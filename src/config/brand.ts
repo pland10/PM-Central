@@ -21,11 +21,11 @@ export const BRAND: Brand = {
   shortName: "PMI",
   tagline: "Property Management Hub",
   colors: {
-    primary: "#F26A21", // PMI orange
-    primaryDark: "#D2551A",
-    primary50: "#FDEEE4",
-    ink: "#0B0B0C", // black
-    inkSoft: "#1D1D20",
+    primary: "#FF6F00", // PMI orange
+    primaryDark: "#E06200",
+    primary50: "#FFF1E3",
+    ink: "#141418", // black
+    inkSoft: "#26262E",
   },
 };
 
