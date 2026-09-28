@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { BRAND, brandCssVars } from "@/config/brand";
+import { Logo } from "@/components/Logo";
 
 export const metadata: Metadata = {
   title: BRAND.name,
@@ -39,12 +40,7 @@ export default function RootLayout({
               className="flex h-14 items-center gap-2.5 px-4"
               style={{ borderBottom: "1px solid rgba(255,255,255,0.10)" }}
             >
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold text-white"
-                style={{ backgroundColor: BRAND.colors.primary }}
-              >
-                {BRAND.shortName}
-              </div>
+              <Logo />
               <span className="font-semibold tracking-tight text-white">
                 {BRAND.name}
               </span>
