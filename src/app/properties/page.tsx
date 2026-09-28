@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
+import { BRAND } from "@/config/brand";
+import { PropertiesTable, type PropertyRow } from "./PropertiesTable";
 
 export const dynamic = "force-dynamic";
 
@@ -14,22 +15,6 @@ function ownerName(portfolio: {
   return (name || "—") + extra;
 }
 
-function sourceBadge(source: string) {
-  const styles: Record<string, string> = {
-    manual: "bg-slate-100 text-slate-600",
-    rentvine: "bg-emerald-100 text-emerald-700",
-  };
-  return (
-    <span
-      className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${
-        styles[source] ?? "bg-indigo-100 text-indigo-700"
-      }`}
-    >
-      {source}
-    </span>
-  );
-}
-
 export default async function PropertiesPage() {
   const properties = await prisma.property.findMany({
     orderBy: { createdAt: "asc" },
@@ -39,24 +24,32 @@ export default async function PropertiesPage() {
     },
   });
 
-  const rows = properties.map((p) => {
+  const rows: PropertyRow[] = properties.map((p) => {
     const unitCount = p.units.length;
-    const occupied = p.units.filter((u) =>
-      u.leases.some((l) => l.status === "active")
-    ).length;
+    const occupied = p.units.filter((u) => u.leases.some((l) => l.status === "active")).length;
     const rentRoll = p.units.reduce((sum, u) => {
       const active = u.leases.find((l) => l.status === "active");
       return sum + (active?.rent ?? 0);
     }, 0);
     const occupancy = unitCount > 0 ? Math.round((occupied / unitCount) * 100) : 0;
-    return { p, unitCount, occupied, rentRoll, occupancy };
+    return {
+      id: p.id,
+      title: p.name || p.street1,
+      address: formatAddress(p),
+      owner: ownerName(p.portfolio),
+      unitCount,
+      occupied,
+      occupancy,
+      rentRoll,
+      type: p.propertyType,
+      source: p.source,
+    };
   });
 
   const totalUnits = rows.reduce((s, r) => s + r.unitCount, 0);
   const totalRentRoll = rows.reduce((s, r) => s + r.rentRoll, 0);
   const totalOccupied = rows.reduce((s, r) => s + r.occupied, 0);
-  const portfolioOccupancy =
-    totalUnits > 0 ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+  const portfolioOccupancy = totalUnits > 0 ? Math.round((totalOccupied / totalUnits) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -71,7 +64,8 @@ export default async function PropertiesPage() {
         <button
           disabled
           title="Coming soon"
-          className="cursor-not-allowed rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white opacity-60"
+          className="cursor-not-allowed rounded-md px-3 py-2 text-sm font-medium text-white"
+          style={{ backgroundColor: BRAND.colors.primary }}
         >
           + Add property
         </button>
@@ -84,72 +78,7 @@ export default async function PropertiesPage() {
         <Stat label="Rent roll / mo" value={formatCurrency(totalRentRoll)} />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 font-medium">Property</th>
-              <th className="px-4 py-3 font-medium">Owner</th>
-              <th className="px-4 py-3 text-right font-medium">Units</th>
-              <th className="px-4 py-3 text-right font-medium">Occupancy</th>
-              <th className="px-4 py-3 text-right font-medium">Rent roll</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                  No properties yet. Seed the database or wire up an import to get
-                  started.
-                </td>
-              </tr>
-            )}
-            {rows.map(({ p, unitCount, occupied, rentRoll, occupancy }) => (
-              <tr
-                key={p.id}
-                className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-              >
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/properties/${p.id}`}
-                    className="font-medium text-slate-900 hover:text-brand-600"
-                  >
-                    {p.name || p.street1}
-                  </Link>
-                  <div className="text-xs text-slate-500">{formatAddress(p)}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {ownerName(p.portfolio)}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">{unitCount}</td>
-                <td className="px-4 py-3 text-right">
-                  <span
-                    className={
-                      occupancy === 100
-                        ? "text-emerald-600"
-                        : occupancy === 0
-                        ? "text-slate-400"
-                        : "text-amber-600"
-                    }
-                  >
-                    {occupancy}%
-                  </span>
-                  <span className="text-xs text-slate-400"> ({occupied}/{unitCount})</span>
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {formatCurrency(rentRoll)}
-                </td>
-                <td className="px-4 py-3 capitalize text-slate-600">
-                  {p.propertyType.replace("-", " ")}
-                </td>
-                <td className="px-4 py-3">{sourceBadge(p.source)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PropertiesTable rows={rows} />
     </div>
   );
 }
