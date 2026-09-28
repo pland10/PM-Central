@@ -25,6 +25,7 @@ datasource db {
 model Portfolio {
   id         String   @id @default(cuid())
   name       String
+  // Ownership / accounting entity that groups properties.
   status     String   @default("active")
   source     String   @default("manual")
   externalId String?
@@ -40,11 +41,13 @@ model Portfolio {
 model Property {
   id          String   @id @default(cuid())
   name        String?
+  // Physical address
   street1     String
   street2     String?
   city        String
   state       String
   zip         String
+  // e.g. single-family, multi-family, condo, commercial
   propertyType String  @default("single-family")
   status      String   @default("active")
   source      String   @default("manual")
@@ -70,7 +73,7 @@ model Unit {
   baths      Float?
   sqft       Int?
   marketRent Float?
-  status     String   @default("vacant")
+  status     String   @default("vacant") // vacant | occupied | unavailable
   source     String   @default("manual")
   externalId String?
   createdAt  DateTime @default(now())
@@ -87,11 +90,14 @@ model Unit {
 
 model Lease {
   id         String    @id @default(cuid())
-  status     String    @default("active")
+  status     String    @default("active") // active | pending | ended | eviction
   startDate  DateTime?
   endDate    DateTime?
   rent       Float     @default(0)
   deposit    Float     @default(0)
+  // Financial snapshot from the source (e.g. Rentvine rent roll)
+  balanceDue     Float @default(0)
+  depositBalance Float @default(0)
   source     String    @default("manual")
   externalId String?
   createdAt  DateTime  @default(now())
@@ -118,6 +124,7 @@ model Contact {
   companyName String?
   email       String?
   phone       String?
+  // Comma-separated roles for simplicity in SQLite: "owner", "tenant", "vendor"
   roles       String   @default("")
   source      String   @default("manual")
   externalId  String?
@@ -164,8 +171,8 @@ model WorkOrder {
   id          String    @id @default(cuid())
   title       String
   description String?
-  status      String    @default("open")
-  priority    String    @default("normal")
+  status      String    @default("open") // open | in-progress | completed | canceled
+  priority    String    @default("normal") // low | normal | high | emergency
   cost        Float?
   source      String    @default("manual")
   externalId  String?
@@ -186,7 +193,7 @@ model WorkOrder {
 
 model Inspection {
   id          String    @id @default(cuid())
-  type        String    @default("routine")
+  type        String    @default("routine") // move-in | move-out | routine | drive-by
   status      String    @default("scheduled")
   scheduledFor DateTime?
   completedAt DateTime?
@@ -208,7 +215,7 @@ model Inspection {
 
 model Transaction {
   id         String   @id @default(cuid())
-  type       String
+  type       String   // charge | payment | credit
   amount     Float
   date       DateTime @default(now())
   memo       String?
@@ -226,7 +233,7 @@ model Transaction {
 model Bill {
   id         String    @id @default(cuid())
   amount     Float
-  status     String    @default("unpaid")
+  status     String    @default("unpaid") // unpaid | paid | void
   dueDate    DateTime?
   memo       String?
   source     String    @default("manual")
@@ -247,7 +254,7 @@ model Bill {
 
 model Note {
   id         String   @id @default(cuid())
-  objectType String
+  objectType String   // "property" | "lease" | "workOrder" | ...
   objectId   String
   body       String
   createdAt  DateTime @default(now())

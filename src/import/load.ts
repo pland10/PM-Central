@@ -124,6 +124,8 @@ export async function loadCanonical(
         const leaseData = {
           status: u.lease.status,
           rent: u.lease.rent,
+          balanceDue: u.lease.balanceDue ?? 0,
+          depositBalance: u.lease.depositBalance ?? 0,
           startDate: u.lease.startDate ? new Date(u.lease.startDate) : null,
           endDate: u.lease.endDate ? new Date(u.lease.endDate) : null,
         };

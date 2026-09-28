@@ -41,6 +41,8 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
               externalId: l.leaseId != null ? String(l.leaseId) : `${p.id}-${i + 1}`,
               status: "active",
               rent: l.rent ?? 0,
+              balanceDue: l.balanceDue ?? 0,
+              depositBalance: l.depositBalance ?? 0,
               startDate: l.start,
               endDate: l.end,
               tenants: [

@@ -22,6 +22,8 @@ export interface RvLease {
   start: string;
   end: string;
   rent?: number;
+  balanceDue?: number;
+  depositBalance?: number;
 }
 
 export interface RvWorkOrder {

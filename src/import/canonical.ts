@@ -19,6 +19,8 @@ export interface CanonicalLease {
   externalId: string;
   status: string;
   rent: number;
+  balanceDue?: number;
+  depositBalance?: number;
   startDate?: string | null; // ISO date
   endDate?: string | null;
   tenants: CanonicalTenant[];
