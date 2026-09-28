@@ -60,7 +60,7 @@ export default async function WorkOrdersPage() {
             {workOrders.map((w) => (
               <tr key={w.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-400">
-                  {w.externalId?.replace("rv-wo-", "") ?? "—"}
+                  {w.externalId?.split(":").pop() ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-slate-800">{w.description || w.title}</td>
                 <td className="px-4 py-3">
