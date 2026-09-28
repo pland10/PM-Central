@@ -29,26 +29,40 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen">
         <div className="flex min-h-screen">
-          {/* Sidebar */}
-          <aside className="hidden w-56 shrink-0 flex-col bg-ink text-slate-300 md:flex">
-            <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-500 text-xs font-bold text-white">
+          {/* Sidebar — colors come straight from the brand config (inline, so
+              they never depend on the CSS build). */}
+          <aside
+            className="hidden w-56 shrink-0 flex-col text-slate-300 md:flex"
+            style={{ backgroundColor: BRAND.colors.ink }}
+          >
+            <div
+              className="flex h-14 items-center gap-2.5 px-4"
+              style={{ borderBottom: "1px solid rgba(255,255,255,0.10)" }}
+            >
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold text-white"
+                style={{ backgroundColor: BRAND.colors.primary }}
+              >
                 {BRAND.shortName}
               </div>
-              <span className="font-semibold tracking-tight text-white">{BRAND.name}</span>
+              <span className="font-semibold tracking-tight text-white">
+                {BRAND.name}
+              </span>
             </div>
             <nav className="flex flex-col gap-1 p-3 text-sm">
               {nav.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-ink-soft hover:text-white"
+                  className="rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   {item.label}
                 </Link>
               ))}
             </nav>
-            <div className="mt-auto p-3 text-xs text-slate-500">{BRAND.tagline}</div>
+            <div className="mt-auto p-3 text-xs text-slate-500">
+              {BRAND.tagline}
+            </div>
           </aside>
 
           {/* Main */}

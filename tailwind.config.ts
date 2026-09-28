@@ -1,22 +1,22 @@
 import type { Config } from "tailwindcss";
 
-// The `brand` palette and `ink` reference CSS variables set from
-// src/config/brand.ts, so utility classes like bg-brand-500 / text-brand-600 /
-// bg-ink follow the active brand automatically.
+// Brand palette. Literal hex so the utilities always compile.
+// Keep these in sync with src/config/brand.ts (the app also reads that directly
+// for inline styles). To re-skin: change both.
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
         brand: {
-          50: "var(--brand-primary-50)",
-          500: "var(--brand-primary)",
-          600: "var(--brand-primary-dark)",
-          700: "var(--brand-primary-dark)",
+          50: "#FFF1E3",
+          500: "#FF6F00", // PMI orange
+          600: "#E06200",
+          700: "#E06200",
         },
         ink: {
-          DEFAULT: "var(--brand-ink)",
-          soft: "var(--brand-ink-soft)",
+          DEFAULT: "#141418", // black
+          soft: "#26262E",
         },
       },
     },
