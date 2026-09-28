@@ -1,0 +1,275 @@
+// PM-Central database
+// ---------------------
+// The foundation is a list of properties. This schema models the full
+// property-management domain so the hub has room to grow, and every record
+// carries `source` + `externalId` so data can be pulled from many places
+// (Rentvine, manual entry, other feeds) and merged cleanly.
+//
+// Dev uses SQLite for zero-setup. To move to production, switch the datasource
+// provider to "postgresql" and point DATABASE_URL at Postgres — the models
+// don't change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Core hierarchy: Portfolio -> Property -> Unit -> Lease
+// ---------------------------------------------------------------------------
+
+model Portfolio {
+  id         String   @id @default(cuid())
+  name       String
+  status     String   @default("active")
+  source     String   @default("manual")
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  properties Property[]
+  owners     OwnerLink[]
+
+  @@unique([source, externalId])
+}
+
+model Property {
+  id          String   @id @default(cuid())
+  name        String?
+  street1     String
+  street2     String?
+  city        String
+  state       String
+  zip         String
+  propertyType String  @default("single-family")
+  status      String   @default("active")
+  source      String   @default("manual")
+  externalId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
+
+  units       Unit[]
+  workOrders  WorkOrder[]
+  inspections Inspection[]
+
+  @@unique([source, externalId])
+  @@index([portfolioId])
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  unitNumber String   @default("1")
+  beds       Int?
+  baths      Float?
+  sqft       Int?
+  marketRent Float?
+  status     String   @default("vacant")
+  source     String   @default("manual")
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  leases     Lease[]
+
+  @@unique([source, externalId])
+  @@index([propertyId])
+}
+
+model Lease {
+  id         String    @id @default(cuid())
+  status     String    @default("active")
+  startDate  DateTime?
+  endDate    DateTime?
+  rent       Float     @default(0)
+  deposit    Float     @default(0)
+  source     String    @default("manual")
+  externalId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  unitId     String
+  unit       Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  tenants      LeaseTenant[]
+  transactions Transaction[]
+
+  @@unique([source, externalId])
+  @@index([unitId])
+}
+
+// ---------------------------------------------------------------------------
+// People: one Contact entity, many roles (owner / tenant / vendor / association)
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id          String   @id @default(cuid())
+  firstName   String?
+  lastName    String?
+  companyName String?
+  email       String?
+  phone       String?
+  roles       String   @default("")
+  source      String   @default("manual")
+  externalId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerLinks  OwnerLink[]
+  leaseLinks  LeaseTenant[]
+  workOrders  WorkOrder[]  @relation("VendorWorkOrders")
+  bills       Bill[]
+
+  @@unique([source, externalId])
+}
+
+model OwnerLink {
+  id          String @id @default(cuid())
+  portfolioId String
+  contactId   String
+  ownershipPct Float @default(100)
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  contact   Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, contactId])
+}
+
+model LeaseTenant {
+  id        String  @id @default(cuid())
+  leaseId   String
+  contactId String
+  isPrimary Boolean @default(false)
+
+  lease   Lease   @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, contactId])
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+model WorkOrder {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("open")
+  priority    String    @default("normal")
+  cost        Float?
+  source      String    @default("manual")
+  externalId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  vendorId String?
+  vendor   Contact? @relation("VendorWorkOrders", fields: [vendorId], references: [id])
+
+  bills Bill[]
+
+  @@unique([source, externalId])
+  @@index([propertyId])
+}
+
+model Inspection {
+  id          String    @id @default(cuid())
+  type        String    @default("routine")
+  status      String    @default("scheduled")
+  scheduledFor DateTime?
+  completedAt DateTime?
+  source      String    @default("manual")
+  externalId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalId])
+  @@index([propertyId])
+}
+
+// ---------------------------------------------------------------------------
+// Financials
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  id         String   @id @default(cuid())
+  type       String
+  amount     Float
+  date       DateTime @default(now())
+  memo       String?
+  source     String   @default("manual")
+  externalId String?
+  createdAt  DateTime @default(now())
+
+  leaseId String
+  lease   Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalId])
+  @@index([leaseId])
+}
+
+model Bill {
+  id         String    @id @default(cuid())
+  amount     Float
+  status     String    @default("unpaid")
+  dueDate    DateTime?
+  memo       String?
+  source     String    @default("manual")
+  externalId String?
+  createdAt  DateTime  @default(now())
+
+  vendorId    String?
+  vendor      Contact?   @relation(fields: [vendorId], references: [id])
+  workOrderId String?
+  workOrder   WorkOrder? @relation(fields: [workOrderId], references: [id])
+
+  @@unique([source, externalId])
+}
+
+// ---------------------------------------------------------------------------
+// Generic attachments: notes + tags can hang off any record
+// ---------------------------------------------------------------------------
+
+model Note {
+  id         String   @id @default(cuid())
+  objectType String
+  objectId   String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([objectType, objectId])
+}
+
+model Tag {
+  id    String    @id @default(cuid())
+  name  String    @unique
+  color String    @default("#64748b")
+  links TagLink[]
+}
+
+model TagLink {
+  id         String @id @default(cuid())
+  tagId      String
+  objectType String
+  objectId   String
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, objectType, objectId])
+  @@index([objectType, objectId])
+}
