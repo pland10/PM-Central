@@ -39,6 +39,7 @@ export async function loadCanonical(
     // units, leases, and lease-tenant links.
     await prisma.workOrder.deleteMany({ where: { source, externalId: { startsWith: prefix } } });
     await prisma.property.deleteMany({ where: { source, externalId: { startsWith: prefix } } });
+    await prisma.portfolio.deleteMany({ where: { source, externalId: { startsWith: prefix } } });
     await prisma.contact.deleteMany({ where: { source, externalId: { startsWith: prefix } } });
   }
 
@@ -46,6 +47,41 @@ export async function loadCanonical(
   const propIdByExt = new Map<string, string>();
 
   for (const p of dataset.properties) {
+    // Owner / portfolio (ownership entity) — created first so the property can link to it.
+    let portfolioId: string | null = null;
+    if (p.owner) {
+      const pfExt = ns(account, "portfolio", p.owner.externalId);
+      const portfolio = await prisma.portfolio.upsert({
+        where: { source_externalId: { source, externalId: pfExt } },
+        create: { source, externalId: pfExt, name: p.owner.name },
+        update: { name: p.owner.name },
+      });
+      portfolioId = portfolio.id;
+
+      const ownerExt = ns(account, "owner", p.owner.externalId);
+      const isCompany = /\b(llc|inc|corp|trust|holdings|rentals|family|company)\b/i.test(p.owner.name);
+      const ownerFields = isCompany
+        ? { companyName: p.owner.name, firstName: null, lastName: null }
+        : {
+            companyName: null,
+            firstName: p.owner.name.split(/\s+/)[0],
+            lastName: p.owner.name.split(/\s+/).slice(1).join(" ") || null,
+          };
+      const ownerContact = await prisma.contact.upsert({
+        where: { source_externalId: { source, externalId: ownerExt } },
+        create: { source, externalId: ownerExt, roles: "owner", ...ownerFields },
+        update: ownerFields,
+      });
+      const link = await prisma.ownerLink.findUnique({
+        where: { portfolioId_contactId: { portfolioId: portfolio.id, contactId: ownerContact.id } },
+      });
+      if (!link) {
+        await prisma.ownerLink.create({
+          data: { portfolioId: portfolio.id, contactId: ownerContact.id },
+        });
+      }
+    }
+
     const externalId = ns(account, "property", p.externalId);
     const propData = {
       name: p.name ?? p.street1,
@@ -56,6 +92,7 @@ export async function loadCanonical(
       zip: p.zip,
       propertyType: p.propertyType,
       status: p.status,
+      portfolioId,
     };
     const property = await prisma.property.upsert({
       where: { source_externalId: { source, externalId } },

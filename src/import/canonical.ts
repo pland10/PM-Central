@@ -35,6 +35,11 @@ export interface CanonicalUnit {
   lease?: CanonicalLease | null;
 }
 
+export interface CanonicalOwner {
+  externalId: string; // stable id of the owning entity (e.g. portfolio id)
+  name: string;
+}
+
 export interface CanonicalProperty {
   externalId: string;
   name?: string | null;
@@ -45,6 +50,7 @@ export interface CanonicalProperty {
   zip: string;
   propertyType: string;
   status: string;
+  owner?: CanonicalOwner | null;
   units: CanonicalUnit[];
 }
 

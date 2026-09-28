@@ -2,7 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand color variables — default values (PMI Lighthouse). These are overridden
+   at runtime by the <style> the layout injects from src/config/brand.ts, so
+   editing the brand config re-skins the whole app. */
 :root {
+  --brand-primary: #f26a21;
+  --brand-primary-dark: #d2551a;
+  --brand-primary-50: #fdeee4;
+  --brand-ink: #0b0b0c;
+  --brand-ink-soft: #1d1d20;
+
   --background: #f6f7f9;
   --foreground: #0f172a;
 }

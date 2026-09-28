@@ -63,6 +63,10 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
       zip: p.zip,
       propertyType: RV_TYPE[p.type] ?? p.type,
       status: "active",
+      owner:
+        p.owner && p.portfolioId != null
+          ? { externalId: String(p.portfolioId), name: p.owner }
+          : null,
       units,
     };
   });

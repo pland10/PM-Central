@@ -9,6 +9,8 @@ export interface RvProperty {
   state: string;
   zip: string;
   type: string; // Rentvine's label, e.g. "Single Family Home"
+  portfolioId?: number; // Rentvine portfolio (ownership entity) id
+  owner?: string; // portfolio / owner display name
 }
 
 export interface RvLease {
