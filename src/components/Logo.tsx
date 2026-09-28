@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { BRAND } from "@/config/brand";
 
-// Shows the brand logo image from /public/pmi-logo.png (or .svg). Until that
+// Shows the brand logo image from BRAND.logoSrc (a file in /public). Until that
 // file exists it falls back to the colored initials tile, so the sidebar never
-// shows a broken image. Drop your logo at public/pmi-logo.png to use it.
+// shows a broken image. Set the path in src/config/brand.ts and drop the file
+// in /public to use it.
 export function Logo() {
   const [failed, setFailed] = useState(false);
 
-  if (!failed) {
+  if (BRAND.logoSrc && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src="/pmi-logo.png"
+        src={BRAND.logoSrc}
         alt={BRAND.name}
         className="h-8 w-auto max-w-[150px] object-contain"
         onError={() => setFailed(true)}
