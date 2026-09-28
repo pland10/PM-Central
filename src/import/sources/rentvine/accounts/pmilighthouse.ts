@@ -5,9 +5,9 @@ import type { RentvineExport } from "../raw";
 // the generic loader writes it. When the live API client is wired up, this file
 // is replaced by a live extract() call — transform + loader stay the same.
 //
-// Coverage: all 46 properties (with owner/portfolio), active leases (primary
-// tenant + contact + term + rent), and the full work-order history. Work orders
-// on properties no longer managed are skipped by the loader.
+// Coverage: all 46 properties (owner/portfolio), active leases (tenant + contact
+// + term + rent + balances), and the full work-order history. Work orders on
+// properties no longer managed are skipped by the loader.
 
 export const pmilighthouse: RentvineExport = {
   account: "pmilighthouse",
@@ -60,19 +60,19 @@ export const pmilighthouse: RentvineExport = {
     { id: 81, street: "796 Amboy Avenue", city: "Perth Amboy", state: "NJ", zip: "08861", type: "Commercial", portfolioId: 72, owner: "GE Office rentals llc" },
   ],
   activeLeases: [
-    { prop: 30, leaseId: 19, tenant: "Taichna Charles", email: "c.taichna@yahoo.com", phone: "+15164767445", start: "2026-10-01", end: "2028-09-30", rent: 5700 },
+    { prop: 30, leaseId: 19, tenant: "Taichna Charles", email: "c.taichna@yahoo.com", phone: "+15164767445", start: "2026-10-01", end: "2028-09-30", rent: 5700, balanceDue: 865.95 },
     { prop: 71, leaseId: 49, tenant: "Nebia Chui", email: "knsj8163@aol.com", phone: "+16315074202", start: "2026-10-01", end: "2028-03-31", rent: 4500 },
     { prop: 37, leaseId: 47, tenant: "Miljiam Licona", email: "miljiamivonnelicona28@gmail.com", phone: "+19342069533", start: "2026-08-15", end: "2027-08-31", rent: 4800 },
     { prop: 67, leaseId: 48, tenant: "Audrey Rakovich Seville", email: "audreyseville@protonmail.com", phone: "+19178389520", start: "2026-08-15", end: "2028-08-31", rent: 5625 },
-    { prop: 35, leaseId: 21, tenant: "Megan Purdue", email: "parduemegan@yahoo.com", phone: "+16316127931", start: "2026-08-01", end: "2027-07-31", rent: 3000 },
+    { prop: 35, leaseId: 21, tenant: "Megan Purdue", email: "parduemegan@yahoo.com", phone: "+16316127931", start: "2026-08-01", end: "2027-07-31", rent: 3000, depositBalance: 2800 },
     { prop: 20, leaseId: 14, tenant: "Victoria Pierre-Louis", email: "victoria.pierrelouis@yahoo.com", phone: "+17185933557", start: "2026-07-01", end: "2028-06-30", rent: 2800 },
-    { prop: 41, leaseId: 34, tenant: "Selina Sun", email: "selinas.sjy@gmail.com", phone: "+19175813783", start: "2026-07-01", end: "2027-09-30", rent: 5200 },
-    { prop: 49, leaseId: 46, tenant: "Lori Stevens", email: "lasny1993@gmail.com", phone: "+15164925070", start: "2026-06-19", end: "2027-06-30", rent: 4900 },
+    { prop: 41, leaseId: 34, tenant: "Selina Sun", email: "selinas.sjy@gmail.com", phone: "+19175813783", start: "2026-07-01", end: "2027-09-30", rent: 5200, depositBalance: 5200 },
+    { prop: 49, leaseId: 46, tenant: "Lori Stevens", email: "lasny1993@gmail.com", phone: "+15164925070", start: "2026-06-19", end: "2027-06-30", rent: 4900, depositBalance: 1500 },
     { prop: 19, leaseId: 12, tenant: "Karen Vasilecozzo", email: "Mandy02009@gmail.com", phone: "+16317673197", start: "2026-06-01", end: "2028-05-31", rent: 4800 },
     { prop: 48, leaseId: 33, tenant: "Linda Muñoz Gallo", email: "lindavivianamunoz@gmail.com", phone: "+13476471691", start: "2026-06-01", end: "2027-05-31", rent: 2696 },
     { prop: 58, leaseId: 45, tenant: "Marvin Geovanni Raymundo", email: "marvinraymundo2015@gmail.com", phone: "+16319604773", start: "2026-05-01", end: "2027-04-30", rent: 4200 },
-    { prop: 56, leaseId: 44, tenant: "Claudia Lipinski", email: "claudia.lipinski64@gmail.com", phone: "+16312207019", start: "2026-04-18", end: "2027-04-30", rent: 2500 },
-    { prop: 40, leaseId: 27, tenant: "Pamela Roberts", email: "deroche2002@yahoo.com", phone: "+13478582688", start: "2026-04-01", end: "2027-03-31", rent: 4425 },
+    { prop: 56, leaseId: 44, tenant: "Claudia Lipinski", email: "claudia.lipinski64@gmail.com", phone: "+16312207019", start: "2026-04-18", end: "2027-04-30", rent: 2500, depositBalance: 250 },
+    { prop: 40, leaseId: 27, tenant: "Pamela Roberts", email: "deroche2002@yahoo.com", phone: "+13478582688", start: "2026-04-01", end: "2027-03-31", rent: 4425, depositBalance: 250 },
     { prop: 53, leaseId: 43, tenant: "Alec Longo", email: "Alongo@opt4lifeinc.com", phone: "+16319439655", start: "2026-03-22", end: "2027-03-31", rent: 6025 },
     { prop: 9, leaseId: 10, tenant: "Catherine Smith", email: "cat42985@gmail.com", phone: "+16315619058", start: "2026-02-01", end: "2027-01-31", rent: 2050 },
     { prop: 11, leaseId: 6, tenant: "julie dimaggio", email: "juliedimaggio1@outlook.com", phone: "+15163531279", start: "2026-01-15", end: "2027-01-14", rent: 4100 },
@@ -80,16 +80,16 @@ export const pmilighthouse: RentvineExport = {
     { prop: 48, leaseId: 31, tenant: "Cynthia Tabora", email: "rcynthiaa21@yahoo.com", phone: "+13476392146", start: "2025-12-01", end: "2026-11-30", rent: 2500 },
     { prop: 55, leaseId: 40, tenant: "Joely Rojas López", email: "j.rojaslopez@hotmail.com", phone: "+16316394073", start: "2025-11-09", end: "2027-11-30", rent: 4000 },
     { prop: 24, leaseId: 13, tenant: "Bobbye Sanders", email: "bobbye_sanders@aol.com", phone: "+19282761601", start: "2025-11-01", end: "2026-10-31", rent: 3200 },
-    { prop: 51, leaseId: 38, tenant: "Michael Serrant", email: "Michael.serrant7@gmail.com", phone: "+15168534469", start: "2025-10-01", end: "2027-09-30", rent: 3500 },
+    { prop: 51, leaseId: 38, tenant: "Michael Serrant", email: "Michael.serrant7@gmail.com", phone: "+15168534469", start: "2025-10-01", end: "2027-09-30", rent: 3500, balanceDue: 7875 },
     { prop: 5, leaseId: 4, tenant: "Stephany Seifert", email: "stephanyseifert@gmail.com", phone: "+16316334134", start: "2025-09-01", end: "2027-08-31", rent: 3500 },
     { prop: 27, leaseId: 18, tenant: "Chantel Rausche Williams", email: "Mizzchanshine@yahoo.com", phone: "+16318966721", start: "2025-09-01", end: "2027-08-31", rent: 4300 },
-    { prop: 50, leaseId: 37, tenant: "Maria Galindo", email: "m.galindo72@icloud.com", phone: "+15168500848", start: "2025-09-01", end: "2027-08-31", rent: 4500 },
+    { prop: 50, leaseId: 37, tenant: "Maria Galindo", email: "m.galindo72@icloud.com", phone: "+15168500848", start: "2025-09-01", end: "2027-08-31", rent: 4500, depositBalance: 250 },
     { prop: 52, leaseId: 35, tenant: "Robert Kreib", email: "Robertkreib1@gmail.com", phone: "+15169030544", start: "2025-08-01", end: "2027-07-31", rent: 4500 },
-    { prop: 79, leaseId: 50, tenant: "Rachel Barnes", email: "rbarnes76@gmail.com", phone: "+17373791181", start: "2025-07-01", end: "2026-06-30", rent: 1863 },
+    { prop: 79, leaseId: 50, tenant: "Rachel Barnes", email: "rbarnes76@gmail.com", phone: "+17373791181", start: "2025-07-01", end: "2026-06-30", rent: 1863, balanceDue: 1913 },
     { prop: 45, leaseId: 30, tenant: "Michael J Hayes", email: "Mikehayes23@aol.com", phone: "+16319223756", start: "2025-06-15", end: "2027-06-14", rent: 4700 },
-    { prop: 78, leaseId: 51, tenant: "Health Up Training and Services LLC", email: "Healthuptraining@gmail.com", phone: "+19082674143", start: "2025-05-01", end: "2030-04-30", rent: 3060 },
+    { prop: 78, leaseId: 51, tenant: "Health Up Training and Services LLC", email: "Healthuptraining@gmail.com", phone: "+19082674143", start: "2025-05-01", end: "2030-04-30", rent: 3060, balanceDue: 3060 },
     { prop: 36, leaseId: 25, tenant: "Nechama Neren Silverman", email: "Nsilverman0523@gmail.com", start: "2025-02-15", end: "2027-02-28", rent: 7000 },
-    { prop: 18, leaseId: 15, tenant: "Timothy Robert Walker", email: "Timothywalker_2@yahoo.com", phone: "+17344976102", start: "2024-07-15", end: "2026-07-31", rent: 4500 },
+    { prop: 18, leaseId: 15, tenant: "Timothy Robert Walker", email: "Timothywalker_2@yahoo.com", phone: "+17344976102", start: "2024-07-15", end: "2026-07-31", rent: 4500, balanceDue: 18564.40 },
     { prop: 6, leaseId: 5, tenant: "Jonathan M Ebel", email: "Jebel@netw1.com", phone: "+16313351589", start: "2024-01-01", end: "2026-12-31", rent: 5260 },
   ],
   workOrders: [
