@@ -11,7 +11,7 @@ const nav = [
   { href: "/properties", label: "Properties" },
   { href: "/portfolios", label: "Portfolios" },
   { href: "/leases", label: "Leases" },
-  { href: "/contacts", label: "Contacts" },
+  { href: "/tenants", label: "Tenants" },
   { href: "/work-orders", label: "Work Orders" },
 ];
 
@@ -24,6 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen">
         <div className="flex min-h-screen">
+          {/* Sidebar */}
           <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
             <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-4">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-500 text-sm font-bold text-white">
@@ -44,6 +45,7 @@ export default function RootLayout({
             </nav>
           </aside>
 
+          {/* Main */}
           <div className="flex min-w-0 flex-1 flex-col">
             <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
               <div className="text-sm text-slate-500">Property Management Hub</div>
