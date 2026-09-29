@@ -1,5 +1,18 @@
 # PM-Central — open items
 
+## Inspections app — linked now, rebuild later
+Done: sidebar "Inspections" tab links out to the separate inspection app
+(set `INSPECTIONS_URL` to its deployed URL). The inspection app
+(`pland10/PMI-Inspection`) is Flask + Supabase (auth, photo storage) and pulls
+properties from Rentvine.
+
+Rebuild-into-PM-Central plan (later): port inspection CRUD + UI to Next.js/Prisma
+(the `Inspection` model already exists), then tackle the two hard parts —
+per-inspector auth/roles and photo storage (no equivalent in PM-Central yet).
+NOTE: the inspection app's data is throwaway except the real metadata — do NOT
+migrate inspection records/photos; only carry over the schema/metadata.
+
+
 ## 🚩 Deposits held — data is wrong (revisit later)
 The dashboard "Deposits held" KPI sums `Lease.depositBalance`, which currently
 comes from Rentvine's Rent Roll `depositBalance` column (total ≈ $10,250). That
