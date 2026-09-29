@@ -6,9 +6,9 @@ foundation is a list of properties. Goal is a Rentvine-style tool that pulls
 data from many sources and could be sold as a product.
 
 ## Conventions
-- **Stack:** Next.js App Router + TypeScript + Tailwind + Prisma. DB is
-  **Postgres** everywhere (local + production) — point `DATABASE_URL` at a local
-  Postgres (`docker compose up -d db`) or a hosted one. See `DEPLOY.md`.
+- **Stack:** Next.js App Router + TypeScript + Tailwind + Prisma. Dev DB is
+  SQLite (`prisma/dev.db`); a hosted deploy keeps SQLite on a persistent volume,
+  or switch the one provider line to Postgres. See `DEPLOY.md`.
 - **Data sources:** every core model has `source` + `externalId`. Imports must
   **upsert on `(source, externalId)`**, never blind-create, so re-syncing is
   idempotent. `source = "manual"` for hand-entered records.

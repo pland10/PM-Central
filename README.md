@@ -8,8 +8,8 @@ other feeds) and grow into a full Rentvine-style tool over time.
 
 - **Next.js (App Router) + TypeScript** — app shell and pages
 - **Tailwind CSS** — UI
-- **Prisma + Postgres** — the database, the same locally and in production
-  (see [DEPLOY.md](./DEPLOY.md))
+- **Prisma + SQLite** — the database, a single file (`prisma/dev.db`); a hosted
+  deploy keeps SQLite on a volume (see [DEPLOY.md](./DEPLOY.md))
 
 ## The database
 
@@ -29,11 +29,10 @@ duplicating.
 ## Getting started
 
 ```bash
-docker compose up -d db   # local Postgres (or use a free Neon DB — see DEPLOY.md)
-npm install               # installs deps and runs `prisma generate`
-npm run db:push           # creates the tables from the schema
-npm run db:seed           # loads sample properties, units, leases, tenants
-npm run dev               # http://localhost:3000
+npm install          # installs deps and runs `prisma generate`
+npm run db:push      # creates the SQLite database from the schema
+npm run db:seed      # loads sample properties, units, leases, tenants
+npm run dev          # http://localhost:3000
 ```
 
 To deploy so others can see it, see **[DEPLOY.md](./DEPLOY.md)**.
