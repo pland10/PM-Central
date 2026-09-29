@@ -1,0 +1,44 @@
+# Local development stack.
+#
+#   docker compose up -d db     # just Postgres (recommended for `npm run dev`)
+#   docker compose up --build   # Postgres + the full app in a container
+#
+# The `db` service gives you a local Postgres with zero manual setup. Point
+# your .env at it:
+#   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pmcentral?schema=public"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pmcentral
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    # Runs only when you `docker compose up` without a service name, or via
+    # `--profile full`. For normal dev use `npm run dev` against the db above.
+    profiles: ["full"]
+    environment:
+      # Inside the compose network the db host is "db", not "localhost".
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/pmcentral?schema=public"
+      BASIC_AUTH_USER: "${BASIC_AUTH_USER:-}"
+      BASIC_AUTH_PASSWORD: "${BASIC_AUTH_PASSWORD:-}"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

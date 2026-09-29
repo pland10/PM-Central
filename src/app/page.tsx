@@ -34,14 +34,14 @@ export default async function DashboardPage() {
   let totalUnits = 0;
   let occupiedUnits = 0;
   let rentRoll = 0;
+  let totalBalanceDue = 0;
+  let totalDeposits = 0;
   const vacancies: { key: string; propertyId: string; address: string; unit: string }[] = [];
   const expirations: {
-    key: string;
-    propertyId: string;
-    address: string;
-    tenant: string;
-    endMs: number;
-    rent: number;
+    key: string; propertyId: string; address: string; tenant: string; endMs: number; rent: number;
+  }[] = [];
+  const delinquencies: {
+    key: string; propertyId: string; address: string; tenant: string; amount: number;
   }[] = [];
   const ownerAgg = new Map<string, { name: string; properties: number; rentRoll: number }>();
 
@@ -56,15 +56,19 @@ export default async function DashboardPage() {
       if (active) {
         occupiedUnits += 1;
         rentRoll += active.rent;
+        totalBalanceDue += active.balanceDue;
+        totalDeposits += active.depositBalance;
         agg.rentRoll += active.rent;
+        const tenant = contactName(active.tenants[0]?.contact);
         if (active.endDate) {
           expirations.push({
-            key: active.id,
-            propertyId: p.id,
-            address: formatAddress(p),
-            tenant: contactName(active.tenants[0]?.contact),
-            endMs: active.endDate.getTime(),
-            rent: active.rent,
+            key: active.id, propertyId: p.id, address: formatAddress(p), tenant,
+            endMs: active.endDate.getTime(), rent: active.rent,
+          });
+        }
+        if (active.balanceDue > 0) {
+          delinquencies.push({
+            key: active.id, propertyId: p.id, address: formatAddress(p), tenant, amount: active.balanceDue,
           });
         }
       } else {
@@ -79,39 +83,48 @@ export default async function DashboardPage() {
   const soonest = [...expirations].sort((a, b) => a.endMs - b.endMs).slice(0, 8);
   const topOwners = [...ownerAgg.values()].sort((a, b) => b.rentRoll - a.rentRoll).slice(0, 6);
   const vacantList = vacancies.slice(0, 8);
+  const topDelinquencies = [...delinquencies].sort((a, b) => b.amount - a.amount);
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Portfolio at a glance — {properties.length} properties across{" "}
-          {ownerAgg.size} owners.
+          Portfolio at a glance — {properties.length} properties across {ownerAgg.size} owners.
         </p>
       </div>
 
       {/* KPIs */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat label="Properties" value={String(properties.length)} href="/properties" />
         <Stat label="Units" value={String(totalUnits)} href="/properties" />
         <Stat label="Occupancy" value={`${occupancy}%`} accent={occupancy < 90} />
         <Stat label="Rent roll / mo" value={formatCurrency(rentRoll)} href="/leases" />
+        <Stat label="Outstanding" value={formatCurrency(totalBalanceDue)} href="/leases" accent={totalBalanceDue > 0} />
+        <Stat label="Deposits held" value={formatCurrency(totalDeposits)} href="/leases" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
-        <Stat
-          label="High-priority WOs"
-          value={String(highWorkOrders.length)}
-          href="/work-orders"
-          accent={highWorkOrders.length > 0}
-        />
+        <Stat label="High-priority WOs" value={String(highWorkOrders.length)} href="/work-orders" accent={highWorkOrders.length > 0} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Panel title="Delinquencies" href="/leases" linkLabel="All leases" badge={topDelinquencies.length}>
+          {topDelinquencies.length === 0 && <Empty>No outstanding balances.</Empty>}
+          {topDelinquencies.map((d) => (
+            <Row key={d.key} href={`/properties/${d.propertyId}`}>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-slate-800">{d.tenant}</div>
+                <div className="truncate text-xs text-slate-500">{d.address}</div>
+              </div>
+              <span className="shrink-0 font-medium text-red-600">{formatCurrency(d.amount)}</span>
+            </Row>
+          ))}
+        </Panel>
+
         <Panel title="Upcoming lease expirations" href="/leases" linkLabel="All leases">
           {soonest.length === 0 && <Empty>No dated leases.</Empty>}
           {soonest.map((e) => {
             const days = Math.round((e.endMs - now) / 86_400_000);
-            const label =
-              days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? "today" : `in ${days}d`;
+            const label = days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? "today" : `in ${days}d`;
             const tone = days < 0 ? "text-red-600" : days <= 60 ? "text-amber-600" : "text-slate-500";
             return (
               <Row key={e.key} href={`/properties/${e.propertyId}`}>
@@ -128,12 +141,7 @@ export default async function DashboardPage() {
           })}
         </Panel>
 
-        <Panel
-          title="Vacant units"
-          href="/properties"
-          linkLabel="Properties"
-          badge={vacancies.length}
-        >
+        <Panel title="Vacant units" href="/properties" linkLabel="Properties" badge={vacancies.length}>
           {vacantList.length === 0 && <Empty>No vacancies — fully occupied.</Empty>}
           {vacantList.map((v) => (
             <Row key={v.key} href={`/properties/${v.propertyId}`}>
@@ -148,12 +156,7 @@ export default async function DashboardPage() {
           ))}
         </Panel>
 
-        <Panel
-          title="High-priority work orders"
-          href="/work-orders"
-          linkLabel="All work orders"
-          badge={highWorkOrders.length}
-        >
+        <Panel title="High-priority work orders" href="/work-orders" linkLabel="All work orders" badge={highWorkOrders.length}>
           {highWorkOrders.length === 0 && <Empty>Nothing high-priority open.</Empty>}
           {highWorkOrders.slice(0, 8).map((w) => (
             <Row key={w.id} href={`/properties/${w.propertyId}`}>
@@ -170,10 +173,7 @@ export default async function DashboardPage() {
 
         <Panel title="Top owners by rent roll" href="/portfolios" linkLabel="All portfolios">
           {topOwners.map((o, i) => (
-            <div
-              key={o.name}
-              className="flex items-center justify-between border-b border-slate-100 py-2 last:border-0 text-sm"
-            >
+            <div key={o.name} className="flex items-center justify-between border-b border-slate-100 py-2 last:border-0 text-sm">
               <div className="min-w-0">
                 <span className="mr-2 text-xs text-slate-400">{i + 1}.</span>
                 <span className="font-medium text-slate-800">{o.name}</span>
@@ -190,40 +190,18 @@ export default async function DashboardPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  href,
-  accent,
-}: {
-  label: string;
-  value: string;
-  href?: string;
-  accent?: boolean;
-}) {
+function Stat({ label, value, href, accent }: { label: string; value: string; href?: string; accent?: boolean }) {
   const body = (
     <div className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300">
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold tracking-tight ${accent ? "text-brand-600" : ""}`}>
-        {value}
-      </div>
+      <div className={`mt-1 text-2xl font-semibold tracking-tight ${accent ? "text-brand-600" : ""}`}>{value}</div>
     </div>
   );
   return href ? <Link href={href}>{body}</Link> : body;
 }
 
-function Panel({
-  title,
-  href,
-  linkLabel,
-  badge,
-  children,
-}: {
-  title: string;
-  href?: string;
-  linkLabel?: string;
-  badge?: number;
-  children: React.ReactNode;
+function Panel({ title, href, linkLabel, badge, children }: {
+  title: string; href?: string; linkLabel?: string; badge?: number; children: React.ReactNode;
 }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -231,15 +209,11 @@ function Panel({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           {title}
           {badge != null && (
-            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-              {badge}
-            </span>
+            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">{badge}</span>
           )}
         </h2>
         {href && linkLabel && (
-          <Link href={href} className="text-xs font-medium text-brand-600 hover:underline">
-            {linkLabel} →
-          </Link>
+          <Link href={href} className="text-xs font-medium text-brand-600 hover:underline">{linkLabel} →</Link>
         )}
       </div>
       <div>{children}</div>
@@ -249,10 +223,7 @@ function Panel({
 
 function Row({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link
-      href={href}
-      className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0 hover:bg-slate-50"
-    >
+    <Link href={href} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0 hover:bg-slate-50">
       {children}
     </Link>
   );
