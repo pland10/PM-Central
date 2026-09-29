@@ -1,5 +1,6 @@
 import type { CanonicalDataset, CanonicalProperty } from "../../canonical";
 import type { RentvineExport, RvLease } from "./raw";
+import { tagSlug } from "@/lib/programs";
 
 // Rentvine -> canonical. This is the ONLY Rentvine-specific mapping. Another PMS
 // would have its own transform producing the same CanonicalDataset.
@@ -65,6 +66,7 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
       zip: p.zip,
       propertyType: RV_TYPE[p.type] ?? p.type,
       status: "active",
+      tags: (p.groups ?? []).map(tagSlug),
       owner:
         p.owner && p.portfolioId != null
           ? { externalId: String(p.portfolioId), name: p.owner }

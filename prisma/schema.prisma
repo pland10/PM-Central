@@ -53,6 +53,9 @@ model Property {
   // e.g. single-family, multi-family, condo, commercial
   propertyType String  @default("single-family")
   status      String   @default("active")
+  // Programs/tags from the source, comma-separated slugs (e.g. "squatterwatch").
+  // A Rentvine property group maps to a tag here. See src/lib/programs.ts.
+  tags        String   @default("")
   source      String   @default("manual")
   externalId  String?
   createdAt   DateTime @default(now())

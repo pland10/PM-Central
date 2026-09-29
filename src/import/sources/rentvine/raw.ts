@@ -11,6 +11,7 @@ export interface RvProperty {
   type: string; // Rentvine's label, e.g. "Single Family Home"
   portfolioId?: number; // Rentvine portfolio (ownership entity) id
   owner?: string; // portfolio / owner display name
+  groups?: string[]; // Rentvine property groups, e.g. ["Squatter Watch"]
 }
 
 export interface RvLease {

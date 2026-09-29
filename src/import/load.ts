@@ -92,6 +92,7 @@ export async function loadCanonical(
       zip: p.zip,
       propertyType: p.propertyType,
       status: p.status,
+      tags: (p.tags ?? []).join(","),
       portfolioId,
     };
     const property = await prisma.property.upsert({

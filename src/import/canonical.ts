@@ -52,6 +52,8 @@ export interface CanonicalProperty {
   zip: string;
   propertyType: string;
   status: string;
+  // Program/group tags as normalized slugs (e.g. ["squatterwatch"]).
+  tags?: string[];
   owner?: CanonicalOwner | null;
   units: CanonicalUnit[];
 }
