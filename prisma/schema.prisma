@@ -5,19 +5,16 @@
 // carries `source` + `externalId` so data can be pulled from many places
 // (Rentvine, manual entry, other feeds) and merged cleanly.
 //
-// Postgres everywhere (local dev + production) so there's no drift between
-// environments. Point DATABASE_URL at any Postgres — a local one from
-// docker-compose, a free Neon database, or your host's managed Postgres.
-// See DEPLOY.md.
+// Dev uses SQLite for zero setup (file:./dev.db) — no database to install. For a
+// hosted deploy we keep SQLite on a persistent volume (see DEPLOY.md); to move to
+// Postgres later, change this one provider to "postgresql" and set DATABASE_URL.
 
 generator client {
-  provider      = "prisma-client-js"
-  // native = your local machine; debian target = the Linux container we deploy in.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
