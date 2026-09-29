@@ -92,9 +92,11 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // The inspection app is a separate site; link out to it. Set INSPECTIONS_URL
-  // (env) to its deployed URL — no code change needed to point it elsewhere.
-  const inspectionsUrl = process.env.INSPECTIONS_URL || "";
+  // The inspection app is a separate site; link out to it. Defaults to PMI's
+  // deployed inspection app; override with INSPECTIONS_URL (env) for other
+  // deployments — no code change needed.
+  const inspectionsUrl =
+    process.env.INSPECTIONS_URL || "https://pmilighthouse.app/inspections.html";
 
   return (
     <html lang="en">
