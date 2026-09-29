@@ -5,16 +5,19 @@
 // carries `source` + `externalId` so data can be pulled from many places
 // (Rentvine, manual entry, other feeds) and merged cleanly.
 //
-// Dev uses SQLite for zero-setup. To move to production, switch the datasource
-// provider to "postgresql" and point DATABASE_URL at Postgres — the models
-// don't change.
+// Postgres everywhere (local dev + production) so there's no drift between
+// environments. Point DATABASE_URL at any Postgres — a local one from
+// docker-compose, a free Neon database, or your host's managed Postgres.
+// See DEPLOY.md.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native = your local machine; debian target = the Linux container we deploy in.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -124,7 +127,7 @@ model Contact {
   companyName String?
   email       String?
   phone       String?
-  // Comma-separated roles for simplicity in SQLite: "owner", "tenant", "vendor"
+  // Comma-separated roles for simplicity: "owner", "tenant", "vendor"
   roles       String   @default("")
   source      String   @default("manual")
   externalId  String?
