@@ -80,7 +80,7 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
     propertyExternalId: String(w.prop),
     title: w.desc.length > 60 ? w.desc.slice(0, 57) + "…" : w.desc,
     description: w.desc,
-    status: "open",
+    status: w.status ?? "open",
     priority: w.priority,
   }));
 

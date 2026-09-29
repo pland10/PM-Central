@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { DataTable, type Column } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 
@@ -19,7 +20,11 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       header: "Portfolio / Owner",
       sortable: true,
       sortValue: (r) => r.name.toLowerCase(),
-      render: (r) => <span className="font-medium text-slate-900">{r.name}</span>,
+      render: (r) => (
+        <Link href={`/portfolios/${r.id}`} className="font-medium text-slate-900 hover:text-brand-600">
+          {r.name}
+        </Link>
+      ),
     },
     {
       key: "properties",

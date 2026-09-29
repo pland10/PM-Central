@@ -98,8 +98,8 @@ export default function RootLayout({
         {/* Brand colors, from src/config/brand.ts */}
         <style dangerouslySetInnerHTML={{ __html: brandCssVars() }} />
       </head>
-      <body className="min-h-screen">
-        <div className="flex min-h-screen">
+      <body className="h-screen overflow-hidden">
+        <div className="flex h-screen">
           {/* Sidebar — colors come straight from the brand config (inline, so
               they never depend on the CSS build). */}
           <aside
@@ -149,11 +149,11 @@ export default function RootLayout({
 
           {/* Main */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
+            <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
               <div className="text-sm text-slate-500">{BRAND.tagline}</div>
               <div className="text-sm font-medium text-slate-700">pland10</div>
             </header>
-            <main className="flex-1 p-6">{children}</main>
+            <main className="flex-1 overflow-y-auto p-6">{children}</main>
           </div>
         </div>
       </body>

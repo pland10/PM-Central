@@ -17,16 +17,18 @@ export default async function WorkOrdersPage() {
     propertyId: w.propertyId,
     propertyAddress: formatAddress(w.property),
     priority: w.priority,
+    state: w.status === "completed" ? "closed" : "open",
   }));
 
   const open = workOrders.filter((w) => w.status !== "completed").length;
+  const closed = workOrders.length - open;
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Work Orders</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {open} open · maintenance across the portfolio, tied to each property.
+          {open} open · {closed} closed · maintenance across the portfolio, tied to each property.
         </p>
       </div>
 

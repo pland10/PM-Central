@@ -32,6 +32,7 @@ export interface RvWorkOrder {
   prop: number; // Rentvine property id
   desc: string;
   priority: string; // "low" | "normal" | "high"
+  status?: string; // "open" | "completed" (closed); defaults to open if absent
 }
 
 export interface RentvineExport {

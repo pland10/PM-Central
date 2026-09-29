@@ -24,6 +24,7 @@ export default async function TenantsPage() {
     .filter((lt) => lt.lease.status === "active")
     .map((lt) => ({
       id: lt.id,
+      contactId: lt.contactId,
       name: fullName(lt.contact),
       email: lt.contact.email,
       phone: lt.contact.phone,

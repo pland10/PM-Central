@@ -6,6 +6,19 @@ import { externalLink } from "@/lib/externalLinks";
 
 export const dynamic = "force-dynamic";
 
+function fmtMonth(d: Date | null) {
+  if (!d) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+function contactName(c: {
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+}) {
+  return c.companyName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Tenant";
+}
+
 export default async function PropertyDetail({
   params,
 }: {
@@ -24,6 +37,11 @@ export default async function PropertyDetail({
   if (!property) notFound();
 
   const rvLink = externalLink(property.source, property.externalId);
+  const owner = property.portfolio?.owners[0]?.contact;
+  const openWorkOrders = property.workOrders.filter((w) => w.status !== "completed").length;
+  const workOrders = [...property.workOrders].sort(
+    (a, b) => (a.status !== "completed" ? 0 : 1) - (b.status !== "completed" ? 0 : 1)
+  );
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -49,39 +67,53 @@ export default async function PropertyDetail({
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <section className="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Units
+            Units &amp; Leases
           </h2>
           <ul className="divide-y divide-slate-100">
             {property.units.map((u) => {
               const active = u.leases.find((l) => l.status === "active");
-              const tenant = active?.tenants[0]?.contact;
               return (
-                <li key={u.id} className="flex items-center justify-between py-2 text-sm">
-                  <div>
-                    <span className="font-medium">Unit {u.unitNumber}</span>
-                    <span className="ml-2 text-slate-400">
-                      {u.beds ?? "?"}bd / {u.baths ?? "?"}ba
-                    </span>
-                  </div>
-                  <div className="text-right">
+                <li key={u.id} className="py-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <span className="font-medium">Unit {u.unitNumber}</span>
+                      <span className="ml-2 text-slate-400">
+                        {u.beds ?? "?"}bd / {u.baths ?? "?"}ba
+                      </span>
+                    </div>
                     {active ? (
-                      <>
-                        <div className="text-slate-700">
-                          {tenant
-                            ? [tenant.firstName, tenant.lastName].filter(Boolean).join(" ")
-                            : "Occupied"}
+                      <div className="text-right">
+                        <div className="text-emerald-600">{formatCurrency(active.rent)}/mo</div>
+                        <div className="text-xs text-slate-400">
+                          {fmtMonth(active.startDate)} – {fmtMonth(active.endDate)}
                         </div>
-                        <div className="text-xs text-emerald-600">
-                          {formatCurrency(active.rent)}/mo
-                        </div>
-                      </>
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400">Vacant</span>
                     )}
                   </div>
+                  {active && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      {active.tenants.map((t) => (
+                        <Link
+                          key={t.id}
+                          href={`/tenants/${t.contact.id}`}
+                          className="font-medium text-brand-600 hover:underline"
+                        >
+                          {contactName(t.contact)}
+                        </Link>
+                      ))}
+                      {active.tenants.length === 0 && <span className="text-slate-400">Occupied</span>}
+                      {active.balanceDue > 0 && (
+                        <span className="font-medium text-red-600">
+                          {formatCurrency(active.balanceDue)} due
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -98,25 +130,36 @@ export default async function PropertyDetail({
           <dl className="space-y-2 text-sm">
             <Row label="Type" value={property.propertyType.replace("-", " ")} />
             <Row label="Status" value={property.status} />
-            <Row label="Portfolio" value={property.portfolio?.name ?? "—"} />
-            <Row
-              label="Owner"
-              value={
-                property.portfolio?.owners[0]?.contact
-                  ? property.portfolio.owners[0].contact.companyName ||
-                    [
-                      property.portfolio.owners[0].contact.firstName,
-                      property.portfolio.owners[0].contact.lastName,
-                    ]
-                      .filter(Boolean)
-                      .join(" ")
-                  : "—"
-              }
-            />
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Portfolio</dt>
+              <dd className="font-medium text-slate-800">
+                {property.portfolio ? (
+                  <Link href={`/portfolios/${property.portfolio.id}`} className="text-brand-600 hover:underline">
+                    {property.portfolio.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Owner</dt>
+              <dd className="font-medium text-slate-800">
+                {owner ? (
+                  property.portfolio ? (
+                    <Link href={`/portfolios/${property.portfolio.id}`} className="text-brand-600 hover:underline">
+                      {contactName(owner)}
+                    </Link>
+                  ) : (
+                    contactName(owner)
+                  )
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
             <Row label="Source" value={property.source} />
-            <Row label="Open work orders" value={String(
-              property.workOrders.filter((w) => w.status !== "completed").length
-            )} />
+            <Row label="Open work orders" value={String(openWorkOrders)} />
           </dl>
         </section>
       </div>
@@ -124,15 +167,23 @@ export default async function PropertyDetail({
       {property.workOrders.length > 0 && (
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Work Orders ({property.workOrders.length})
+            Work Orders ({openWorkOrders} open / {property.workOrders.length} total)
           </h2>
           <ul className="divide-y divide-slate-100">
-            {property.workOrders.map((w) => {
+            {workOrders.map((w) => {
               const wl = externalLink(w.source, w.externalId);
+              const isOpen = w.status !== "completed";
               return (
                 <li key={w.id} className="flex items-start justify-between gap-4 py-2 text-sm">
                   <span className="text-slate-700">{w.description || w.title}</span>
                   <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        isOpen ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {isOpen ? "Open" : "Closed"}
+                    </span>
                     <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium capitalize text-blue-700">
                       {w.priority}
                     </span>

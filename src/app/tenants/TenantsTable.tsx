@@ -5,6 +5,7 @@ import { DataTable, type Column } from "@/components/DataTable";
 
 export type TenantRow = {
   id: string;
+  contactId: string;
   name: string;
   email: string | null;
   phone: string | null;
@@ -27,7 +28,11 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
       header: "Tenant",
       sortable: true,
       sortValue: (r) => r.name.toLowerCase(),
-      render: (r) => <span className="font-medium text-slate-900">{r.name}</span>,
+      render: (r) => (
+        <Link href={`/tenants/${r.contactId}`} className="font-medium text-slate-900 hover:text-brand-600">
+          {r.name}
+        </Link>
+      ),
     },
     {
       key: "contact",

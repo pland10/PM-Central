@@ -9,7 +9,7 @@ import type { RentvineExport } from "../raw";
 // + term + rent + balances), and the full work-order history. Work orders on
 // properties no longer managed are skipped by the loader.
 
-export const pmilighthouse: RentvineExport = {
+const pmilighthouse: RentvineExport = {
   account: "pmilighthouse",
   properties: [
     { id: 5, street: "18 Timber Ridge Drive", city: "Holtsville", state: "NY", zip: "11742", type: "Single Family Home", portfolioId: 6, owner: "Jennifer Seeba" },
@@ -484,3 +484,23 @@ export const pmilighthouse: RentvineExport = {
     { id: 1, prop: 6, desc: "Stove breaker tripping; loose wire reconnected.", priority: "normal" },
   ],
 };
+
+// Work-order open/closed state, pulled from Rentvine. Statuses Completed,
+// Cancelled and Rejected count as closed; everything else (Open, In Progress,
+// On Hold, Estimating, Requested, On-going, Pending Closure) counts as open.
+// Kept here (not in the transform) so the transform/loader stay generic; refresh
+// this set when re-syncing work orders.
+const OPEN_WORK_ORDER_IDS = new Set<number>([
+  121, 137, 172, 187, 203, 206, 220, 224, 240, 243, 259, 266, 267, 268, 271,
+  281, 285, 289, 307, 308, 309, 310, 315, 323, 327, 328, 329, 331, 344, 346,
+  353, 354, 357, 360, 362, 363, 364, 365, 370, 372, 373, 376, 377, 378, 379,
+  380, 381, 382, 386, 389, 390, 391, 393, 394, 396, 398, 399, 401, 403, 405,
+  406, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421,
+  422, 423, 424, 425, 426,
+]);
+
+for (const wo of pmilighthouse.workOrders) {
+  wo.status = OPEN_WORK_ORDER_IDS.has(wo.id) ? "open" : "completed";
+}
+
+export { pmilighthouse };

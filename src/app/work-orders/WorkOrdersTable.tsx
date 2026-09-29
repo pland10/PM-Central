@@ -10,6 +10,7 @@ export type WorkOrderRow = {
   propertyId: string;
   propertyAddress: string;
   priority: string;
+  state: "open" | "closed";
 };
 
 const PRIORITY_RANK: Record<string, number> = { emergency: 4, high: 3, normal: 2, low: 1 };
@@ -28,6 +29,18 @@ function priorityBadge(priority: string) {
       }`}
     >
       {priority}
+    </span>
+  );
+}
+
+function statusBadge(state: "open" | "closed") {
+  return state === "open" ? (
+    <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+      Open
+    </span>
+  ) : (
+    <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+      Closed
     </span>
   );
 }
@@ -60,6 +73,13 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       ),
     },
     {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      sortValue: (r) => (r.state === "open" ? 1 : 0),
+      render: (r) => statusBadge(r.state),
+    },
+    {
       key: "priority",
       header: "Priority",
       sortable: true,
@@ -73,6 +93,15 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
     .map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
 
   const facets: Facet<WorkOrderRow>[] = [
+    {
+      key: "status",
+      label: "Status",
+      options: [
+        { value: "open", label: "Open" },
+        { value: "closed", label: "Closed" },
+      ],
+      match: (r, v) => r.state === v,
+    },
     {
       key: "priority",
       label: "Priority",
@@ -89,6 +118,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       search={(r) => `${r.issue} ${r.propertyAddress}`}
       searchPlaceholder="Search issue or property…"
       facets={facets}
+      initialSort={{ key: "status", dir: "desc" }}
     />
   );
 }
