@@ -7,3 +7,6 @@ export const INSPECTIONS_URL =
 
 export const INVOICING_URL =
   process.env.INVOICING_URL || "https://invoicing.pmilighthouse.app/";
+
+export const SEARCH_URL =
+  process.env.SEARCH_URL || "https://pmilighthouse.app/search.html";
