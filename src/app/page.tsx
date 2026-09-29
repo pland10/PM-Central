@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
+import { SQUATTER_WATCH } from "@/lib/programs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ function contactName(c: {
 export default async function DashboardPage() {
   const [properties, highWorkOrders] = await Promise.all([
     prisma.property.findMany({
+      // Exclude Squatter Watch (home-watch) properties — vacant by design, they
+      // would otherwise drag down occupancy and fill the vacancy panel.
+      where: { NOT: { tags: { contains: SQUATTER_WATCH } } },
       include: {
         portfolio: true,
         units: {

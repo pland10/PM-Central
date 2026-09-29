@@ -16,7 +16,7 @@ export function Logo() {
       <img
         src={BRAND.logoSrc}
         alt={BRAND.name}
-        className="h-8 w-auto max-w-[150px] object-contain"
+        className="h-11 w-auto max-w-[180px] object-contain"
         onError={() => setFailed(true)}
       />
     );
@@ -24,7 +24,7 @@ export function Logo() {
 
   return (
     <div
-      className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold text-white"
+      className="flex h-11 w-11 items-center justify-center rounded-md text-sm font-bold text-white"
       style={{ backgroundColor: BRAND.colors.primary }}
     >
       {BRAND.shortName}

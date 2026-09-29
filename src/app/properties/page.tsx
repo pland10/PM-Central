@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { BRAND } from "@/config/brand";
+import { SQUATTER_WATCH } from "@/lib/programs";
 import { PropertiesTable, type PropertyRow } from "./PropertiesTable";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +18,19 @@ function ownerName(portfolio: {
 }
 
 export default async function PropertiesPage() {
-  const properties = await prisma.property.findMany({
-    orderBy: { createdAt: "asc" },
-    include: {
-      portfolio: { include: { owners: { include: { contact: true } } } },
-      units: { include: { leases: true } },
-    },
-  });
+  // Squatter Watch (home-watch) properties are vacant by design — they live on
+  // their own page and are excluded here so they don't skew vacancy/occupancy.
+  const [properties, squatterWatchCount] = await Promise.all([
+    prisma.property.findMany({
+      where: { NOT: { tags: { contains: SQUATTER_WATCH } } },
+      orderBy: { createdAt: "asc" },
+      include: {
+        portfolio: { include: { owners: { include: { contact: true } } } },
+        units: { include: { leases: true } },
+      },
+    }),
+    prisma.property.count({ where: { tags: { contains: SQUATTER_WATCH } } }),
+  ]);
 
   const rows: PropertyRow[] = properties.map((p) => {
     const unitCount = p.units.length;
@@ -59,6 +67,14 @@ export default async function PropertiesPage() {
           <p className="mt-1 text-sm text-slate-500">
             The foundation of the hub. {properties.length} propert
             {properties.length === 1 ? "y" : "ies"} · pulled from multiple sources.
+            {squatterWatchCount > 0 && (
+              <>
+                {" "}
+                <Link href="/squatter-watch" className="font-medium text-brand-600 hover:underline">
+                  {squatterWatchCount} on Squatter Watch →
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <button
