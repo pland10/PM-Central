@@ -17,9 +17,9 @@ function contactName(c: {
 export default async function DashboardPage() {
   const [properties, highWorkOrders] = await Promise.all([
     prisma.property.findMany({
-      // Exclude Squatter Watch (home-watch) properties — vacant by design, they
-      // would otherwise drag down occupancy and fill the vacancy panel.
-      where: { NOT: { tags: { contains: SQUATTER_WATCH } } },
+      // Exclude Squatter Watch (home-watch, vacant by design) and inactive
+      // properties (e.g. terminated agreements) so they don't distort occupancy.
+      where: { status: "active", NOT: { tags: { contains: SQUATTER_WATCH } } },
       include: {
         portfolio: true,
         units: {

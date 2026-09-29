@@ -12,6 +12,7 @@ export interface RvProperty {
   portfolioId?: number; // Rentvine portfolio (ownership entity) id
   owner?: string; // portfolio / owner display name
   groups?: string[]; // Rentvine property groups, e.g. ["Squatter Watch"]
+  status?: string; // "active" (default) | "inactive" — e.g. management agreement terminated
 }
 
 export interface RvLease {

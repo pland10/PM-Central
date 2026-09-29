@@ -26,7 +26,7 @@ const pmilighthouse: RentvineExport = {
     { id: 35, street: "185 North Indiana Avenue", city: "Lindenhurst", state: "NY", zip: "11757", type: "Apartment", portfolioId: 32, owner: "Richard Lahn" },
     { id: 36, street: "19 Colgate Road", city: "Great Neck", state: "NY", zip: "11023", type: "Single Family Home", portfolioId: 34, owner: "Ila Mishra & Amogh Mahapatra" },
     { id: 37, street: "25 Thorney Avenue", city: "Huntington Station", state: "NY", zip: "11746", type: "Single Family Home", portfolioId: 35, owner: "Epifanio Vasquez" },
-    { id: 38, street: "144 Storm Drive", city: "Holtsville", state: "NY", zip: "11742", type: "Single Family Home", portfolioId: 36, owner: "Daniel Patti" },
+    { id: 38, street: "144 Storm Drive", city: "Holtsville", state: "NY", zip: "11742", type: "Single Family Home", portfolioId: 36, owner: "Daniel Patti", status: "inactive" }, // management agreement terminated
     { id: 40, street: "66 Francis Court", city: "Elmont", state: "NY", zip: "11003", type: "Single Family Home", portfolioId: 38, owner: "Gilma Escobar" },
     { id: 41, street: "24-12 42nd Road Apt 2E", city: "Long Island City", state: "NY", zip: "11101", type: "Condo", portfolioId: 39, owner: "Dana Cho" },
     { id: 44, street: "160 Red Dirt Rd", city: "East Hampton", state: "NY", zip: "11937", type: "Single Family Home", portfolioId: 42, owner: "Kevin Kunkel", groups: ["Squatterwatch Properties"] },

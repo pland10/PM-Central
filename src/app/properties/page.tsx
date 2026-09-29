@@ -22,14 +22,14 @@ export default async function PropertiesPage() {
   // their own page and are excluded here so they don't skew vacancy/occupancy.
   const [properties, squatterWatchCount] = await Promise.all([
     prisma.property.findMany({
-      where: { NOT: { tags: { contains: SQUATTER_WATCH } } },
+      where: { status: "active", NOT: { tags: { contains: SQUATTER_WATCH } } },
       orderBy: { createdAt: "asc" },
       include: {
         portfolio: { include: { owners: { include: { contact: true } } } },
         units: { include: { leases: true } },
       },
     }),
-    prisma.property.count({ where: { tags: { contains: SQUATTER_WATCH } } }),
+    prisma.property.count({ where: { status: "active", tags: { contains: SQUATTER_WATCH } } }),
   ]);
 
   const rows: PropertyRow[] = properties.map((p) => {

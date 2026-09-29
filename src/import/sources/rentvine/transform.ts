@@ -65,7 +65,7 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
       state: p.state,
       zip: p.zip,
       propertyType: RV_TYPE[p.type] ?? p.type,
-      status: "active",
+      status: p.status ?? "active",
       tags: (p.groups ?? []).map(tagSlug),
       owner:
         p.owner && p.portfolioId != null
