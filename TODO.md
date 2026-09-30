@@ -36,6 +36,15 @@ backup + a tested fallback to the standalone app, and decide the auth model
 `created_by`/`updated_by` stay meaningful). Don't start until Phase 1 has been
 in real use for a bit.
 
+Future work (pending team review of the read-only views):
+- **PDF link / "Print – PDF" button** in the invoice drawer. Note: the standalone
+  app does NOT store PDFs — it renders the invoice HTML and uses the browser's
+  Print → Save as PDF (`window.print()` + print CSS). So the plan is to generate
+  on demand: a clean print-styled invoice view (e.g. `/invoicing/[id]/print`)
+  matching the app's layout, triggered from the drawer. Read-only, no storage,
+  no new deps. (A real server-generated/stored PDF for emailing/archiving is a
+  bigger, Phase-2-ish step — only if the team wants automatic PDFs.)
+
 
 ## Inspections app — linked now, rebuild later
 Done: sidebar "Inspections" tab links out to the separate inspection app
