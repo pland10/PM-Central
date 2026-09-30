@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { BRAND, brandCssVars } from "@/config/brand";
+import { isFeatureEnabled, type FeatureKey } from "@/config/features";
 import { Logo } from "@/components/Logo";
 
 export const metadata: Metadata = {
@@ -11,10 +12,12 @@ export const metadata: Metadata = {
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
-const nav = [
+// `feature` ties each item to a flag so disabled modules drop out of the nav.
+const nav: { href: string; label: string; feature: FeatureKey; icon: React.ReactNode }[] = [
   {
     href: "/",
     label: "Dashboard",
+    feature: "dashboard",
     icon: (
       <>
         <rect x="3" y="3" width="7" height="9" rx="1" />
@@ -27,6 +30,7 @@ const nav = [
   {
     href: "/properties",
     label: "Properties",
+    feature: "properties",
     icon: (
       <>
         <rect x="4" y="2" width="16" height="20" rx="2" />
@@ -38,6 +42,7 @@ const nav = [
   {
     href: "/squatter-watch",
     label: "Squatter Watch",
+    feature: "squatterWatch",
     icon: (
       <>
         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
@@ -48,6 +53,7 @@ const nav = [
   {
     href: "/portfolios",
     label: "Portfolios",
+    feature: "portfolios",
     icon: (
       <>
         <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -58,6 +64,7 @@ const nav = [
   {
     href: "/leases",
     label: "Leases",
+    feature: "leases",
     icon: (
       <>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -69,6 +76,7 @@ const nav = [
   {
     href: "/tenants",
     label: "Tenants",
+    feature: "tenants",
     icon: (
       <>
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -81,6 +89,7 @@ const nav = [
   {
     href: "/work-orders",
     label: "Work Orders",
+    feature: "workOrders",
     icon: (
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     ),
@@ -88,6 +97,7 @@ const nav = [
   {
     href: "/search",
     label: "Search",
+    feature: "search",
     icon: (
       <>
         <circle cx="11" cy="11" r="8" />
@@ -98,6 +108,7 @@ const nav = [
   {
     href: "/inspections",
     label: "Inspections",
+    feature: "inspections",
     icon: (
       <>
         <rect x="8" y="2" width="8" height="4" rx="1" />
@@ -109,6 +120,7 @@ const nav = [
   {
     href: "/invoicing",
     label: "Invoicing",
+    feature: "invoicing",
     icon: (
       <>
         <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z" />
@@ -124,6 +136,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const items = nav.filter((item) => isFeatureEnabled(item.feature));
+
   return (
     <html lang="en">
       <head>
@@ -149,7 +163,7 @@ export default function RootLayout({
               </span>
             </Link>
             <nav className="flex flex-col gap-1 p-3 text-sm">
-              {nav.map((item) => (
+              {items.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
