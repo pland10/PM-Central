@@ -5,5 +5,6 @@
 export const INSPECTIONS_URL =
   process.env.INSPECTIONS_URL || "https://pmilighthouse.app/inspections.html";
 
-export const INVOICING_URL =
-  process.env.INVOICING_URL || "https://invoicing.pmilighthouse.app/";
+// Note: Invoicing is now a native, read-only view inside PM-Central (see
+// src/app/invoicing and src/lib/invoicing-supabase.ts) rather than an embedded
+// iframe, so there is no INVOICING_URL here anymore.

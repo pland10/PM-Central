@@ -16,6 +16,27 @@ Full data ownership = port that sync pipeline into PM-Central's own DB later.
 Standalone `search.html` is now frozen (PM-Central is the home).
 
 
+## Invoicing — native read-only (Phase 1 done); writes later
+Invoicing is now native in PM-Central: `/invoicing` reads the live invoicing
+database directly (server-side) and renders a list + read-only detail drawer —
+KPIs (outstanding / paid / collected rate), status filter (draft/sent/paid),
+search, sortable columns, per-invoice line items and totals. **Read-only**: the
+standalone invoicing app (`pland10/pmi-invoicing`) stays the only writer.
+
+Config: the invoicing app is its own Supabase project (separate from Search).
+Its `invoices` table is locked to signed-in users (`... to authenticated`) — on
+purpose, since the anon key ships in the public invoicing client — so PM-Central
+reads server-side with the project's **service_role** key. Set
+`INVOICING_SUPABASE_URL` + `INVOICING_SUPABASE_SERVICE_KEY` (service key stays
+server-side, behind Basic Auth; PM-Central only ever SELECTs).
+
+Phase 2 (later, careful): allow edits/create from PM-Central. Prereqs — a DB
+backup + a tested fallback to the standalone app, and decide the auth model
+(service_role writes are trusted-backend; or sign in a real invoicing user so
+`created_by`/`updated_by` stay meaningful). Don't start until Phase 1 has been
+in real use for a bit.
+
+
 ## Inspections app — linked now, rebuild later
 Done: sidebar "Inspections" tab links out to the separate inspection app
 (set `INSPECTIONS_URL` to its deployed URL). The inspection app
