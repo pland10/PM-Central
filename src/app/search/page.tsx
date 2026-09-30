@@ -1,8 +1,9 @@
-import { AppFrame } from "@/components/AppFrame";
-import { SEARCH_URL } from "@/config/apps";
+import { requireFeature } from "@/config/features";
+import { SearchClient } from "./SearchClient";
 
 export const dynamic = "force-dynamic";
 
 export default function SearchPage() {
-  return <AppFrame title="Search" src={SEARCH_URL} />;
+  requireFeature("search");
+  return <SearchClient />;
 }
