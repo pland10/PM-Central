@@ -4,11 +4,12 @@
 Search is now native in PM-Central: `/search` page + `/api/search` route querying
 the synced LeadSimple `activities` table in Supabase (keys server-side, behind
 PM-Central auth). Set `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
-Ported: full-text search, type filter (email/text/call/task), direction, task
-open/closed, pagination, count.
-Not yet ported from the standalone app: context typeahead (contact / property /
-pipeline autocomplete), the contact side-panel, "complete task" action (needs the
-LeadSimple key server-side too), and the sync-freshness indicator.
+Ported: full-text search, all 6 types (email/text/call/note/chat/task), direction,
+task open/closed, "scope by" contact/property/pipeline with autocomplete, per-page,
+pagination, count, and the sync-freshness indicator.
+Not yet ported from the standalone app: the contact side-panel, and the
+"complete task" action (needs the LeadSimple key wired server-side — the key
+currently lives only in the standalone repo's env/HTML).
 Bigger picture — "everything hits PM-Central": the data still lives in Supabase,
 populated by the standalone repo's Python sync scripts (`pland10/leadsimple-search`).
 Full data ownership = port that sync pipeline into PM-Central's own DB later.
