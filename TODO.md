@@ -50,6 +50,21 @@ NOTE: the inspection app's data is throwaway except the real metadata — do NOT
 migrate inspection records/photos; only carry over the schema/metadata.
 
 
+## 🚩 Delinquencies / balances are a static snapshot (live sync before prod)
+Delinquent balances (`Lease.balanceDue`) are hand-loaded from a one-time
+Rentvine pull in `src/import/sources/rentvine/accounts/pmilighthouse.ts`. They do
+NOT refresh — they only change when someone re-runs the import. Verified stale
+2026-09-30: Michael Serrant (lease 38) showed $7,875 in PM-Central vs $6,875 live
+in Rentvine. Fine for now (we know the data is dated); not fine for prod.
+
+Before prod:
+1. Show a **"Last updated: <timestamp>"** indicator wherever balances/delinquencies
+   appear (dashboard KPIs, delinquency panel), so nobody trusts a stale number.
+   Store the import/sync time and surface it.
+2. Move balances to a **live/scheduled sync** from Rentvine (`get_lease_balance_due`
+   per active lease, or a delinquency report) instead of the baked snapshot, so
+   the timestamp stays fresh on its own.
+
 ## 🚩 Deposits held — data is wrong (revisit later)
 The dashboard "Deposits held" KPI sums `Lease.depositBalance`, which currently
 comes from Rentvine's Rent Roll `depositBalance` column (total ≈ $10,250). That
