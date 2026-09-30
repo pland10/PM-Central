@@ -44,6 +44,18 @@ Future work (pending team review of the read-only views):
   matching the app's layout, triggered from the drawer. Read-only, no storage,
   no new deps. (A real server-generated/stored PDF for emailing/archiving is a
   bigger, Phase-2-ish step — only if the team wants automatic PDFs.)
+- **Finalize / lock invoices (status is a WRITE → Phase 2, or the standalone app).**
+  Problem: every invoice currently reads "draft" because nobody advances the
+  status, so the field is meaningless. Want: finalizing an invoice moves it out
+  of draft and locks it. Open decisions for the team:
+    - Trigger: an explicit **"Finalize & Send"** action (draft → sent), NOT plain
+      print — otherwise previewing a draft would lock it by accident. (Optionally
+      a DRAFT watermark on unfinalized prints, removed once finalized.)
+    - Meaning of "lock": just advance the status, or also make it non-editable
+      (frozen until an explicit void/unlock)? Real invoicing usually freezes it.
+  Note: PM-Central's Invoicing is read-only today and cannot change status; this
+  requires either Phase 2 writes in PM-Central or a change in the standalone app
+  (the current sole writer).
 
 
 ## Inspections app — linked now, rebuild later
