@@ -372,18 +372,6 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
               )}
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() =>
-              setChecklist((c) => [
-                ...c,
-                { key: "", label: "", checked: false, status: "", issue_notes: "", fixed: false },
-              ])
-            }
-            className="text-sm font-medium text-brand-600 hover:underline"
-          >
-            + Add another item
-          </button>
         </div>
       </Section>
 
