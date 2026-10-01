@@ -83,11 +83,16 @@ export type SpecialInstruction = NamedOption & { property_ids: number[] };
 // instructions that applied for that property, and whether each was done.
 export type InstructionState = { id: number; name: string; checked: boolean };
 
+// An inspector is a login user on the inspections Supabase project.
+export type Inspector = { id: string; email: string | null; name: string };
+
 export type InspectionMeta = {
   properties: InspectionProperty[];
   reasons: NamedOption[];
   services: NamedOption[];
   specialInstructions: SpecialInstruction[];
+  inspectors: Inspector[];
+  me: { id: string; name: string | null };
 };
 
 // Parse the special_instructions column, which may hold either JSON (the newer

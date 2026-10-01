@@ -2,17 +2,24 @@ import { NextResponse } from "next/server";
 import { getInspectionsDb } from "@/lib/inspections/supabase";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
-import type { InspectionProperty, NamedOption, SpecialInstruction } from "@/lib/inspections/types";
+import type {
+  InspectionProperty,
+  NamedOption,
+  SpecialInstruction,
+  Inspector,
+} from "@/lib/inspections/types";
 
 // Reference data for the inspection create/edit form: properties, reasons,
-// services, and special instructions (with the property IDs each is assigned to).
+// services, special instructions (with the property IDs each is assigned to),
+// and the inspectors (the people with login accounts).
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   if (!isFeatureEnabled("inspections")) {
     return NextResponse.json({ error: "Inspections is disabled." }, { status: 404 });
   }
-  if (!(await getCurrentUser())) {
+  const me = await getCurrentUser();
+  if (!me) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const db = getInspectionsDb();
@@ -43,10 +50,32 @@ export async function GET() {
     (i) => ({ ...i, property_ids: byInstruction.get(i.id) ?? [] })
   );
 
+  // Inspectors = the login users on this Supabase project (admin API).
+  let inspectors: Inspector[] = [];
+  try {
+    const usersRes = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    inspectors = (usersRes.data?.users ?? [])
+      .map((u) => {
+        const m = (u.user_metadata ?? {}) as Record<string, unknown>;
+        const name =
+          (typeof m.full_name === "string" && m.full_name) ||
+          (typeof m.name === "string" && m.name) ||
+          u.email ||
+          "";
+        return { id: u.id, email: u.email ?? null, name };
+      })
+      .filter((u) => u.name)
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  } catch {
+    inspectors = [];
+  }
+
   return NextResponse.json({
     properties: (propsRes.data ?? []) as InspectionProperty[],
     reasons: (reasonsRes.data ?? []) as NamedOption[],
     services: (servicesRes.data ?? []) as NamedOption[],
     specialInstructions,
+    inspectors,
+    me: { id: me.id, name: me.name },
   });
 }

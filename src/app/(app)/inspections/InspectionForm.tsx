@@ -98,6 +98,12 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
       .catch((e) => setLoadErr(e.message));
   }, []);
 
+  // Default the inspector to the logged-in user on a new inspection.
+  useEffect(() => {
+    if (!isEdit && meta?.me?.name && !inspector) setInspector(meta.me.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta]);
+
   // Instructions assigned to the selected property.
   const propertyInstructions = useMemo(() => {
     if (!meta || propertyId === "") return [];
@@ -211,11 +217,21 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
           </select>
         </Labeled>
         <Labeled label="Inspector">
-          <input
+          <select
             value={inspector}
             onChange={(e) => setInspector(e.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-          />
+          >
+            <option value="">— Select inspector —</option>
+            {meta.inspectors.map((u) => (
+              <option key={u.id} value={u.name}>
+                {u.name}
+              </option>
+            ))}
+            {inspector && !meta.inspectors.some((u) => u.name === inspector) && (
+              <option value={inspector}>{inspector}</option>
+            )}
+          </select>
         </Labeled>
         <Labeled label="Overall status">
           <select
