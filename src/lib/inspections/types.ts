@@ -59,6 +59,51 @@ export type InspectionDetail = InspectionRow & {
   work_items: WorkItem[];
 };
 
+// Reference data (small lookup lists) used by the create/edit form.
+export type NamedOption = { id: number; name: string; sort_order?: number };
+
+// A special instruction, plus which property IDs it's assigned to. This is the
+// "only for certain houses" feature: an instruction applies to the properties
+// listed in property_ids.
+export type SpecialInstruction = NamedOption & { property_ids: number[] };
+
+// What gets stored on an inspection's special_instructions column (JSON): the
+// instructions that applied for that property, and whether each was done.
+export type InstructionState = { id: number; name: string; checked: boolean };
+
+export type InspectionMeta = {
+  properties: InspectionProperty[];
+  reasons: NamedOption[];
+  services: NamedOption[];
+  specialInstructions: SpecialInstruction[];
+};
+
+// Parse the special_instructions column, which may hold either JSON (the newer
+// per-property instruction states) or plain text (older rows).
+export function parseSpecialInstructions(
+  raw: string | null | undefined
+): { states: InstructionState[]; text: string } {
+  if (!raw) return { states: [], text: "" };
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed) as unknown[];
+      const states = arr
+        .filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
+        .map((x) => ({
+          id: Number(x.id) || 0,
+          name: String(x.name ?? ""),
+          checked: x.checked === true,
+        }))
+        .filter((x) => x.name);
+      return { states, text: "" };
+    } catch {
+      // fall through to text
+    }
+  }
+  return { states: [], text: raw };
+}
+
 // Normalize the free-form overall_status into a small set for badge coloring.
 export function statusTone(status: string | null | undefined): "good" | "warn" | "bad" | "neutral" {
   const s = (status || "").toLowerCase();

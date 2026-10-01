@@ -10,7 +10,10 @@ import {
   type InspectionProperty,
   statusTone,
   formatInspectionDate,
+  parseSpecialInstructions,
 } from "@/lib/inspections/types";
+import { InspectionActions } from "../InspectionActions";
+import { PhotoUploader } from "../PhotoUploader";
 
 export const dynamic = "force-dynamic";
 
@@ -64,22 +67,25 @@ export default async function InspectionDetailPage({
         ← All inspections
       </Link>
 
-      <div className="mt-2 flex items-start justify-between">
+      <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-ink">
             {property?.name || "Inspection"}
           </h1>
           {property?.address && <p className="text-sm text-slate-500">{property.address}</p>}
         </div>
-        {insp.overall_status && (
-          <span
-            className={`inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize ${
-              TONE_STYLES[statusTone(insp.overall_status)]
-            }`}
-          >
-            {insp.overall_status}
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          {insp.overall_status && (
+            <span
+              className={`inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize ${
+                TONE_STYLES[statusTone(insp.overall_status)]
+              }`}
+            >
+              {insp.overall_status}
+            </span>
+          )}
+          <InspectionActions id={insp.id} />
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-4">
@@ -89,11 +95,33 @@ export default async function InspectionDetailPage({
         <Field label="Reason" value={insp.inspection_reason || "—"} />
       </div>
 
-      {insp.special_instructions && (
-        <Section title="Special instructions">
-          <p className="whitespace-pre-line text-sm text-slate-700">{insp.special_instructions}</p>
-        </Section>
-      )}
+      {(() => {
+        const si = parseSpecialInstructions(insp.special_instructions);
+        if (si.states.length) {
+          return (
+            <Section title="Special instructions">
+              <ul className="space-y-1.5">
+                {si.states.map((st) => (
+                  <li key={st.id} className="flex items-center gap-2 text-sm">
+                    <span className={st.checked ? "text-emerald-600" : "text-slate-300"}>
+                      {st.checked ? "✓" : "○"}
+                    </span>
+                    <span className="text-slate-700">{st.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          );
+        }
+        if (si.text) {
+          return (
+            <Section title="Special instructions">
+              <p className="whitespace-pre-line text-sm text-slate-700">{si.text}</p>
+            </Section>
+          );
+        }
+        return null;
+      })()}
 
       {insp.notes && (
         <Section title="Notes">
@@ -152,6 +180,9 @@ export default async function InspectionDetailPage({
       )}
 
       <Section title={`Photos${photos.length ? ` (${photos.length})` : ""}`}>
+        <div className="mb-3">
+          <PhotoUploader inspectionId={insp.id} />
+        </div>
         {photos.length === 0 ? (
           <p className="text-sm text-slate-400">No photos.</p>
         ) : (

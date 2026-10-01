@@ -34,6 +34,7 @@ export type AppUser = {
   name: string | null;
   role: "admin" | "inspector" | "user";
   canDelete: boolean;
+  canEditAll: boolean;
 };
 
 // Resolve the current user (or null) plus a simple role. Role comes from the
@@ -59,9 +60,14 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   const app = (user.app_metadata ?? {}) as Record<string, unknown>;
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
   const canDelete = app.can_delete === true;
+  const canEditAll = app.can_edit_all === true;
   const claimed = typeof app.role === "string" ? (app.role as string) : "";
   const role: AppUser["role"] =
-    claimed === "admin" || canDelete ? "admin" : claimed === "inspector" ? "inspector" : "user";
+    claimed === "admin" || canDelete || canEditAll
+      ? "admin"
+      : claimed === "inspector"
+        ? "inspector"
+        : "user";
 
   return {
     id: user.id,
@@ -69,5 +75,6 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     name: (typeof meta.name === "string" ? meta.name : null) ?? user.email ?? null,
     role,
     canDelete,
+    canEditAll,
   };
 }
