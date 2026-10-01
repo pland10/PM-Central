@@ -84,7 +84,7 @@ export default async function InspectionsPage() {
             href="/inspections/settings"
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            Manage instructions
+            Settings
           </Link>
           <Link
             href="/inspections/new"
