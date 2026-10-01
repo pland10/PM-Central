@@ -7,6 +7,8 @@ import {
   type InspectionMeta,
   type InstructionState,
   parseSpecialInstructions,
+  DEFAULT_CHECKLIST,
+  CHECKLIST_STATUSES,
 } from "@/lib/inspections/types";
 
 type ChecklistDraft = {
@@ -15,7 +17,40 @@ type ChecklistDraft = {
   checked: boolean;
   status: string;
   issue_notes: string;
+  fixed: boolean; // part of the standard checklist (label not editable, not removable)
 };
+
+// Standard checklist for every inspection, with any saved values merged in.
+function buildChecklist(initial?: InspectionDetail): ChecklistDraft[] {
+  const saved = initial?.checklist ?? [];
+  const byKey = new Map(saved.map((c) => [c.item_key ?? "", c]));
+  const rows: ChecklistDraft[] = DEFAULT_CHECKLIST.map((d) => {
+    const s = byKey.get(d.key);
+    return {
+      key: d.key,
+      label: d.label,
+      checked: s ? Boolean(s.checked) : false,
+      status: s?.status ?? "",
+      issue_notes: s?.issue_notes ?? "",
+      fixed: true,
+    };
+  });
+  // Any saved items that aren't part of the standard set show as extra rows.
+  const defaultKeys = new Set(DEFAULT_CHECKLIST.map((d) => d.key));
+  for (const c of saved) {
+    if (!defaultKeys.has(c.item_key ?? "")) {
+      rows.push({
+        key: c.item_key ?? c.item_label ?? "",
+        label: c.item_label ?? "",
+        checked: Boolean(c.checked),
+        status: c.status ?? "",
+        issue_notes: c.issue_notes ?? "",
+        fixed: false,
+      });
+    }
+  }
+  return rows;
+}
 type WorkDraft = { service_name: string; quantity: number; notes: string };
 
 const STATUS_OPTIONS = ["", "Satisfactory", "Needs attention", "Issues found"];
@@ -47,15 +82,7 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
   }, [initial]);
   const [checkedInstr, setCheckedInstr] = useState<Record<number, boolean>>({});
 
-  const [checklist, setChecklist] = useState<ChecklistDraft[]>(
-    (initial?.checklist ?? []).map((c) => ({
-      key: c.item_key ?? "",
-      label: c.item_label ?? "",
-      checked: Boolean(c.checked),
-      status: c.status ?? "",
-      issue_notes: c.issue_notes ?? "",
-    }))
-  );
+  const [checklist, setChecklist] = useState<ChecklistDraft[]>(() => buildChecklist(initial));
   const [work, setWork] = useState<WorkDraft[]>(
     (initial?.work_items ?? []).map((w) => ({
       service_name: w.service_name ?? "",
@@ -113,11 +140,11 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
       notes,
       special_instructions: instructionStates.length ? JSON.stringify(instructionStates) : "",
       checklist: checklist
-        .filter((c) => c.label.trim())
+        .filter((c) => c.fixed || c.label.trim())
         .map((c) => ({
           key: c.key || c.label,
           label: c.label,
-          checked: c.checked,
+          checked: c.status !== "",
           status: c.status || null,
           issue_notes: c.issue_notes || null,
         })),
@@ -297,40 +324,65 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
         </div>
       </Section>
 
-      <Section title="Checklist" hint="Optional items noted during the inspection.">
+      <Section title="Inspection checklist" hint="Mark each item OK or Issue found; add a note on any issue.">
         <div className="space-y-2">
           {checklist.map((c, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              {c.fixed ? (
+                <span className="w-44 shrink-0 text-sm text-slate-800">{c.label}</span>
+              ) : (
+                <input
+                  placeholder="Item"
+                  value={c.label}
+                  onChange={(e) => updateCheck(i, { label: e.target.value })}
+                  className="w-44 shrink-0 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
+                />
+              )}
+              <select
+                value={c.status}
+                onChange={(e) => updateCheck(i, { status: e.target.value })}
+                className={`rounded-md border px-2 py-1.5 text-sm outline-none focus:border-brand-500 ${
+                  c.status === "Issue found"
+                    ? "border-red-300 text-red-700"
+                    : c.status === "OK"
+                      ? "border-emerald-300 text-emerald-700"
+                      : "border-slate-300"
+                }`}
+              >
+                {CHECKLIST_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s || "—"}
+                  </option>
+                ))}
+              </select>
               <input
-                type="checkbox"
-                checked={c.checked}
-                onChange={(e) => updateCheck(i, { checked: e.target.checked })}
-              />
-              <input
-                placeholder="Item"
-                value={c.label}
-                onChange={(e) => updateCheck(i, { label: e.target.value })}
-                className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
-              />
-              <input
-                placeholder="Notes"
+                placeholder={c.status === "Issue found" ? "Describe the issue" : "Notes"}
                 value={c.issue_notes}
                 onChange={(e) => updateCheck(i, { issue_notes: e.target.value })}
-                className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
+                className="min-w-[8rem] flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
               />
-              <button type="button" onClick={() => removeCheck(i)} className="px-1 text-slate-400 hover:text-red-500">
-                ✕
-              </button>
+              {!c.fixed && (
+                <button
+                  type="button"
+                  onClick={() => removeCheck(i)}
+                  className="px-1 text-slate-400 hover:text-red-500"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
           <button
             type="button"
             onClick={() =>
-              setChecklist((c) => [...c, { key: "", label: "", checked: false, status: "", issue_notes: "" }])
+              setChecklist((c) => [
+                ...c,
+                { key: "", label: "", checked: false, status: "", issue_notes: "", fixed: false },
+              ])
             }
             className="text-sm font-medium text-brand-600 hover:underline"
           >
-            + Add checklist item
+            + Add another item
           </button>
         </div>
       </Section>

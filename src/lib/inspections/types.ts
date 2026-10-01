@@ -59,6 +59,18 @@ export type InspectionDetail = InspectionRow & {
   work_items: WorkItem[];
 };
 
+// The standard checklist that appears on every inspection (ported from the
+// original app). Each item is marked OK or "Issue found" during the visit.
+export const DEFAULT_CHECKLIST: { key: string; label: string }[] = [
+  { key: "exterior", label: "🏠 Exterior Condition" },
+  { key: "water", label: "💧 Water / Leaks" },
+  { key: "mail", label: "📬 Mail Collected" },
+  { key: "security", label: "🔒 Break-in / Security" },
+  { key: "hvac", label: "🌡️ HVAC / Utilities" },
+];
+
+export const CHECKLIST_STATUSES = ["", "OK", "Issue found"] as const;
+
 // Reference data (small lookup lists) used by the create/edit form.
 export type NamedOption = { id: number; name: string; sort_order?: number };
 
