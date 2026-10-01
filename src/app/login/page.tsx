@@ -43,12 +43,12 @@ export default function LoginPage() {
       style={{ backgroundColor: BRAND.colors.ink }}
     >
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
-        <div className="mb-6 flex flex-col items-center gap-3">
-          <Logo />
-          <div className="text-center">
-            <div className="text-lg font-semibold text-slate-900">{BRAND.name}</div>
-            <div className="text-sm text-slate-500">Sign in to continue</div>
-          </div>
+        <div className="mb-7 flex flex-col items-center gap-4">
+          <Logo
+            className="h-16 w-auto max-w-[220px] object-contain"
+            fallbackClassName="h-16 w-16 text-lg"
+          />
+          <div className="text-sm text-slate-500">Sign in to continue</div>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
