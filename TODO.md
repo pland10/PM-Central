@@ -78,13 +78,19 @@ NOT refresh — they only change when someone re-runs the import. Verified stale
 2026-09-30: Michael Serrant (lease 38) showed $7,875 in PM-Central vs $6,875 live
 in Rentvine. Fine for now (we know the data is dated); not fine for prod.
 
-Before prod:
+Progress: a one-command live sync now exists — `npm run sync:balances`
+(`scripts/sync-balances.ts`) pulls Rentvine's "Rent Roll Outstanding Balance"
+report (report id 27) and writes current balances onto the leases in the DB,
+matched by Rentvine leaseID. Needs RENTVINE_BASE_URL / RENTVINE_API_KEY /
+RENTVINE_API_SECRET. NOTE: `npm run import` reloads the static snapshot and
+resets balances, so run the sync again after any import.
+
+Still before prod:
 1. Show a **"Last updated: <timestamp>"** indicator wherever balances/delinquencies
-   appear (dashboard KPIs, delinquency panel), so nobody trusts a stale number.
-   Store the import/sync time and surface it.
-2. Move balances to a **live/scheduled sync** from Rentvine (`get_lease_balance_due`
-   per active lease, or a delinquency report) instead of the baked snapshot, so
-   the timestamp stays fresh on its own.
+   appear (dashboard KPIs, delinquency panel). Have sync:balances record the
+   sync time and surface it.
+2. Make the sync **scheduled/automatic** (cron / job) instead of manual, and/or
+   fold balances into the main import's live source so one path keeps them fresh.
 
 ## 🚩 Deposits held — data is wrong (revisit later)
 The dashboard "Deposits held" KPI sums `Lease.depositBalance`, which currently

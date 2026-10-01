@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "import": "tsx scripts/import.ts",
+    "sync:balances": "tsx scripts/sync-balances.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
