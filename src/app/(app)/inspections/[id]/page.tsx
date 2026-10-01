@@ -1,0 +1,200 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireFeature } from "@/config/features";
+import { getInspectionsDb } from "@/lib/inspections/supabase";
+import {
+  type InspectionRow,
+  type ChecklistItem,
+  type WorkItem,
+  type InspectionPhoto,
+  type InspectionProperty,
+  statusTone,
+  formatInspectionDate,
+} from "@/lib/inspections/types";
+
+export const dynamic = "force-dynamic";
+
+const TONE_STYLES: Record<string, string> = {
+  good: "bg-emerald-100 text-emerald-700",
+  warn: "bg-amber-100 text-amber-700",
+  bad: "bg-red-100 text-red-700",
+  neutral: "bg-slate-100 text-slate-600",
+};
+
+export default async function InspectionDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  requireFeature("inspections");
+  const { id } = await params;
+  const inspectionId = Number(id);
+  if (!Number.isFinite(inspectionId)) notFound();
+
+  const db = getInspectionsDb();
+  if (!db) notFound();
+
+  const insRes = await db
+    .from("pmi_inspect_inspections")
+    .select("*")
+    .eq("id", inspectionId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (insRes.error || !insRes.data) notFound();
+  const insp = insRes.data as InspectionRow;
+
+  const [propRes, checkRes, photoRes, workRes] = await Promise.all([
+    insp.property_id != null
+      ? db.from("pmi_inspect_properties").select("id,name,address").eq("id", insp.property_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from("pmi_inspect_checklist_items").select("*").eq("inspection_id", inspectionId).order("id"),
+    db.from("pmi_inspect_photos").select("*").eq("inspection_id", inspectionId).order("id"),
+    db.from("pmi_inspect_work_items").select("*").eq("inspection_id", inspectionId).order("id"),
+  ]);
+
+  const property = (propRes.data ?? null) as InspectionProperty | null;
+  const checklist = (checkRes.data ?? []) as ChecklistItem[];
+  const photos = (photoRes.data ?? []) as InspectionPhoto[];
+  const workItems = (workRes.data ?? []) as WorkItem[];
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <Link href="/inspections" className="text-sm text-slate-500 hover:text-brand-600">
+        ← All inspections
+      </Link>
+
+      <div className="mt-2 flex items-start justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-ink">
+            {property?.name || "Inspection"}
+          </h1>
+          {property?.address && <p className="text-sm text-slate-500">{property.address}</p>}
+        </div>
+        {insp.overall_status && (
+          <span
+            className={`inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize ${
+              TONE_STYLES[statusTone(insp.overall_status)]
+            }`}
+          >
+            {insp.overall_status}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-4">
+        <Field label="Date" value={formatInspectionDate(insp.inspection_date)} />
+        <Field label="Time" value={insp.inspection_time || "—"} />
+        <Field label="Inspector" value={insp.inspector_name || "—"} />
+        <Field label="Reason" value={insp.inspection_reason || "—"} />
+      </div>
+
+      {insp.special_instructions && (
+        <Section title="Special instructions">
+          <p className="whitespace-pre-line text-sm text-slate-700">{insp.special_instructions}</p>
+        </Section>
+      )}
+
+      {insp.notes && (
+        <Section title="Notes">
+          <p className="whitespace-pre-line text-sm text-slate-700">{insp.notes}</p>
+        </Section>
+      )}
+
+      {checklist.length > 0 && (
+        <Section title="Checklist">
+          <ul className="divide-y divide-slate-100">
+            {checklist.map((c) => (
+              <li key={c.id} className="flex items-start gap-3 py-2 text-sm">
+                <span className={c.checked ? "text-emerald-600" : "text-slate-300"}>
+                  {c.checked ? "✓" : "○"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-slate-800">{c.item_label || c.item_key}</div>
+                  {c.issue_notes && <div className="text-xs text-slate-500">{c.issue_notes}</div>}
+                </div>
+                {c.status && (
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${
+                      TONE_STYLES[statusTone(c.status)]
+                    }`}
+                  >
+                    {c.status}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {workItems.length > 0 && (
+        <Section title="Work items">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="pb-2 font-medium">Service</th>
+                <th className="pb-2 text-right font-medium">Qty</th>
+                <th className="pb-2 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workItems.map((w) => (
+                <tr key={w.id} className="border-b border-slate-100 last:border-0">
+                  <td className="py-2 text-slate-800">{w.service_name || "—"}</td>
+                  <td className="py-2 text-right text-slate-600">{w.quantity ?? 1}</td>
+                  <td className="py-2 text-slate-600">{w.notes || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      <Section title={`Photos${photos.length ? ` (${photos.length})` : ""}`}>
+        {photos.length === 0 ? (
+          <p className="text-sm text-slate-400">No photos.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {photos.map((ph) =>
+              ph.url ? (
+                <a
+                  key={ph.id}
+                  href={ph.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group block overflow-hidden rounded-lg border border-slate-200"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ph.url}
+                    alt={ph.original_name || "Inspection photo"}
+                    className="h-32 w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                </a>
+              ) : null
+            )}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <h2 className="mb-2 text-sm font-semibold text-ink">{title}</h2>
+      {children}
+    </div>
+  );
+}
