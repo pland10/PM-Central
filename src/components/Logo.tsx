@@ -7,7 +7,13 @@ import { BRAND } from "@/config/brand";
 // file exists it falls back to the colored initials tile, so the sidebar never
 // shows a broken image. Set the path in src/config/brand.ts and drop the file
 // in /public to use it.
-export function Logo() {
+export function Logo({
+  className = "h-11 w-auto max-w-[180px] object-contain",
+  fallbackClassName = "h-11 w-11 text-sm",
+}: {
+  className?: string;
+  fallbackClassName?: string;
+}) {
   const [failed, setFailed] = useState(false);
 
   if (BRAND.logoSrc && !failed) {
@@ -16,7 +22,7 @@ export function Logo() {
       <img
         src={BRAND.logoSrc}
         alt={BRAND.name}
-        className="h-11 w-auto max-w-[180px] object-contain"
+        className={className}
         onError={() => setFailed(true)}
       />
     );
@@ -24,7 +30,7 @@ export function Logo() {
 
   return (
     <div
-      className="flex h-11 w-11 items-center justify-center rounded-md text-sm font-bold text-white"
+      className={`flex items-center justify-center rounded-md font-bold text-white ${fallbackClassName}`}
       style={{ backgroundColor: BRAND.colors.primary }}
     >
       {BRAND.shortName}
