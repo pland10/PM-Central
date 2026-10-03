@@ -2,11 +2,11 @@ import { requireFeature } from "@/config/features";
 import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
 import type { InvoiceRow } from "@/lib/invoices";
 import { InvoicingTable } from "./InvoicingTable";
+import { NewInvoiceButton } from "./NewInvoiceButton";
 
-// Native, READ-ONLY Invoicing view. Reads the live invoicing Supabase project
-// server-side (keys never reach the browser) and renders the same data the
-// standalone invoicing app shows. Nothing here writes — the standalone app
-// remains the only thing that creates, edits, or sends invoices.
+// Native Invoicing over the live invoicing Supabase project (service key stays
+// server-side). Create / edit / status / print happen here; the standalone app
+// remains available as a fallback on the same database.
 export const dynamic = "force-dynamic";
 
 export default async function InvoicingPage() {
@@ -39,8 +39,9 @@ export default async function InvoicingPage() {
   const { data, error } = await db
     .from("invoices")
     .select(
-      "id,number,invoice_date,due_date,period,from_party,bill_to,terms,notes,billing_contact,tax_rate,status,items,created_at,updated_at"
+      "id,number,invoice_date,due_date,period,from_party,bill_to,terms,notes,billing_contact,tax_rate,status,items,billing_party,customer_id,period_key,deleted_at,created_at,updated_at"
     )
+    .is("deleted_at", null)
     .order("invoice_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(2000);
@@ -62,13 +63,9 @@ export default async function InvoicingPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-ink">Invoicing</h1>
-          <p className="text-sm text-slate-500">
-            Read-only view of the live invoicing records.
-          </p>
+          <p className="text-sm text-slate-500">Live invoicing records.</p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-          Read-only
-        </span>
+        <NewInvoiceButton />
       </div>
       <InvoicingTable rows={rows} />
     </div>

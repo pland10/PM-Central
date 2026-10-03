@@ -36,8 +36,21 @@ export type InvoiceRow = {
   tax_rate: number | string | null;
   status: InvoiceStatus;
   items: InvoiceItem[] | null;
+  billing_party: string | null;
+  customer_id: string | null;
+  period_key: string | null;
+  deleted_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+// Defaults stored in app_settings.settings (id = 1).
+export type InvoiceSettings = {
+  billTo?: InvoiceParty;
+  terms?: string;
+  notes?: string;
+  taxRate?: number;
+  notesByParty?: Record<string, string>;
 };
 
 function num(v: unknown): number {
