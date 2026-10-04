@@ -4,7 +4,8 @@ import { isFeatureEnabled, type FeatureKey } from "@/config/features";
 import { Logo } from "@/components/Logo";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { SignOutButton } from "@/components/SignOutButton";
-import { ENV_INDICATOR } from "@/config/environment";
+import { ENV_INDICATOR, IDLE_LOGOUT_MINUTES } from "@/config/environment";
+import { IdleLogout } from "@/components/IdleLogout";
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
@@ -179,6 +180,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {user && IDLE_LOGOUT_MINUTES > 0 && <IdleLogout minutes={IDLE_LOGOUT_MINUTES} />}
       {/* Sidebar — colors come straight from the brand config (inline, so they
           never depend on the CSS build). */}
       <aside
@@ -190,8 +192,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           className="flex h-14 items-center gap-2.5 px-4 transition-colors hover:bg-white/5"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.10)" }}
         >
-          <Logo />
-          <span className="font-semibold tracking-tight text-white">{BRAND.name}</span>
+          {/* Dark wordmark already includes the brand name, so no separate text. */}
+          <Logo dark className="h-9 w-auto max-w-[180px] object-contain" />
         </Link>
         <nav className="flex flex-col gap-0.5 p-3 text-sm">
           {navLayout.map((entry) => {
