@@ -39,6 +39,9 @@ export type InvoiceRow = {
   billing_party: string | null;
   customer_id: string | null;
   period_key: string | null;
+  // The property this invoice is about, by the property's stable externalId
+  // (matches Property.externalId in PM-Central). Nullable; added via migration.
+  property_external_id: string | null;
   deleted_at: string | null;
   created_at: string | null;
   updated_at: string | null;

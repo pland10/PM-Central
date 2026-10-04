@@ -1,27 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 
-// Update an invoice (partial, over an allowlist) or soft-delete it. Writes to
-// the live invoicing DB with the service key. from_party / billing_party are
+// Update an invoice (partial, over an allowlist) or discard a draft. Writes to
+// PM-Central's single database (Prisma/Postgres). from_party / billing_party are
 // NOT editable after creation (the sender is fixed, as in the original app).
 export const dynamic = "force-dynamic";
 
-const EDITABLE = new Set([
-  "invoice_date",
-  "due_date",
-  "period",
-  "bill_to",
-  "terms",
-  "notes",
-  "billing_contact",
-  "tax_rate",
-  "status",
-  "items",
-  "customer_id",
-  "period_key",
-]);
+// Editable fields, mapping the app's snake_case payload to Prisma camelCase.
+const FIELD_MAP: Record<string, string> = {
+  invoice_date: "invoiceDate",
+  due_date: "dueDate",
+  period: "period",
+  bill_to: "billTo",
+  terms: "terms",
+  notes: "notes",
+  billing_contact: "billingContact",
+  tax_rate: "taxRate",
+  status: "status",
+  items: "items",
+  customer_id: "customerId",
+  period_key: "periodKey",
+  property_external_id: "propertyExternalId",
+};
 
 const STATUSES = new Set(["draft", "sent", "paid"]);
 
@@ -32,8 +35,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!(await getCurrentUser())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const db = getInvoicingSupabase();
-  if (!db) return NextResponse.json({ error: "Invoicing not configured" }, { status: 503 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -42,21 +43,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patch: Record<string, any> = {};
+  const data: Record<string, any> = {};
   for (const [k, v] of Object.entries(body)) {
-    if (EDITABLE.has(k)) patch[k] = v;
+    const col = FIELD_MAP[k];
+    if (col) data[col] = v;
   }
-  if (patch.status != null && !STATUSES.has(patch.status)) {
+  if (data.status != null && !STATUSES.has(data.status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
-  if (typeof patch.tax_rate !== "undefined") patch.tax_rate = Number(patch.tax_rate) || 0;
-  if (Object.keys(patch).length === 0) {
+  if (typeof data.taxRate !== "undefined") data.taxRate = Number(data.taxRate) || 0;
+  if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
-  patch.updated_at = new Date().toISOString();
 
-  const { error } = await db.from("invoices").update(patch).eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 502 });
+  try {
+    await prisma.invoice.update({ where: { id }, data: data as Prisma.InvoiceUpdateInput });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const message = e instanceof Error ? e.message : "Update failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
   return NextResponse.json({ id });
 }
 
@@ -64,30 +72,27 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!isFeatureEnabled("invoicing")) {
     return NextResponse.json({ error: "Invoicing is disabled." }, { status: 404 });
   }
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const db = getInvoicingSupabase();
-  if (!db) return NextResponse.json({ error: "Invoicing not configured" }, { status: 503 });
+  if (!(await getCurrentUser())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await params;
 
-  // Only DRAFT invoices can be removed from PM-Central — a hard delete that
-  // frees the number (used by the editor's "Discard"). A hard delete sidesteps
-  // the invoicing DB's soft-delete guard trigger, which only allows deleted_at
-  // changes for a signed-in invoicing-project admin. Sent/paid invoices are
-  // deleted through the standalone app's request/approve flow.
-  const cur = await db.from("invoices").select("status").eq("id", id).maybeSingle();
-  if (!cur.data) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (cur.data.status !== "draft") {
+  // Only DRAFT invoices can be discarded here — a hard delete that frees the
+  // number (used by the editor's "Discard"). Sent/paid invoices are kept.
+  const cur = await prisma.invoice.findUnique({ where: { id }, select: { status: true } });
+  if (!cur) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (cur.status !== "draft") {
     return NextResponse.json(
-      {
-        error:
-          "Only draft invoices can be discarded here. Delete sent/paid invoices in the invoicing app.",
-      },
+      { error: "Only draft invoices can be discarded." },
       { status: 403 }
     );
   }
-  const { error } = await db.from("invoices").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 502 });
+  try {
+    await prisma.invoice.delete({ where: { id } });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
   return NextResponse.json({ ok: true });
 }

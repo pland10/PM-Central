@@ -33,6 +33,11 @@ function billToName(r: InvoiceRow): string {
   return r.bill_to?.name?.trim() || "—";
 }
 
+function propertyName(r: InvoiceRow, labels: Record<string, string>): string {
+  if (!r.property_external_id) return "";
+  return labels[r.property_external_id] || "Linked property";
+}
+
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -43,7 +48,13 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
   );
 }
 
-export function InvoicingTable({ rows }: { rows: InvoiceRow[] }) {
+export function InvoicingTable({
+  rows,
+  propertyLabels = {},
+}: {
+  rows: InvoiceRow[];
+  propertyLabels?: Record<string, string>;
+}) {
   const kpis = useMemo(() => {
     const acc = { count: rows.length, outstanding: 0, paid: 0, draftCount: 0, sentCount: 0, paidCount: 0 };
     for (const r of rows) {
@@ -85,6 +96,20 @@ export function InvoicingTable({ rows }: { rows: InvoiceRow[] }) {
       sortable: true,
       sortValue: (r) => billToName(r).toLowerCase(),
       render: (r) => <span className="text-slate-800">{billToName(r)}</span>,
+    },
+    {
+      key: "property",
+      header: "Property",
+      sortable: true,
+      sortValue: (r) => propertyName(r, propertyLabels).toLowerCase(),
+      render: (r) => {
+        const name = propertyName(r, propertyLabels);
+        return name ? (
+          <span className="text-slate-700">{name}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        );
+      },
     },
     {
       key: "period",
@@ -153,8 +178,8 @@ export function InvoicingTable({ rows }: { rows: InvoiceRow[] }) {
         rows={rows}
         columns={columns}
         rowKey={(r) => r.id}
-        search={(r) => `${r.number} ${billToName(r)} ${r.period ?? ""}`}
-        searchPlaceholder="Search number, customer, period…"
+        search={(r) => `${r.number} ${billToName(r)} ${propertyName(r, propertyLabels)} ${r.period ?? ""}`}
+        searchPlaceholder="Search number, customer, property, period…"
         facets={facets}
         initialSort={{ key: "date", dir: "desc" }}
       />
