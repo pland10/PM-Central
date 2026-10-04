@@ -30,6 +30,7 @@ export function DataTable<T>({
   searchPlaceholder = "Search…",
   facets,
   initialSort,
+  initialFacets,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -38,9 +39,10 @@ export function DataTable<T>({
   searchPlaceholder?: string;
   facets?: Facet<T>[];
   initialSort?: { key: string; dir: "asc" | "desc" };
+  initialFacets?: Record<string, string>;
 }) {
   const [q, setQ] = useState("");
-  const [facetValues, setFacetValues] = useState<Record<string, string>>({});
+  const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
   const [sort, setSort] = useState<SortState>(initialSort ?? null);
 
   const filtered = useMemo(() => {

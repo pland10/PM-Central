@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { BRAND } from "@/config/brand";
@@ -18,19 +17,18 @@ function ownerName(portfolio: {
 }
 
 export default async function PropertiesPage() {
-  // Squatter Watch (home-watch) properties are vacant by design — they live on
-  // their own page and are excluded here so they don't skew vacancy/occupancy.
-  const [properties, squatterWatchCount] = await Promise.all([
-    prisma.property.findMany({
-      where: { status: "active", NOT: { tags: { contains: SQUATTER_WATCH } } },
-      orderBy: { createdAt: "asc" },
-      include: {
-        portfolio: { include: { owners: { include: { contact: true } } } },
-        units: { include: { leases: true } },
-      },
-    }),
-    prisma.property.count({ where: { status: "active", tags: { contains: SQUATTER_WATCH } } }),
-  ]);
+  // Includes Squatter Watch (home-watch) properties, marked with a Program field
+  // and filtered via the Program facet. The headline stats below use only
+  // under-management properties so the always-vacant home-watch ones don't skew
+  // occupancy.
+  const properties = await prisma.property.findMany({
+    where: { status: "active" },
+    orderBy: { createdAt: "asc" },
+    include: {
+      portfolio: { include: { owners: { include: { contact: true } } } },
+      units: { include: { leases: true } },
+    },
+  });
 
   const rows: PropertyRow[] = properties.map((p) => {
     const unitCount = p.units.length;
@@ -51,12 +49,15 @@ export default async function PropertiesPage() {
       rentRoll,
       type: p.propertyType,
       source: p.source,
+      program: p.tags.includes(SQUATTER_WATCH) ? ("squatterwatch" as const) : ("managed" as const),
     };
   });
 
-  const totalUnits = rows.reduce((s, r) => s + r.unitCount, 0);
-  const totalRentRoll = rows.reduce((s, r) => s + r.rentRoll, 0);
-  const totalOccupied = rows.reduce((s, r) => s + r.occupied, 0);
+  const managed = rows.filter((r) => r.program === "managed");
+  const squatterWatchCount = rows.length - managed.length;
+  const totalUnits = managed.reduce((s, r) => s + r.unitCount, 0);
+  const totalRentRoll = managed.reduce((s, r) => s + r.rentRoll, 0);
+  const totalOccupied = managed.reduce((s, r) => s + r.occupied, 0);
   const portfolioOccupancy = totalUnits > 0 ? Math.round((totalOccupied / totalUnits) * 100) : 0;
 
   return (
@@ -65,16 +66,9 @@ export default async function PropertiesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
           <p className="mt-1 text-sm text-slate-500">
-            The foundation of the hub. {properties.length} propert
-            {properties.length === 1 ? "y" : "ies"} · pulled from multiple sources.
-            {squatterWatchCount > 0 && (
-              <>
-                {" "}
-                <Link href="/squatter-watch" className="font-medium text-brand-600 hover:underline">
-                  {squatterWatchCount} on Squatter Watch →
-                </Link>
-              </>
-            )}
+            The foundation of the hub. {managed.length} under management
+            {squatterWatchCount > 0 && <> · {squatterWatchCount} on Squatter Watch</>} — filter by
+            Program below.
           </p>
         </div>
         <button
@@ -88,7 +82,7 @@ export default async function PropertiesPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Properties" value={String(properties.length)} />
+        <Stat label="Properties" value={String(managed.length)} />
         <Stat label="Units" value={String(totalUnits)} />
         <Stat label="Occupancy" value={`${portfolioOccupancy}%`} />
         <Stat label="Rent roll / mo" value={formatCurrency(totalRentRoll)} />

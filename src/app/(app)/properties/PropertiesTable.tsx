@@ -15,6 +15,7 @@ export type PropertyRow = {
   rentRoll: number;
   type: string;
   source: string;
+  program: "managed" | "squatterwatch";
 };
 
 function sourceBadge(source: string) {
@@ -42,12 +43,19 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       sortValue: (r) => r.title.toLowerCase(),
       render: (r) => (
         <>
-          <Link
-            href={`/properties/${r.id}`}
-            className="font-medium text-slate-900 hover:text-brand-600"
-          >
-            {r.title}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/properties/${r.id}`}
+              className="font-medium text-slate-900 hover:text-brand-600"
+            >
+              {r.title}
+            </Link>
+            {r.program === "squatterwatch" && (
+              <span className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                Squatter Watch
+              </span>
+            )}
+          </div>
           <div className="text-xs text-slate-500">{r.address}</div>
         </>
       ),
@@ -124,6 +132,26 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
 
   const facets: Facet<PropertyRow>[] = [
     {
+      key: "program",
+      label: "Program",
+      options: [
+        { value: "managed", label: "Under management" },
+        { value: "squatterwatch", label: "Squatter Watch" },
+      ],
+      match: (r, v) => r.program === v,
+    },
+    {
+      key: "occupancy",
+      label: "Occupancy",
+      options: [
+        { value: "full", label: "Full (100%)" },
+        { value: "partial", label: "Partial" },
+        { value: "vacant", label: "Vacant (0%)" },
+      ],
+      match: (r, v) =>
+        v === "full" ? r.occupancy === 100 : v === "vacant" ? r.occupancy === 0 : r.occupancy > 0 && r.occupancy < 100,
+    },
+    {
       key: "type",
       label: "Type",
       options: typeOptions,
@@ -146,6 +174,7 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       searchPlaceholder="Search address or owner…"
       facets={facets}
       initialSort={{ key: "title", dir: "asc" }}
+      initialFacets={{ program: "managed" }}
     />
   );
 }
