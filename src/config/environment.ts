@@ -16,8 +16,9 @@ export const APP_ENV: AppEnv = (() => {
 
 export const IS_PRODUCTION = APP_ENV === "production";
 
-// Label + color for the top-bar environment indicator. Production renders the
-// normal white bar (no label); everything else gets a loud red bar.
+// Label + color for the environment indicator (top bar + login banner).
+// Production renders the normal white bar (no label); everything else gets a
+// loud red bar.
 export const ENV_INDICATOR: { label: string; bg: string; fg: string } | null =
   IS_PRODUCTION
     ? null
@@ -26,3 +27,15 @@ export const ENV_INDICATOR: { label: string; bg: string; fg: string } | null =
         bg: "#B91C1C", // red-700
         fg: "#FFFFFF",
       };
+
+// Idle auto-logout (minutes). 0 disables it. Default: 15 min on non-prod, off on
+// prod — so a forgotten dev session doesn't stay open against shared data.
+// Override per deployment with SESSION_IDLE_MINUTES (e.g. enable it on prod too).
+export const IDLE_LOGOUT_MINUTES: number = (() => {
+  const raw = process.env.SESSION_IDLE_MINUTES;
+  if (raw != null && raw.trim() !== "") {
+    const n = parseInt(raw.trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return IS_PRODUCTION ? 0 : 15;
+})();

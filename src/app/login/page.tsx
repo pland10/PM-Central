@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import { Logo } from "@/components/Logo";
@@ -12,6 +12,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("timeout")) {
+      setNotice("You were signed out due to inactivity. Please sign in again.");
+    }
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +58,12 @@ export default function LoginPage() {
           />
           <div className="text-sm text-slate-500">Sign in to continue</div>
         </div>
+
+        {notice && (
+          <div className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {notice}
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
