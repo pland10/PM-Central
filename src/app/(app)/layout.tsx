@@ -91,7 +91,7 @@ const nav: { href: string; label: string; feature: FeatureKey; icon: React.React
   },
   {
     href: "/search",
-    label: "Search",
+    label: "Search Communications",
     feature: "search",
     icon: (
       <>

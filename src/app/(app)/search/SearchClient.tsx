@@ -245,9 +245,9 @@ export function SearchClient() {
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Search Communications</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Full-text search across LeadSimple activity — emails, texts, calls, notes, chats and tasks.
+            Full-text search across your communication history — emails, texts, calls, notes, chats and tasks.
           </p>
         </div>
         {fresh.updatedAt && (
