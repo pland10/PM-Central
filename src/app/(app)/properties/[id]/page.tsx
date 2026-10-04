@@ -6,7 +6,6 @@ import { externalLink } from "@/lib/externalLinks";
 import { isFeatureEnabled } from "@/config/features";
 import { getInspectionsDb } from "@/lib/inspections/supabase";
 import { type InspectionRow, statusTone, formatInspectionDate } from "@/lib/inspections/types";
-import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
 import { loadInvoicesForProperty } from "@/lib/invoicing-query";
 import { type InvoiceRow, invoiceTotals, formatMoney, formatDate } from "@/lib/invoices";
 
@@ -25,13 +24,11 @@ const INVOICE_TONE: Record<InvoiceRow["status"], string> = {
   paid: "bg-emerald-100 text-emerald-700",
 };
 
-// Invoices linked to this property (by externalId) in the invoicing database.
+// Invoices linked to this property (by externalId) in the single PM-Central DB.
 async function invoicesForProperty(externalId: string | null): Promise<InvoiceRow[]> {
   if (!isFeatureEnabled("invoicing")) return [];
-  const db = getInvoicingSupabase();
-  if (!db) return [];
   try {
-    return await loadInvoicesForProperty(db, externalId);
+    return await loadInvoicesForProperty(externalId);
   } catch {
     return [];
   }

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
-import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
 import { loadInvoiceById } from "@/lib/invoicing-query";
 import { listPropertyOptions } from "@/lib/property-options";
 import { InvoiceEditor } from "./InvoiceEditor";
@@ -12,11 +11,8 @@ export default async function InvoiceEditPage({ params }: { params: Promise<{ id
   requireFeature("invoicing");
   const { id } = await params;
 
-  const db = getInvoicingSupabase();
-  if (!db) notFound();
-
   const [invoice, properties] = await Promise.all([
-    loadInvoiceById(db, id),
+    loadInvoiceById(id),
     listPropertyOptions(),
   ]);
 

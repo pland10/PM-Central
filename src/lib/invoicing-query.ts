@@ -1,75 +1,65 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { InvoiceRow } from "@/lib/invoices";
+import { prisma } from "@/lib/prisma";
+import type {
+  InvoiceRow,
+  InvoiceStatus,
+  InvoiceParty,
+  InvoiceItem,
+} from "@/lib/invoices";
 
-// Server-side invoice loaders over the live invoicing Supabase project.
-//
-// These centralize the column list and, importantly, degrade gracefully if the
-// `property_external_id` column hasn't been added yet (see DEPLOY.md / the SQL
-// in the invoice→property change): a read that references a missing column is
-// retried without it, so linking invoices to properties can never break the
-// actively-used invoicing views before the migration runs.
-
-const BASE_FIELDS =
-  "id,number,invoice_date,due_date,period,from_party,bill_to,terms,notes,billing_contact,tax_rate,status,items,billing_party,customer_id,period_key,deleted_at,created_at,updated_at";
-const FIELDS_WITH_PROPERTY = `${BASE_FIELDS},property_external_id`;
-
-// Postgres 42703 = undefined_column. Supabase/PostgREST may surface it as the
-// code, or only name the column in the message, so check both.
-function isMissingPropertyColumn(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false;
-  return err.code === "42703" || /property_external_id/i.test(err.message ?? "");
-}
+// Invoice data access over PM-Central's single database (Prisma/Postgres).
+// Invoicing used to live in a separate Supabase project; it now lives here, so
+// it shares the app DB's dev/prod branch isolation. The app speaks the original
+// snake_case `InvoiceRow` shape, so we map Prisma's camelCase rows to it here.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalize(row: any): InvoiceRow {
-  return { ...row, property_external_id: row?.property_external_id ?? null } as InvoiceRow;
+function toInvoiceRow(inv: any): InvoiceRow {
+  return {
+    id: inv.id,
+    number: inv.number,
+    invoice_date: inv.invoiceDate ?? null,
+    due_date: inv.dueDate ?? null,
+    period: inv.period ?? null,
+    from_party: (inv.fromParty ?? null) as InvoiceParty | null,
+    bill_to: (inv.billTo ?? null) as InvoiceParty | null,
+    terms: inv.terms ?? null,
+    notes: inv.notes ?? null,
+    billing_contact: inv.billingContact ?? null,
+    tax_rate: inv.taxRate ?? null,
+    status: inv.status as InvoiceStatus,
+    items: (inv.items ?? null) as InvoiceItem[] | null,
+    billing_party: inv.billingParty ?? null,
+    customer_id: inv.customerId ?? null,
+    period_key: inv.periodKey ?? null,
+    property_external_id: inv.propertyExternalId ?? null,
+    deleted_at: inv.deletedAt ? inv.deletedAt.toISOString() : null,
+    created_at: inv.createdAt ? inv.createdAt.toISOString() : null,
+    updated_at: inv.updatedAt ? inv.updatedAt.toISOString() : null,
+  };
 }
 
-export async function loadInvoiceById(
-  db: SupabaseClient,
-  id: string
-): Promise<InvoiceRow | null> {
-  let res = await db.from("invoices").select(FIELDS_WITH_PROPERTY).eq("id", id).maybeSingle();
-  if (res.error && isMissingPropertyColumn(res.error)) {
-    res = await db.from("invoices").select(BASE_FIELDS).eq("id", id).maybeSingle();
-  }
-  if (res.error || !res.data) return null;
-  return normalize(res.data);
+export async function loadInvoices(): Promise<InvoiceRow[]> {
+  const rows = await prisma.invoice.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+    take: 2000,
+  });
+  return rows.map(toInvoiceRow);
 }
 
-export async function loadInvoices(
-  db: SupabaseClient
-): Promise<{ rows: InvoiceRow[]; error: string | null }> {
-  const build = (fields: string) =>
-    db
-      .from("invoices")
-      .select(fields)
-      .is("deleted_at", null)
-      .order("invoice_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(2000);
-
-  let res = await build(FIELDS_WITH_PROPERTY);
-  if (res.error && isMissingPropertyColumn(res.error)) res = await build(BASE_FIELDS);
-  if (res.error) return { rows: [], error: res.error.message };
-  return { rows: (res.data ?? []).map(normalize), error: null };
+export async function loadInvoiceById(id: string): Promise<InvoiceRow | null> {
+  const inv = await prisma.invoice.findUnique({ where: { id } });
+  return inv ? toInvoiceRow(inv) : null;
 }
 
 // Invoices linked to a given property (by the property's stable externalId).
-// Returns [] when the column doesn't exist yet or nothing matches, so the
-// property page never errors on account of invoicing.
 export async function loadInvoicesForProperty(
-  db: SupabaseClient,
   propertyExternalId: string | null
 ): Promise<InvoiceRow[]> {
   if (!propertyExternalId) return [];
-  const res = await db
-    .from("invoices")
-    .select(FIELDS_WITH_PROPERTY)
-    .eq("property_external_id", propertyExternalId)
-    .is("deleted_at", null)
-    .order("invoice_date", { ascending: false })
-    .limit(50);
-  if (res.error) return [];
-  return (res.data ?? []).map(normalize);
+  const rows = await prisma.invoice.findMany({
+    where: { propertyExternalId, deletedAt: null },
+    orderBy: [{ invoiceDate: "desc" }],
+    take: 50,
+  });
+  return rows.map(toInvoiceRow);
 }

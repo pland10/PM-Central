@@ -5,9 +5,8 @@
 // carries `source` + `externalId` so data can be pulled from many places
 // (Rentvine, manual entry, other feeds) and merged cleanly.
 //
-// Dev uses SQLite for zero setup (file:./dev.db) — no database to install. For a
-// hosted deploy we keep SQLite on a persistent volume (see DEPLOY.md); to move to
-// Postgres later, change this one provider to "postgresql" and set DATABASE_URL.
+// Backed by PostgreSQL (Neon). This is PM-Central's single database — dev and
+// prod are separate Neon branches of it (see DEPLOY.md). Set DATABASE_URL.
 
 generator client {
   provider = "prisma-client-js"
@@ -282,4 +281,48 @@ model TagLink {
 
   @@unique([tagId, objectType, objectId])
   @@index([objectType, objectId])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+// Migrated out of the standalone invoicing Supabase project into this single
+// PM-Central database. JSON columns mirror the original shapes:
+//   fromParty / billTo = { name, addr, contact, extra }
+//   items              = [{ desc, qty, rate }]
+// Dates are kept as 'YYYY-MM-DD' strings to match how the UI parses them.
+// status: draft | sent | paid.
+
+model Invoice {
+  id                 String    @id @default(uuid())
+  number             String    @unique
+  invoiceDate        String?
+  dueDate            String?
+  period             String?
+  fromParty          Json?
+  billTo             Json?
+  terms              String?
+  notes              String?
+  billingContact     String?
+  taxRate            Float     @default(0)
+  status             String    @default("draft")
+  items              Json?
+  billingParty       String?
+  customerId         String?
+  periodKey          String?
+  // The property this invoice is about, by Property.externalId (nullable).
+  propertyExternalId String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([propertyExternalId])
+  @@index([status])
+}
+
+// Single-row (id = 1) invoice defaults, mirroring the old app_settings.settings
+// JSON: { billTo, terms, notes, taxRate, notesByParty }.
+model InvoiceSetting {
+  id       Int   @id
+  settings Json?
 }

@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
-import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
 import { loadInvoiceById } from "@/lib/invoicing-query";
 import { propertyLabelMap } from "@/lib/property-options";
 import { partyOf } from "@/config/invoicing-parties";
@@ -14,10 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   requireFeature("invoicing");
   const { id } = await params;
-  const db = getInvoicingSupabase();
-  if (!db) notFound();
-
-  const [inv, labels] = await Promise.all([loadInvoiceById(db, id), propertyLabelMap()]);
+  const [inv, labels] = await Promise.all([loadInvoiceById(id), propertyLabelMap()]);
   if (!inv) notFound();
 
   const propertyName = inv.property_external_id ? labels[inv.property_external_id] ?? null : null;
