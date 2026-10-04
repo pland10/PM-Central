@@ -6,7 +6,8 @@ export interface Brand {
   name: string;
   shortName: string; // fallback logo mark when no logo image is set
   tagline: string;
-  logoSrc?: string; // path to the logo image in /public (e.g. "/logo.png")
+  logoSrc?: string; // logo for LIGHT backgrounds (e.g. the login card) — /public path
+  logoSrcDark?: string; // logo for DARK backgrounds (e.g. the sidebar) — reversed/white version
   colors: {
     primary: string; // accent (buttons, links, active state)
     primaryDark: string; // hover / pressed
@@ -21,7 +22,8 @@ export const BRAND: Brand = {
   name: "PMI Lighthouse",
   shortName: "PMI",
   tagline: "Property Management Hub",
-  logoSrc: "/logo.png",
+  logoSrc: "/logo.png", // black + orange wordmark (login / light surfaces)
+  logoSrcDark: "/logo-dark.png", // white + orange wordmark (sidebar / dark surfaces)
   colors: {
     primary: "#FF6F00", // PMI orange
     primaryDark: "#E06200",

@@ -3,24 +3,29 @@
 import { useState } from "react";
 import { BRAND } from "@/config/brand";
 
-// Shows the brand logo image from BRAND.logoSrc (a file in /public). Until that
-// file exists it falls back to the colored initials tile, so the sidebar never
-// shows a broken image. Set the path in src/config/brand.ts and drop the file
-// in /public to use it.
+// Shows the brand logo image from the brand config. Pass `dark` on dark surfaces
+// (e.g. the sidebar) to use the reversed/white logo (BRAND.logoSrcDark); light
+// surfaces (e.g. the login card) use BRAND.logoSrc. If the right variant isn't
+// set or fails to load, it falls back to the colored initials tile — so a dark
+// surface never shows the black logo (which would be invisible).
 export function Logo({
   className = "h-11 w-auto max-w-[180px] object-contain",
   fallbackClassName = "h-11 w-11 text-sm",
+  dark = false,
 }: {
   className?: string;
   fallbackClassName?: string;
+  dark?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
 
-  if (BRAND.logoSrc && !failed) {
+  const src = dark ? BRAND.logoSrcDark : BRAND.logoSrc;
+
+  if (src && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={BRAND.logoSrc}
+        src={src}
         alt={BRAND.name}
         className={className}
         onError={() => setFailed(true)}

@@ -190,7 +190,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           className="flex h-14 items-center gap-2.5 px-4 transition-colors hover:bg-white/5"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.10)" }}
         >
-          <Logo />
+          <Logo dark />
           <span className="font-semibold tracking-tight text-white">{BRAND.name}</span>
         </Link>
         <nav className="flex flex-col gap-0.5 p-3 text-sm">
