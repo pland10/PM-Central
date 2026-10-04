@@ -1,5 +1,9 @@
 import { ENV_INDICATOR } from "@/config/environment";
 
+// Render at request time, not build time: APP_ENV is a runtime var (not a build
+// arg), so static prerendering would bake in the wrong environment banner.
+export const dynamic = "force-dynamic";
+
 // Wraps the login page. On non-prod it shows a fixed red banner at the top so
 // you always know which environment you're signing into. Server component, so
 // APP_ENV is read server-side (prod stays clean, no banner).
