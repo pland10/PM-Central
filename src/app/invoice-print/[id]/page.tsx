@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
 import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
+import { loadInvoiceById } from "@/lib/invoicing-query";
+import { propertyLabelMap } from "@/lib/property-options";
 import { partyOf } from "@/config/invoicing-parties";
-import { type InvoiceRow, invoiceTotals, lineAmount, formatMoney, formatDate } from "@/lib/invoices";
+import { invoiceTotals, lineAmount, formatMoney, formatDate } from "@/lib/invoices";
 import { PrintToolbar } from "./PrintToolbar";
 
 // Standalone, print-styled invoice sheet (no app chrome). Opened in a new tab
@@ -15,16 +17,10 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const db = getInvoicingSupabase();
   if (!db) notFound();
 
-  const { data, error } = await db
-    .from("invoices")
-    .select(
-      "id,number,invoice_date,due_date,period,from_party,bill_to,terms,notes,billing_contact,tax_rate,status,items,billing_party"
-    )
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !data) notFound();
+  const [inv, labels] = await Promise.all([loadInvoiceById(db, id), propertyLabelMap()]);
+  if (!inv) notFound();
 
-  const inv = data as InvoiceRow;
+  const propertyName = inv.property_external_id ? labels[inv.property_external_id] ?? null : null;
   const party = partyOf(inv.billing_party);
   const from = inv.from_party ?? party.from;
   const billTo = inv.bill_to;
@@ -55,6 +51,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
             <div className="mt-3 text-xs text-slate-600">
               <div>Date: {formatDate(inv.invoice_date)}</div>
               {inv.due_date && <div>Due: {formatDate(inv.due_date)}</div>}
+              {propertyName && <div>Property: {propertyName}</div>}
               {inv.period && <div>Period: {inv.period}</div>}
               {inv.terms && <div>Terms: {inv.terms}</div>}
             </div>

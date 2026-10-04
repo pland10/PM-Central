@@ -11,6 +11,7 @@ import {
   formatMoney,
 } from "@/lib/invoices";
 import { partyOf } from "@/config/invoicing-parties";
+import type { PropertyOption } from "@/lib/property-options";
 
 type ItemDraft = { desc: string; qty: string; rate: string };
 
@@ -23,12 +24,19 @@ function partyToDraft(p: InvoiceParty | null) {
 const field =
   "bg-transparent outline-none rounded px-1 -mx-1 hover:bg-slate-100 focus:bg-brand-50 focus:ring-1 focus:ring-brand-200 transition-colors";
 
-export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
+export function InvoiceEditor({
+  initial,
+  properties,
+}: {
+  initial: InvoiceRow;
+  properties: PropertyOption[];
+}) {
   const router = useRouter();
   const party = partyOf(initial.billing_party);
   const from = initial.from_party ?? party.from;
 
   const [status, setStatus] = useState<InvoiceStatus>(initial.status);
+  const [propertyExternalId, setPropertyExternalId] = useState(initial.property_external_id ?? "");
   const [invoiceDate, setInvoiceDate] = useState(initial.invoice_date ?? "");
   const [dueDate, setDueDate] = useState(initial.due_date ?? "");
   const [period, setPeriod] = useState(initial.period ?? "");
@@ -62,6 +70,7 @@ export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
       billing_contact: billingContact || null,
       tax_rate: Number(taxRate) || 0,
       status,
+      property_external_id: propertyExternalId || null,
       items: items.map((it) => ({ desc: it.desc, qty: Number(it.qty) || 0, rate: Number(it.rate) || 0 })),
     };
     const res = await fetch(`/api/invoices/${initial.id}`, {
@@ -87,7 +96,7 @@ export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
     const t = setTimeout(save, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, invoiceDate, dueDate, period, terms, billingContact, notes, taxRate, billTo, items]);
+  }, [status, invoiceDate, dueDate, period, terms, billingContact, notes, taxRate, billTo, items, propertyExternalId]);
 
   function updateItem(i: number, patch: Partial<ItemDraft>) {
     setItems((arr) => arr.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
@@ -211,6 +220,29 @@ export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
             <input value={billTo.contact} onChange={(e) => setBillTo({ ...billTo, contact: e.target.value })} placeholder="Contact" className={`${field} block w-full text-sm text-slate-700`} />
             <input value={billTo.extra} onChange={(e) => setBillTo({ ...billTo, extra: e.target.value })} placeholder="Attn: …" className={`${field} block w-full text-sm text-slate-700`} />
           </div>
+        </div>
+
+        {/* Property this invoice is about */}
+        <div className="mb-4 flex items-center gap-2">
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Property
+          </span>
+          <select
+            value={propertyExternalId}
+            onChange={(e) => setPropertyExternalId(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-500"
+          >
+            <option value="">— Not linked to a property —</option>
+            {propertyExternalId &&
+              !properties.some((p) => p.externalId === propertyExternalId) && (
+                <option value={propertyExternalId}>(linked property)</option>
+              )}
+            {properties.map((p) => (
+              <option key={p.externalId} value={p.externalId}>
+                {p.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Period / reference */}

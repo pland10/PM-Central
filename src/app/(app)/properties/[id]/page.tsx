@@ -6,6 +6,9 @@ import { externalLink } from "@/lib/externalLinks";
 import { isFeatureEnabled } from "@/config/features";
 import { getInspectionsDb } from "@/lib/inspections/supabase";
 import { type InspectionRow, statusTone, formatInspectionDate } from "@/lib/inspections/types";
+import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
+import { loadInvoicesForProperty } from "@/lib/invoicing-query";
+import { type InvoiceRow, invoiceTotals, formatMoney, formatDate } from "@/lib/invoices";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,24 @@ const INSPECTION_TONE: Record<string, string> = {
   bad: "bg-red-100 text-red-700",
   neutral: "bg-slate-100 text-slate-600",
 };
+
+const INVOICE_TONE: Record<InvoiceRow["status"], string> = {
+  draft: "bg-slate-100 text-slate-600",
+  sent: "bg-amber-100 text-amber-700",
+  paid: "bg-emerald-100 text-emerald-700",
+};
+
+// Invoices linked to this property (by externalId) in the invoicing database.
+async function invoicesForProperty(externalId: string | null): Promise<InvoiceRow[]> {
+  if (!isFeatureEnabled("invoicing")) return [];
+  const db = getInvoicingSupabase();
+  if (!db) return [];
+  try {
+    return await loadInvoicesForProperty(db, externalId);
+  } catch {
+    return [];
+  }
+}
 
 // Inspections live in a separate database keyed by Rentvine property id (rv_id),
 // so match this property's Rentvine id to find them.
@@ -77,7 +98,10 @@ export default async function PropertyDetail({
   const workOrders = [...property.workOrders].sort(
     (a, b) => (a.status !== "completed" ? 0 : 1) - (b.status !== "completed" ? 0 : 1)
   );
-  const inspections = await inspectionsForProperty(property.externalId);
+  const [inspections, invoices] = await Promise.all([
+    inspectionsForProperty(property.externalId),
+    invoicesForProperty(property.externalId),
+  ]);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -282,6 +306,50 @@ export default async function PropertyDetail({
                         {ins.overall_status}
                       </span>
                     )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {isFeatureEnabled("invoicing") && (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Invoices
+            </h2>
+            <Link href="/invoicing" className="text-xs text-brand-600 hover:underline">
+              All invoices →
+            </Link>
+          </div>
+          {invoices.length === 0 ? (
+            <p className="py-2 text-sm text-slate-400">
+              No invoices linked to this property. Link one in the invoice editor.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {invoices.map((inv) => (
+                <li key={inv.id} className="py-2">
+                  <Link
+                    href={`/invoicing/${inv.id}/edit`}
+                    className="flex items-center justify-between gap-4 text-sm hover:text-brand-600"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-brand-600">{inv.number}</span>
+                      <span className="text-slate-500">{formatDate(inv.invoice_date)}</span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${
+                          INVOICE_TONE[inv.status]
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </div>
+                    <span className="font-medium text-slate-800">
+                      {formatMoney(invoiceTotals(inv.items, inv.tax_rate).total)}
+                    </span>
                   </Link>
                 </li>
               ))}

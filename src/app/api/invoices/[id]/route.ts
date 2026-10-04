@@ -21,6 +21,7 @@ const EDITABLE = new Set([
   "items",
   "customer_id",
   "period_key",
+  "property_external_id",
 ]);
 
 const STATUSES = new Set(["draft", "sent", "paid"]);

@@ -1,6 +1,7 @@
 import { requireFeature } from "@/config/features";
 import { getInvoicingSupabase } from "@/lib/invoicing-supabase";
-import type { InvoiceRow } from "@/lib/invoices";
+import { loadInvoices } from "@/lib/invoicing-query";
+import { propertyLabelMap } from "@/lib/property-options";
 import { InvoicingTable } from "./InvoicingTable";
 import { NewInvoiceButton } from "./NewInvoiceButton";
 
@@ -36,27 +37,20 @@ export default async function InvoicingPage() {
     );
   }
 
-  const { data, error } = await db
-    .from("invoices")
-    .select(
-      "id,number,invoice_date,due_date,period,from_party,bill_to,terms,notes,billing_contact,tax_rate,status,items,billing_party,customer_id,period_key,deleted_at,created_at,updated_at"
-    )
-    .is("deleted_at", null)
-    .order("invoice_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(2000);
+  const [{ rows, error }, propertyLabels] = await Promise.all([
+    loadInvoices(db),
+    propertyLabelMap(),
+  ]);
 
   if (error) {
     return (
       <div className="mx-auto max-w-2xl rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-900">
         <h1 className="mb-2 text-base font-semibold">Couldn’t load invoices</h1>
         <p className="mb-2">The invoicing database returned an error:</p>
-        <pre className="whitespace-pre-wrap rounded bg-red-100 p-2 text-xs">{error.message}</pre>
+        <pre className="whitespace-pre-wrap rounded bg-red-100 p-2 text-xs">{error}</pre>
       </div>
     );
   }
-
-  const rows = (data ?? []) as InvoiceRow[];
 
   return (
     <div>
@@ -67,7 +61,7 @@ export default async function InvoicingPage() {
         </div>
         <NewInvoiceButton />
       </div>
-      <InvoicingTable rows={rows} />
+      <InvoicingTable rows={rows} propertyLabels={propertyLabels} />
     </div>
   );
 }
