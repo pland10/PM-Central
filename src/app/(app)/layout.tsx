@@ -4,6 +4,7 @@ import { isFeatureEnabled, type FeatureKey } from "@/config/features";
 import { Logo } from "@/components/Logo";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { SignOutButton } from "@/components/SignOutButton";
+import { ENV_INDICATOR } from "@/config/environment";
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
@@ -224,14 +225,43 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
-          <div className="text-sm text-slate-500">{BRAND.tagline}</div>
+        <header
+          className="flex h-14 shrink-0 items-center justify-between border-b px-6"
+          style={
+            ENV_INDICATOR
+              ? { backgroundColor: ENV_INDICATOR.bg, borderColor: ENV_INDICATOR.bg }
+              : { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+          }
+        >
+          <div className="flex items-center gap-3">
+            {ENV_INDICATOR && (
+              <span
+                className="rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider"
+                style={{ backgroundColor: ENV_INDICATOR.fg, color: ENV_INDICATOR.bg }}
+              >
+                {ENV_INDICATOR.label}
+              </span>
+            )}
+            <span className={ENV_INDICATOR ? "text-sm text-white/90" : "text-sm text-slate-500"}>
+              {BRAND.tagline}
+            </span>
+          </div>
           {user ? (
             <div className="flex items-center gap-3">
               <div className="text-right leading-tight">
-                <div className="text-sm font-medium text-slate-700">{user.name}</div>
+                <div
+                  className={`text-sm font-medium ${
+                    ENV_INDICATOR ? "text-white" : "text-slate-700"
+                  }`}
+                >
+                  {user.name}
+                </div>
                 {user.role !== "user" && (
-                  <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                  <div
+                    className={`text-[11px] uppercase tracking-wide ${
+                      ENV_INDICATOR ? "text-white/80" : "text-slate-400"
+                    }`}
+                  >
                     {user.role}
                   </div>
                 )}
@@ -239,7 +269,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <SignOutButton />
             </div>
           ) : (
-            <div className="text-sm font-medium text-slate-700">pland10</div>
+            <div
+              className={`text-sm font-medium ${ENV_INDICATOR ? "text-white" : "text-slate-700"}`}
+            >
+              pland10
+            </div>
           )}
         </header>
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
