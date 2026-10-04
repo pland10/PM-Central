@@ -49,11 +49,13 @@ export function InstructionsManager() {
     load();
   }
 
-  async function saveAssignments(id: number, propertyIds: number[], name?: string) {
+  // Assign/unassign houses only — never touches the name, so the id↔name
+  // binding can't be changed from here.
+  async function saveHouses(id: number, propertyIds: number[]) {
     const res = await fetch("/api/inspections/special-instructions", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, property_ids: propertyIds, name }),
+      body: JSON.stringify({ id, property_ids: propertyIds }),
     });
     if (!res.ok) {
       setError((await res.json().catch(() => ({}))).error || "Save failed.");
@@ -63,9 +65,43 @@ export function InstructionsManager() {
     load();
   }
 
-  async function remove(id: number) {
-    if (!confirm("Delete this instruction? It will be removed from all houses.")) return;
-    const res = await fetch(`/api/inspections/special-instructions?id=${id}`, { method: "DELETE" });
+  // Renaming is deliberate and separate: it relabels the one instruction
+  // everywhere it's used going forward (past saved inspections keep their name).
+  async function renameInstruction(si: SpecialInstruction) {
+    const count = si.property_ids.length;
+    const next = window.prompt(
+      `Rename "${si.name}".\n\nThis changes its label for ALL ${count} house${
+        count === 1 ? "" : "s"
+      } it's assigned to and for future inspections. Past saved inspections keep the name they recorded.\n\nNew name:`,
+      si.name
+    );
+    if (next == null) return; // cancelled
+    const name = next.trim();
+    if (!name || name === si.name) return;
+    const res = await fetch("/api/inspections/special-instructions", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: si.id, name }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error || "Rename failed.");
+      return;
+    }
+    load();
+  }
+
+  async function remove(si: SpecialInstruction) {
+    const count = si.property_ids.length;
+    const warning =
+      count > 0
+        ? `Delete "${si.name}"? It's assigned to ${count} house${
+            count === 1 ? "" : "s"
+          } and will be removed from all of them. This can't be undone.`
+        : `Delete "${si.name}"? This can't be undone.`;
+    if (!confirm(warning)) return;
+    const res = await fetch(`/api/inspections/special-instructions?id=${si.id}`, {
+      method: "DELETE",
+    });
     if (!res.ok) {
       setError((await res.json().catch(() => ({}))).error || "Delete failed.");
       return;
@@ -83,7 +119,7 @@ export function InstructionsManager() {
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="New instruction (e.g. Water plants)"
+          placeholder="New instruction (e.g. Start the car)"
           className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
           onKeyDown={(e) => e.key === "Enter" && addInstruction()}
         />
@@ -106,8 +142,9 @@ export function InstructionsManager() {
             properties={properties}
             open={openId === si.id}
             onToggle={() => setOpenId(openId === si.id ? null : si.id)}
-            onSave={saveAssignments}
-            onDelete={() => remove(si.id)}
+            onSaveHouses={saveHouses}
+            onRename={() => renameInstruction(si)}
+            onDelete={() => remove(si)}
           />
         ))}
       </div>
@@ -120,22 +157,22 @@ function InstructionRow({
   properties,
   open,
   onToggle,
-  onSave,
+  onSaveHouses,
+  onRename,
   onDelete,
 }: {
   instruction: SpecialInstruction;
   properties: InspectionProperty[];
   open: boolean;
   onToggle: () => void;
-  onSave: (id: number, propertyIds: number[], name?: string) => void;
+  onSaveHouses: (id: number, propertyIds: number[]) => void;
+  onRename: () => void;
   onDelete: () => void;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set(instruction.property_ids));
-  const [name, setName] = useState(instruction.name);
 
   useEffect(() => {
     setSelected(new Set(instruction.property_ids));
-    setName(instruction.name);
   }, [instruction]);
 
   const count = instruction.property_ids.length;
@@ -144,7 +181,12 @@ function InstructionRow({
     <div className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-medium text-slate-800">{instruction.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-800">{instruction.name}</span>
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+              #{instruction.id}
+            </span>
+          </div>
           <div className="text-xs text-slate-400">
             {count === 0 ? "Not assigned to any house" : `${count} house${count === 1 ? "" : "s"}`}
           </div>
@@ -157,6 +199,12 @@ function InstructionRow({
             {open ? "Close" : "Edit houses"}
           </button>
           <button
+            onClick={onRename}
+            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Rename
+          </button>
+          <button
             onClick={onDelete}
             className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
           >
@@ -167,11 +215,10 @@ function InstructionRow({
 
       {open && (
         <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mb-3 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
-          />
+          <div className="mb-2 text-xs text-slate-500">
+            Choose which houses <span className="font-medium">{instruction.name}</span> applies to.
+            To change the wording, use <span className="font-medium">Rename</span>.
+          </div>
           <div className="mb-3 grid max-h-64 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
             {properties.map((p) => (
               <label key={p.id} className="flex items-center gap-2 text-sm text-slate-700">
@@ -192,10 +239,10 @@ function InstructionRow({
             ))}
           </div>
           <button
-            onClick={() => onSave(instruction.id, Array.from(selected), name.trim() || undefined)}
+            onClick={() => onSaveHouses(instruction.id, Array.from(selected))}
             className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
-            Save
+            Save houses
           </button>
         </div>
       )}
