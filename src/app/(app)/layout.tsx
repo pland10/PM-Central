@@ -139,10 +139,10 @@ type NavEntry = { item: FeatureKey } | { heading: string; items: FeatureKey[] };
 const navLayout: NavEntry[] = [
   { item: "dashboard" },
   { item: "search" },
-  { heading: "Property Data", items: ["properties", "squatterWatch", "portfolios", "leases", "tenants"] },
-  { item: "workOrders" },
   { item: "invoicing" },
   { item: "inspections" },
+  { heading: "Property Data", items: ["properties", "squatterWatch", "portfolios", "leases", "tenants"] },
+  { item: "workOrders" },
 ];
 
 function NavLink({ item }: { item: (typeof nav)[number] }) {
