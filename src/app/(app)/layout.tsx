@@ -141,8 +141,10 @@ const navLayout: NavEntry[] = [
   { item: "search" },
   { item: "invoicing" },
   { item: "inspections" },
-  { heading: "Property Data", items: ["properties", "squatterWatch", "portfolios", "leases", "tenants"] },
-  { item: "workOrders" },
+  {
+    heading: "Property Data",
+    items: ["properties", "squatterWatch", "portfolios", "leases", "tenants", "workOrders"],
+  },
 ];
 
 function NavLink({ item }: { item: (typeof nav)[number] }) {
@@ -202,8 +204,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               .filter((it) => it && isFeatureEnabled(it.feature));
             if (groupItems.length === 0) return null;
             return (
-              <div key={entry.heading} className="mt-3">
-                <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <div
+                key={entry.heading}
+                className="mt-4 border-t pt-3"
+                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+              >
+                <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                   {entry.heading}
                 </div>
                 {groupItems.map((it) => (
