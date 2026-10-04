@@ -66,19 +66,28 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Deleting a billing record is admin-only here; the standalone app's full
-  // request/approve workflow remains the fallback for non-admins.
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "Deleting invoices is admin-only." }, { status: 403 });
-  }
   const db = getInvoicingSupabase();
   if (!db) return NextResponse.json({ error: "Invoicing not configured" }, { status: 503 });
 
   const { id } = await params;
-  const { error } = await db
-    .from("invoices")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+
+  // Only DRAFT invoices can be removed from PM-Central — a hard delete that
+  // frees the number (used by the editor's "Discard"). A hard delete sidesteps
+  // the invoicing DB's soft-delete guard trigger, which only allows deleted_at
+  // changes for a signed-in invoicing-project admin. Sent/paid invoices are
+  // deleted through the standalone app's request/approve flow.
+  const cur = await db.from("invoices").select("status").eq("id", id).maybeSingle();
+  if (!cur.data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (cur.data.status !== "draft") {
+    return NextResponse.json(
+      {
+        error:
+          "Only draft invoices can be discarded here. Delete sent/paid invoices in the invoicing app.",
+      },
+      { status: 403 }
+    );
+  }
+  const { error } = await db.from("invoices").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 502 });
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   type InvoiceRow,
   type InvoiceStatus,
@@ -23,6 +24,7 @@ const field =
   "bg-transparent outline-none rounded px-1 -mx-1 hover:bg-slate-100 focus:bg-brand-50 focus:ring-1 focus:ring-brand-200 transition-colors";
 
 export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
+  const router = useRouter();
   const party = partyOf(initial.billing_party);
   const from = initial.from_party ?? party.from;
 
@@ -91,6 +93,18 @@ export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
     setItems((arr) => arr.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   }
 
+  async function discard() {
+    if (!confirm(`Discard invoice ${initial.number}? It will be removed and its number freed.`)) return;
+    const res = await fetch(`/api/invoices/${initial.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setErrorMsg((await res.json().catch(() => ({}))).error || "Could not discard.");
+      setSaveState("error");
+      return;
+    }
+    router.push("/invoicing");
+    router.refresh();
+  }
+
   return (
     <div className="mt-2">
       {/* Toolbar (not part of the sheet) */}
@@ -116,14 +130,24 @@ export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
             {saveState === "error" && <span className="text-red-600">{errorMsg}</span>}
           </span>
         </div>
-        <a
-          href={`/invoice-print/${initial.id}`}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Print / PDF
-        </a>
+        <div className="flex items-center gap-2">
+          {status === "draft" && (
+            <button
+              onClick={discard}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+            >
+              Discard
+            </button>
+          )}
+          <a
+            href={`/invoice-print/${initial.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Print / PDF
+          </a>
+        </div>
       </div>
 
       {/* The invoice sheet */}
