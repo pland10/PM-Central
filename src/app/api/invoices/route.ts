@@ -61,6 +61,12 @@ export async function POST(req: NextRequest) {
     if (m) max = Math.max(max, Number(m[1]));
   }
 
+  // Optional floor for new invoice numbers (env INVOICE_NUMBER_START). Used on
+  // dev to start numbers at e.g. 4000 so dev invoices look distinct from prod;
+  // leave unset on prod to continue the normal sequence.
+  const startAt = Math.max(0, parseInt(process.env.INVOICE_NUMBER_START ?? "", 10) || 0);
+  const base = Math.max(max + 1, startAt);
+
   const date = todayISO();
   const baseData = {
     invoiceDate: date,
@@ -80,7 +86,7 @@ export async function POST(req: NextRequest) {
   };
 
   for (let attempt = 0; attempt < 4; attempt++) {
-    const number = party.prefix + pad4(max + 1 + attempt);
+    const number = party.prefix + pad4(base + attempt);
     try {
       const created = await prisma.invoice.create({
         data: { ...baseData, number },
