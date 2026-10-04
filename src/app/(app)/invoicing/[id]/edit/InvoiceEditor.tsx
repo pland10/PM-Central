@@ -17,7 +17,7 @@ function partyToDraft(p: InvoiceParty | null): { name: string; addr: string; con
   return { name: p?.name ?? "", addr: p?.addr ?? "", contact: p?.contact ?? "", extra: p?.extra ?? "" };
 }
 
-export function InvoiceEditor({ initial, canDelete }: { initial: InvoiceRow; canDelete: boolean }) {
+export function InvoiceEditor({ initial }: { initial: InvoiceRow }) {
   const router = useRouter();
 
   const [status, setStatus] = useState<InvoiceStatus>(initial.status);
@@ -87,18 +87,6 @@ export function InvoiceEditor({ initial, canDelete }: { initial: InvoiceRow; can
     await save({ status: s });
   }
 
-  async function del() {
-    if (!confirm(`Delete invoice ${initial.number}? It moves to deleted (recoverable in the old app).`))
-      return;
-    const res = await fetch(`/api/invoices/${initial.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({}))).error || "Delete failed.");
-      return;
-    }
-    router.push("/invoicing");
-    router.refresh();
-  }
-
   return (
     <div className="mt-2">
       {/* Header */}
@@ -119,14 +107,6 @@ export function InvoiceEditor({ initial, canDelete }: { initial: InvoiceRow; can
           >
             Print / PDF
           </a>
-          {canDelete && (
-            <button
-              onClick={del}
-              className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              Delete
-            </button>
-          )}
           <button
             onClick={() => save()}
             disabled={saving}

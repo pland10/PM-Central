@@ -6,9 +6,10 @@ foundation is a list of properties. Goal is a Rentvine-style tool that pulls
 data from many sources and could be sold as a product.
 
 ## Conventions
-- **Stack:** Next.js App Router + TypeScript + Tailwind + Prisma. Dev DB is
-  SQLite (`prisma/dev.db`); a hosted deploy keeps SQLite on a persistent volume,
-  or switch the one provider line to Postgres. See `DEPLOY.md`.
+- **Stack:** Next.js App Router + TypeScript + Tailwind + Prisma on
+  **PostgreSQL** (local dev uses a free managed Postgres — Neon/Supabase — set
+  via `DATABASE_URL`). Chosen so it scales to a sellable multi-tenant product.
+  See `DEPLOY.md`.
 - **Data sources:** every core model has `source` + `externalId`. Imports must
   **upsert on `(source, externalId)`**, never blind-create, so re-syncing is
   idempotent. `source = "manual"` for hand-entered records.
@@ -16,8 +17,10 @@ data from many sources and could be sold as a product.
   portability, with the allowed values documented in `schema.prisma` comments.
 - Server components query Prisma directly (see `src/app/properties/page.tsx`).
   Keep the Prisma client import via `@/lib/prisma`.
-- **Auth:** the whole app sits behind an HTTP Basic Auth gate in
-  `src/middleware.ts`, driven by `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD`.
+- **Auth:** `src/middleware.ts` gates the whole app. `AUTH_MODE=supabase`
+  (production) uses per-user Supabase login (`/login`, roles from app_metadata);
+  `AUTH_MODE=basic` (default/dev) uses a shared `BASIC_AUTH_USER` /
+  `BASIC_AUTH_PASSWORD`.
 
 ## Commands
 - `npm run db:push` after editing the schema

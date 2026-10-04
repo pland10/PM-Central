@@ -32,11 +32,14 @@ function applyFilters(query: any, f: Filters) {
   }
 
   // Scope: contact/property match either (OR); pipeline is ANDed on top.
+  // Values are interpolated into a PostgREST filter string, so strip the
+  // characters that could break out of it (comma, parens, star, backslash).
+  const safe = (s: string) => s.replace(/[,()*\\]/g, " ").trim();
   const orParts: string[] = [];
-  if (f.contact) orParts.push(`contact_names.ilike.%${f.contact}%`);
-  if (f.property) orParts.push(`property_address.ilike.%${f.property}%`);
+  if (f.contact) orParts.push(`contact_names.ilike.%${safe(f.contact)}%`);
+  if (f.property) orParts.push(`property_address.ilike.%${safe(f.property)}%`);
   if (orParts.length) query = query.or(orParts.join(","));
-  if (f.pipeline) query = query.ilike("pipeline_name", `%${f.pipeline}%`);
+  if (f.pipeline) query = query.ilike("pipeline_name", `%${safe(f.pipeline)}%`);
 
   // Direction — rows with no direction (notes, tasks, some calls) match either.
   if (f.dir === "inbound" || f.dir === "outbound") {
