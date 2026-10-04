@@ -3,8 +3,43 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { externalLink } from "@/lib/externalLinks";
+import { isFeatureEnabled } from "@/config/features";
+import { getInspectionsDb } from "@/lib/inspections/supabase";
+import { type InspectionRow, statusTone, formatInspectionDate } from "@/lib/inspections/types";
 
 export const dynamic = "force-dynamic";
+
+const INSPECTION_TONE: Record<string, string> = {
+  good: "bg-emerald-100 text-emerald-700",
+  warn: "bg-amber-100 text-amber-700",
+  bad: "bg-red-100 text-red-700",
+  neutral: "bg-slate-100 text-slate-600",
+};
+
+// Inspections live in a separate database keyed by Rentvine property id (rv_id),
+// so match this property's Rentvine id to find them.
+async function inspectionsForProperty(externalId: string | null): Promise<InspectionRow[]> {
+  if (!isFeatureEnabled("inspections")) return [];
+  const rvId = externalId?.split(":").pop() ?? "";
+  if (!rvId) return [];
+  const idb = getInspectionsDb();
+  if (!idb) return [];
+  try {
+    const props = await idb.from("pmi_inspect_properties").select("id").eq("rv_id", rvId);
+    const propIds = (props.data ?? []).map((r) => (r as { id: number }).id);
+    if (!propIds.length) return [];
+    const res = await idb
+      .from("pmi_inspect_inspections")
+      .select("id,inspection_date,inspection_reason,inspector_name,overall_status")
+      .in("property_id", propIds)
+      .is("deleted_at", null)
+      .order("inspection_date", { ascending: false })
+      .limit(10);
+    return (res.data ?? []) as InspectionRow[];
+  } catch {
+    return [];
+  }
+}
 
 function fmtMonth(d: Date | null) {
   if (!d) return "—";
@@ -42,6 +77,7 @@ export default async function PropertyDetail({
   const workOrders = [...property.workOrders].sort(
     (a, b) => (a.status !== "completed" ? 0 : 1) - (b.status !== "completed" ? 0 : 1)
   );
+  const inspections = await inspectionsForProperty(property.externalId);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -203,6 +239,54 @@ export default async function PropertyDetail({
               );
             })}
           </ul>
+        </section>
+      )}
+
+      {isFeatureEnabled("inspections") && (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Inspections
+            </h2>
+            <Link href="/inspections" className="text-xs text-brand-600 hover:underline">
+              All inspections →
+            </Link>
+          </div>
+          {inspections.length === 0 ? (
+            <p className="py-2 text-sm text-slate-400">No inspections recorded for this property.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {inspections.map((ins) => (
+                <li key={ins.id} className="py-2">
+                  <Link
+                    href={`/inspections/${ins.id}`}
+                    className="flex items-start justify-between gap-4 text-sm hover:text-brand-600"
+                  >
+                    <div>
+                      <span className="font-medium text-slate-700">
+                        {formatInspectionDate(ins.inspection_date)}
+                      </span>
+                      {ins.inspection_reason && (
+                        <span className="ml-2 text-slate-500">{ins.inspection_reason}</span>
+                      )}
+                      {ins.inspector_name && (
+                        <div className="text-xs text-slate-400">{ins.inspector_name}</div>
+                      )}
+                    </div>
+                    {ins.overall_status && (
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          INSPECTION_TONE[statusTone(ins.overall_status)]
+                        }`}
+                      >
+                        {ins.overall_status}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>
