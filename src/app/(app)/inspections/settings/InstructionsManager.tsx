@@ -18,7 +18,7 @@ export function InstructionsManager() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/inspections/meta");
+      const res = await fetch("/api/inspections/meta", { cache: "no-store" });
       if (!res.ok) throw new Error("Could not load.");
       const d: InspectionMeta = await res.json();
       setProperties(d.properties);

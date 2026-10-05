@@ -92,7 +92,7 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
   );
 
   useEffect(() => {
-    fetch("/api/inspections/meta")
+    fetch("/api/inspections/meta", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Could not load form data."))))
       .then((d: InspectionMeta) => setMeta(d))
       .catch((e) => setLoadErr(e.message));
