@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
@@ -53,21 +54,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const checklist = (body.checklist ?? []) as ChecklistInput[];
   const workItems = ((body.work_items ?? []) as WorkItemInput[]).filter((w) => s(w.service_name));
 
-  try {
-    await prisma.$transaction([
-      prisma.inspectVisit.update({
-        where: { id: inspectionId },
-        data: {
-          inspection_reason: s(body.inspection_reason),
-          inspector_name: s(body.inspector_name),
-          inspection_date: String(body.inspection_date),
-          inspection_time: s(body.inspection_time),
-          notes: s(body.notes),
-          overall_status: s(body.overall_status),
-          special_instructions: s(body.special_instructions),
-        },
-      }),
-      prisma.inspectChecklistItem.deleteMany({ where: { inspection_id: inspectionId } }),
+  const ops: Prisma.PrismaPromise<unknown>[] = [
+    prisma.inspectVisit.update({
+      where: { id: inspectionId },
+      data: {
+        inspection_reason: s(body.inspection_reason),
+        inspector_name: s(body.inspector_name),
+        inspection_date: String(body.inspection_date),
+        inspection_time: s(body.inspection_time),
+        notes: s(body.notes),
+        overall_status: s(body.overall_status),
+        special_instructions: s(body.special_instructions),
+      },
+    }),
+    prisma.inspectChecklistItem.deleteMany({ where: { inspection_id: inspectionId } }),
+  ];
+  if (checklist.length) {
+    ops.push(
       prisma.inspectChecklistItem.createMany({
         data: checklist.map((c) => ({
           inspection_id: inspectionId,
@@ -77,8 +80,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           status: c.status ?? null,
           issue_notes: s(c.issue_notes),
         })),
-      }),
-      prisma.inspectWorkItem.deleteMany({ where: { inspection_id: inspectionId } }),
+      })
+    );
+  }
+  ops.push(prisma.inspectWorkItem.deleteMany({ where: { inspection_id: inspectionId } }));
+  if (workItems.length) {
+    ops.push(
       prisma.inspectWorkItem.createMany({
         data: workItems.map((w) => ({
           inspection_id: inspectionId,
@@ -86,8 +93,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           quantity: w.quantity || 1,
           notes: s(w.notes),
         })),
-      }),
-    ]);
+      })
+    );
+  }
+
+  try {
+    await prisma.$transaction(ops);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Update failed";
     return NextResponse.json({ error: message }, { status: 502 });
