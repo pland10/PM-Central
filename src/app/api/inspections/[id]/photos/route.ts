@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getInspectionsDb, INSPECTION_PHOTOS_BUCKET } from "@/lib/inspections/supabase";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 
-// Upload a photo to the inspection-photos bucket and record it, or delete one.
+// Upload a photo to the inspection-photos bucket (Supabase Storage) and record
+// it in the single DB (Prisma), or delete one. The row lives in Postgres; the
+// file itself stays in Supabase Storage.
 export const dynamic = "force-dynamic";
 
 const ALLOWED = [".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif", ".webp", ".bmp"];
@@ -16,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const db = getInspectionsDb();
-  if (!db) return NextResponse.json({ error: "Not configured" }, { status: 503 });
+  if (!db) return NextResponse.json({ error: "Photo storage not configured" }, { status: 503 });
 
   const inspectionId = Number((await params).id);
   if (!Number.isFinite(inspectionId)) {
@@ -44,19 +47,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: pub } = db.storage.from(INSPECTION_PHOTOS_BUCKET).getPublicUrl(path);
 
-  const ins = await db
-    .from("pmi_inspect_photos")
-    .insert({
-      inspection_id: inspectionId,
-      filename,
-      original_name: file.name,
-      url: pub.publicUrl,
-    })
-    .select("*")
-    .single();
-  if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 502 });
-
-  return NextResponse.json(ins.data, { status: 201 });
+  try {
+    const row = await prisma.inspectPhoto.create({
+      data: {
+        inspection_id: inspectionId,
+        filename,
+        original_name: file.name,
+        url: pub.publicUrl,
+      },
+    });
+    return NextResponse.json(
+      {
+        id: row.id,
+        inspection_id: row.inspection_id,
+        filename: row.filename,
+        original_name: row.original_name,
+        url: row.url,
+      },
+      { status: 201 }
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Insert failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -66,8 +79,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!(await getCurrentUser())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const db = getInspectionsDb();
-  if (!db) return NextResponse.json({ error: "Not configured" }, { status: 503 });
 
   const inspectionId = Number((await params).id);
   const photoId = Number(req.nextUrl.searchParams.get("photoId"));
@@ -75,19 +86,25 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Bad id" }, { status: 400 });
   }
 
-  const row = await db
-    .from("pmi_inspect_photos")
-    .select("id,filename")
-    .eq("id", photoId)
-    .eq("inspection_id", inspectionId)
-    .maybeSingle();
-  if (row.data?.filename) {
+  const row = await prisma.inspectPhoto.findFirst({
+    where: { id: photoId, inspection_id: inspectionId },
+    select: { id: true, filename: true },
+  });
+  if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Remove the file from Supabase Storage (best-effort), then the DB row.
+  const db = getInspectionsDb();
+  if (db && row.filename) {
     await db.storage
       .from(INSPECTION_PHOTOS_BUCKET)
-      .remove([`${inspectionId}/${row.data.filename}`]);
+      .remove([`${inspectionId}/${row.filename}`]);
   }
-  const del = await db.from("pmi_inspect_photos").delete().eq("id", photoId);
-  if (del.error) return NextResponse.json({ error: del.error.message }, { status: 502 });
 
+  try {
+    await prisma.inspectPhoto.delete({ where: { id: photoId } });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
   return NextResponse.json({ ok: true });
 }

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInspectionsDb } from "@/lib/inspections/supabase";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 
 // Update or soft-delete an inspection. Update: owner or can_edit_all. Delete:
-// owner or can_delete (soft delete via deleted_at).
+// owner or can_delete (soft delete via deleted_at). Writes to the single DB.
 export const dynamic = "force-dynamic";
 
 type ChecklistInput = {
@@ -27,8 +27,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const db = getInspectionsDb();
-  if (!db) return NextResponse.json({ error: "Not configured" }, { status: 503 });
 
   const inspectionId = Number((await params).id);
   if (!Number.isFinite(inspectionId)) {
@@ -37,12 +35,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   // Ownership: must own it or have can_edit_all.
   if (!user.canEditAll) {
-    const owner = await db
-      .from("pmi_inspect_inspections")
-      .select("created_by_user_id")
-      .eq("id", inspectionId)
-      .maybeSingle();
-    const ownerId = owner.data?.created_by_user_id;
+    const owner = await prisma.inspectVisit.findUnique({
+      where: { id: inspectionId },
+      select: { created_by_user_id: true },
+    });
+    const ownerId = owner?.created_by_user_id;
     if (ownerId && ownerId !== user.id) {
       return NextResponse.json({ error: "You can only edit your own inspections." }, { status: 403 });
     }
@@ -53,48 +50,47 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "inspection_date is required" }, { status: 400 });
   }
 
-  const upd = await db
-    .from("pmi_inspect_inspections")
-    .update({
-      inspection_reason: s(body.inspection_reason),
-      inspector_name: s(body.inspector_name),
-      inspection_date: body.inspection_date,
-      inspection_time: s(body.inspection_time),
-      notes: s(body.notes),
-      overall_status: s(body.overall_status),
-      special_instructions: s(body.special_instructions),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", inspectionId);
-  if (upd.error) return NextResponse.json({ error: upd.error.message }, { status: 502 });
-
-  // Replace checklist + work items.
-  await db.from("pmi_inspect_checklist_items").delete().eq("inspection_id", inspectionId);
   const checklist = (body.checklist ?? []) as ChecklistInput[];
-  if (checklist.length) {
-    await db.from("pmi_inspect_checklist_items").insert(
-      checklist.map((c) => ({
-        inspection_id: inspectionId,
-        item_key: c.key ?? null,
-        item_label: c.label ?? null,
-        checked: c.checked ? 1 : 0,
-        status: c.status ?? null,
-        issue_notes: s(c.issue_notes),
-      }))
-    );
-  }
-
-  await db.from("pmi_inspect_work_items").delete().eq("inspection_id", inspectionId);
   const workItems = ((body.work_items ?? []) as WorkItemInput[]).filter((w) => s(w.service_name));
-  if (workItems.length) {
-    await db.from("pmi_inspect_work_items").insert(
-      workItems.map((w) => ({
-        inspection_id: inspectionId,
-        service_name: (w.service_name ?? "").trim(),
-        quantity: w.quantity || 1,
-        notes: s(w.notes),
-      }))
-    );
+
+  try {
+    await prisma.$transaction([
+      prisma.inspectVisit.update({
+        where: { id: inspectionId },
+        data: {
+          inspection_reason: s(body.inspection_reason),
+          inspector_name: s(body.inspector_name),
+          inspection_date: String(body.inspection_date),
+          inspection_time: s(body.inspection_time),
+          notes: s(body.notes),
+          overall_status: s(body.overall_status),
+          special_instructions: s(body.special_instructions),
+        },
+      }),
+      prisma.inspectChecklistItem.deleteMany({ where: { inspection_id: inspectionId } }),
+      prisma.inspectChecklistItem.createMany({
+        data: checklist.map((c) => ({
+          inspection_id: inspectionId,
+          item_key: c.key ?? null,
+          item_label: c.label ?? null,
+          checked: c.checked ? 1 : 0,
+          status: c.status ?? null,
+          issue_notes: s(c.issue_notes),
+        })),
+      }),
+      prisma.inspectWorkItem.deleteMany({ where: { inspection_id: inspectionId } }),
+      prisma.inspectWorkItem.createMany({
+        data: workItems.map((w) => ({
+          inspection_id: inspectionId,
+          service_name: (w.service_name ?? "").trim(),
+          quantity: w.quantity || 1,
+          notes: s(w.notes),
+        })),
+      }),
+    ]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Update failed";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   return NextResponse.json({ id: inspectionId });
@@ -106,8 +102,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const db = getInspectionsDb();
-  if (!db) return NextResponse.json({ error: "Not configured" }, { status: 503 });
 
   const inspectionId = Number((await params).id);
   if (!Number.isFinite(inspectionId)) {
@@ -115,22 +109,25 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
 
   if (!user.canDelete) {
-    const owner = await db
-      .from("pmi_inspect_inspections")
-      .select("created_by_user_id")
-      .eq("id", inspectionId)
-      .maybeSingle();
-    const ownerId = owner.data?.created_by_user_id;
+    const owner = await prisma.inspectVisit.findUnique({
+      where: { id: inspectionId },
+      select: { created_by_user_id: true },
+    });
+    const ownerId = owner?.created_by_user_id;
     if (!ownerId || ownerId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
 
-  const del = await db
-    .from("pmi_inspect_inspections")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", inspectionId);
-  if (del.error) return NextResponse.json({ error: del.error.message }, { status: 502 });
+  try {
+    await prisma.inspectVisit.update({
+      where: { id: inspectionId },
+      data: { deleted_at: new Date() },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 
   return NextResponse.json({ ok: true });
 }

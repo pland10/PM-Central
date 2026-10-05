@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInspectionsDb } from "@/lib/inspections/supabase";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 
-// Create an inspection (+ its checklist and work items). Writes to the
-// inspections Supabase project with the service key; records the creator.
+// Create an inspection (+ its checklist and work items) in PM-Central's single
+// database (Prisma/Postgres). Records the creator.
 export const dynamic = "force-dynamic";
 
 type ChecklistInput = {
@@ -28,9 +28,6 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getInspectionsDb();
-  if (!db) return NextResponse.json({ error: "Not configured" }, { status: 503 });
-
   const body = await req.json().catch(() => null);
   if (!body || !body.property_id || !body.inspection_date) {
     return NextResponse.json(
@@ -39,53 +36,52 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data, error } = await db
-    .from("pmi_inspect_inspections")
-    .insert({
-      property_id: body.property_id,
-      inspection_reason: s(body.inspection_reason),
-      inspector_name: s(body.inspector_name) ?? user.name,
-      inspection_date: body.inspection_date,
-      inspection_time: s(body.inspection_time),
-      notes: s(body.notes),
-      overall_status: s(body.overall_status),
-      special_instructions: s(body.special_instructions),
-      created_by_user_id: user.id,
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "Insert failed" }, { status: 502 });
-  }
-  const inspectionId = data.id as number;
-
   const checklist = (body.checklist ?? []) as ChecklistInput[];
-  if (checklist.length) {
-    await db.from("pmi_inspect_checklist_items").insert(
-      checklist.map((c) => ({
-        inspection_id: inspectionId,
-        item_key: c.key ?? null,
-        item_label: c.label ?? null,
-        checked: c.checked ? 1 : 0,
-        status: c.status ?? null,
-        issue_notes: s(c.issue_notes),
-      }))
-    );
-  }
+  const cleanWork = ((body.work_items ?? []) as WorkItemInput[]).filter((w) => s(w.service_name));
 
-  const workItems = (body.work_items ?? []) as WorkItemInput[];
-  const cleanWork = workItems.filter((w) => s(w.service_name));
-  if (cleanWork.length) {
-    await db.from("pmi_inspect_work_items").insert(
-      cleanWork.map((w) => ({
-        inspection_id: inspectionId,
-        service_name: (w.service_name ?? "").trim(),
-        quantity: w.quantity || 1,
-        notes: s(w.notes),
-      }))
-    );
-  }
+  try {
+    const created = await prisma.inspectVisit.create({
+      data: {
+        property_id: Number(body.property_id),
+        inspection_reason: s(body.inspection_reason),
+        inspector_name: s(body.inspector_name) ?? user.name,
+        inspection_date: String(body.inspection_date),
+        inspection_time: s(body.inspection_time),
+        notes: s(body.notes),
+        overall_status: s(body.overall_status),
+        special_instructions: s(body.special_instructions),
+        created_by_user_id: user.id,
+      },
+      select: { id: true },
+    });
 
-  return NextResponse.json({ id: inspectionId }, { status: 201 });
+    if (checklist.length) {
+      await prisma.inspectChecklistItem.createMany({
+        data: checklist.map((c) => ({
+          inspection_id: created.id,
+          item_key: c.key ?? null,
+          item_label: c.label ?? null,
+          checked: c.checked ? 1 : 0,
+          status: c.status ?? null,
+          issue_notes: s(c.issue_notes),
+        })),
+      });
+    }
+
+    if (cleanWork.length) {
+      await prisma.inspectWorkItem.createMany({
+        data: cleanWork.map((w) => ({
+          inspection_id: created.id,
+          service_name: (w.service_name ?? "").trim(),
+          quantity: w.quantity || 1,
+          notes: s(w.notes),
+        })),
+      });
+    }
+
+    return NextResponse.json({ id: created.id }, { status: 201 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Insert failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

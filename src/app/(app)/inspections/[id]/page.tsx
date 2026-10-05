@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
-import { getInspectionsDb } from "@/lib/inspections/supabase";
+import { getInspectionDetail } from "@/lib/inspections/db";
 import {
-  type InspectionRow,
-  type ChecklistItem,
-  type WorkItem,
-  type InspectionPhoto,
-  type InspectionProperty,
   statusTone,
   formatInspectionDate,
   parseSpecialInstructions,
@@ -34,32 +29,9 @@ export default async function InspectionDetailPage({
   const inspectionId = Number(id);
   if (!Number.isFinite(inspectionId)) notFound();
 
-  const db = getInspectionsDb();
-  if (!db) notFound();
-
-  const insRes = await db
-    .from("pmi_inspect_inspections")
-    .select("*")
-    .eq("id", inspectionId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (insRes.error || !insRes.data) notFound();
-  const insp = insRes.data as InspectionRow;
-
-  const [propRes, checkRes, photoRes, workRes] = await Promise.all([
-    insp.property_id != null
-      ? db.from("pmi_inspect_properties").select("id,name,address").eq("id", insp.property_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    db.from("pmi_inspect_checklist_items").select("*").eq("inspection_id", inspectionId).order("id"),
-    db.from("pmi_inspect_photos").select("*").eq("inspection_id", inspectionId).order("id"),
-    db.from("pmi_inspect_work_items").select("*").eq("inspection_id", inspectionId).order("id"),
-  ]);
-
-  const property = (propRes.data ?? null) as InspectionProperty | null;
-  const checklist = (checkRes.data ?? []) as ChecklistItem[];
-  const photos = (photoRes.data ?? []) as InspectionPhoto[];
-  const workItems = (workRes.data ?? []) as WorkItem[];
+  const detail = await getInspectionDetail(inspectionId);
+  if (!detail) notFound();
+  const { inspection: insp, property, checklist, photos, workItems } = detail;
 
   return (
     <div className="mx-auto max-w-3xl">

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { externalLink } from "@/lib/externalLinks";
 import { isFeatureEnabled } from "@/config/features";
-import { getInspectionsDb } from "@/lib/inspections/supabase";
+import { inspectionsForRvId } from "@/lib/inspections/db";
 import { type InspectionRow, statusTone, formatInspectionDate } from "@/lib/inspections/types";
 import { loadInvoicesForProperty } from "@/lib/invoicing-query";
 import { type InvoiceRow, invoiceTotals, formatMoney, formatDate } from "@/lib/invoices";
@@ -34,26 +34,14 @@ async function invoicesForProperty(externalId: string | null): Promise<InvoiceRo
   }
 }
 
-// Inspections live in a separate database keyed by Rentvine property id (rv_id),
-// so match this property's Rentvine id to find them.
+// Inspections are keyed by Rentvine property id (rv_id) in the inspection
+// tables, so match this property's Rentvine id to find them.
 async function inspectionsForProperty(externalId: string | null): Promise<InspectionRow[]> {
   if (!isFeatureEnabled("inspections")) return [];
   const rvId = externalId?.split(":").pop() ?? "";
   if (!rvId) return [];
-  const idb = getInspectionsDb();
-  if (!idb) return [];
   try {
-    const props = await idb.from("pmi_inspect_properties").select("id").eq("rv_id", rvId);
-    const propIds = (props.data ?? []).map((r) => (r as { id: number }).id);
-    if (!propIds.length) return [];
-    const res = await idb
-      .from("pmi_inspect_inspections")
-      .select("id,inspection_date,inspection_reason,inspector_name,overall_status")
-      .in("property_id", propIds)
-      .is("deleted_at", null)
-      .order("inspection_date", { ascending: false })
-      .limit(10);
-    return (res.data ?? []) as InspectionRow[];
+    return await inspectionsForRvId(rvId);
   } catch {
     return [];
   }
