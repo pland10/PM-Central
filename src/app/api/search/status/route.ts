@@ -1,30 +1,26 @@
 import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { syncStatusRows } from "@/lib/search-db";
 import { isFeatureEnabled } from "@/config/features";
 
 // Sync freshness for the Search header ("Updated N ago"). Reads the heartbeat
-// the LeadSimple sync jobs write; reports the OLDEST job so it reads as
-// "everything is at least this fresh", and flags a stuck backlog.
+// the sync jobs write to Neon; reports the OLDEST job so it reads as
+// "everything is at least this fresh", and flags a stuck backlog. Internal
+// cursor rows (job names starting with "_") are already excluded by the query.
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   if (!isFeatureEnabled("search")) return NextResponse.json({}, { status: 404 });
-  const db = getSupabase();
-  if (!db) return NextResponse.json({});
 
-  const { data, error } = await db.from("sync_status").select("job,last_run_at,detail");
-  if (error || !data || !data.length) return NextResponse.json({});
-
-  // Ignore internal bookkeeping rows (the sync cursors, whose job names start
-  // with "_"). They aren't real heartbeats, and their detail JSON contains
-  // "stuck_since", which would otherwise false-match the stuck check below and
-  // leak raw state into the header.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (data as any[]).filter((r) => r.job && !String(r.job).startsWith("_"));
+  let rows;
+  try {
+    rows = await syncStatusRows();
+  } catch {
+    return NextResponse.json({});
+  }
   if (!rows.length) return NextResponse.json({});
 
   const oldest = rows.reduce((a, b) =>
-    new Date(a.last_run_at) < new Date(b.last_run_at) ? a : b
+    new Date(a.last_run_at ?? 0) < new Date(b.last_run_at ?? 0) ? a : b
   );
   const stuck = rows.find((r) => /stuck/i.test(r.detail || ""));
 
