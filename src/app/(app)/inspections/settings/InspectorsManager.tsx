@@ -13,7 +13,7 @@ export function InspectorsManager() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/inspections/inspectors");
+      const res = await fetch("/api/inspections/inspectors", { cache: "no-store" });
       if (!res.ok) throw new Error("Could not load inspectors.");
       const d = await res.json();
       setInspectors(d.inspectors);
