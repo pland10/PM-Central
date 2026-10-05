@@ -69,10 +69,18 @@ export async function getCurrentUser(): Promise<AppUser | null> {
         ? "inspector"
         : "user";
 
+  // Derive the display name the same way the inspector list does
+  // (full_name, then name, then email) so the two always agree.
+  const displayName =
+    (typeof meta.full_name === "string" && meta.full_name ? meta.full_name : null) ??
+    (typeof meta.name === "string" && meta.name ? meta.name : null) ??
+    user.email ??
+    null;
+
   return {
     id: user.id,
     email: user.email ?? null,
-    name: (typeof meta.name === "string" ? meta.name : null) ?? user.email ?? null,
+    name: displayName,
     role,
     canDelete,
     canEditAll,
