@@ -326,3 +326,111 @@ model InvoiceSetting {
   id       Int   @id
   settings Json?
 }
+
+// ---------------------------------------------------------------------------
+// Inspections
+// ---------------------------------------------------------------------------
+// Migrated out of the inspections Supabase project into this single database.
+// Table names are preserved (@@map) so the data migration lines up. Photo FILES
+// still live in a Supabase Storage bucket, and inspectors are Supabase Auth
+// users — only these relational tables move here.
+
+model InspectProperty {
+  id      Int     @id @default(autoincrement())
+  name    String?
+  address String?
+  rv_id   String?
+
+  @@map("pmi_inspect_properties")
+  @@index([rv_id])
+}
+
+model InspectReason {
+  id         Int     @id @default(autoincrement())
+  name       String
+  sort_order Int?
+
+  @@map("pmi_inspect_reasons")
+}
+
+model InspectService {
+  id         Int     @id @default(autoincrement())
+  name       String
+  sort_order Int?
+
+  @@map("pmi_inspect_services")
+}
+
+model InspectSpecialInstruction {
+  id         Int     @id @default(autoincrement())
+  name       String
+  sort_order Int?
+
+  @@map("pmi_inspect_special_instructions")
+}
+
+model InspectPropertyInstruction {
+  id             Int @id @default(autoincrement())
+  property_id    Int
+  instruction_id Int
+
+  @@map("pmi_inspect_property_instructions")
+  @@index([instruction_id])
+  @@index([property_id])
+}
+
+model InspectVisit {
+  id                   Int       @id @default(autoincrement())
+  property_id          Int?
+  inspection_reason    String?
+  inspector_name       String?
+  inspection_date      String?
+  inspection_time      String?
+  notes                String?
+  overall_status       String?
+  special_instructions String?
+  created_by_user_id   String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+  deleted_at           DateTime?
+
+  @@map("pmi_inspect_inspections")
+  @@index([property_id])
+  @@index([deleted_at])
+}
+
+model InspectChecklistItem {
+  id            Int     @id @default(autoincrement())
+  inspection_id Int
+  item_key      String?
+  item_label    String?
+  checked       Int     @default(0)
+  status        String?
+  issue_notes   String?
+
+  @@map("pmi_inspect_checklist_items")
+  @@index([inspection_id])
+}
+
+model InspectWorkItem {
+  id            Int     @id @default(autoincrement())
+  inspection_id Int
+  service_name  String?
+  quantity      Int?
+  notes         String?
+
+  @@map("pmi_inspect_work_items")
+  @@index([inspection_id])
+}
+
+model InspectPhoto {
+  id            Int      @id @default(autoincrement())
+  inspection_id Int
+  filename      String?
+  original_name String?
+  url           String?
+  created_at    DateTime @default(now())
+
+  @@map("pmi_inspect_photos")
+  @@index([inspection_id])
+}

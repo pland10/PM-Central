@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
-import { getInspectionsDb } from "@/lib/inspections/supabase";
-import type {
-  InspectionDetail,
-  ChecklistItem,
-  WorkItem,
-  InspectionPhoto,
-} from "@/lib/inspections/types";
+import { getInspectionDetail } from "@/lib/inspections/db";
+import type { InspectionDetail } from "@/lib/inspections/types";
 import { InspectionForm } from "../../InspectionForm";
 
 export const dynamic = "force-dynamic";
@@ -21,28 +16,14 @@ export default async function EditInspectionPage({
   const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
 
-  const db = getInspectionsDb();
-  if (!db) notFound();
-
-  const insRes = await db
-    .from("pmi_inspect_inspections")
-    .select("*")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (insRes.error || !insRes.data) notFound();
-
-  const [checkRes, workRes, photoRes] = await Promise.all([
-    db.from("pmi_inspect_checklist_items").select("*").eq("inspection_id", id).order("id"),
-    db.from("pmi_inspect_work_items").select("*").eq("inspection_id", id).order("id"),
-    db.from("pmi_inspect_photos").select("*").eq("inspection_id", id).order("id"),
-  ]);
+  const detail = await getInspectionDetail(id);
+  if (!detail) notFound();
 
   const initial: InspectionDetail = {
-    ...(insRes.data as InspectionDetail),
-    checklist: (checkRes.data ?? []) as ChecklistItem[],
-    work_items: (workRes.data ?? []) as WorkItem[],
-    photos: (photoRes.data ?? []) as InspectionPhoto[],
+    ...detail.inspection,
+    checklist: detail.checklist,
+    work_items: detail.workItems,
+    photos: detail.photos,
   };
 
   return (
