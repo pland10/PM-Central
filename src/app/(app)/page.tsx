@@ -88,7 +88,12 @@ export default async function DashboardPage() {
 
   const occupancy = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
   const activeLeases = expirations.length;
-  const expirationsSorted = [...expirations].sort((a, b) => a.endMs - b.endMs);
+  // Only leases expiring within ~120 days, plus any already past — the near-term
+  // renewals to act on, not every dated lease.
+  const EXPIRY_HORIZON_MS = 120 * 86_400_000;
+  const expirationsSorted = [...expirations]
+    .filter((e) => e.endMs - now <= EXPIRY_HORIZON_MS)
+    .sort((a, b) => a.endMs - b.endMs);
   const topOwners = [...ownerAgg.values()].sort((a, b) => b.rentRoll - a.rentRoll).slice(0, 6);
   const vacantSorted = [...vacancies].sort((a, b) => a.address.localeCompare(b.address));
   const topDelinquencies = [...delinquencies].sort((a, b) => b.amount - a.amount);
@@ -140,7 +145,7 @@ export default async function DashboardPage() {
                 <MiniStat label="Largest" value={formatCurrency(largestDelinquency)} />
                 <MiniStat label="Of leases" value={`${delinquencyRate}%`} sub="delinquent" />
               </div>
-              <ExpandableRows initial={8}>
+              <ExpandableRows initial={5}>
                 {topDelinquencies.map((d) => (
                   <Row key={d.key} href={`/properties/${d.propertyId}`}>
                     <div className="min-w-0">
@@ -159,7 +164,7 @@ export default async function DashboardPage() {
           {expirationsSorted.length === 0 ? (
             <Empty>No dated leases.</Empty>
           ) : (
-            <ExpandableRows initial={8}>
+            <ExpandableRows initial={5}>
               {expirationsSorted.map((e) => {
                 const days = Math.round((e.endMs - now) / 86_400_000);
                 const label = days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? "today" : `in ${days}d`;
@@ -185,7 +190,7 @@ export default async function DashboardPage() {
           {vacantSorted.length === 0 ? (
             <Empty>No vacancies — fully occupied.</Empty>
           ) : (
-            <ExpandableRows initial={8}>
+            <ExpandableRows initial={5}>
               {vacantSorted.map((v) => (
                 <Row key={v.key} href={`/properties/${v.propertyId}`}>
                   <div className="min-w-0">
@@ -205,7 +210,7 @@ export default async function DashboardPage() {
           {highWorkOrders.length === 0 ? (
             <Empty>Nothing high-priority open.</Empty>
           ) : (
-            <ExpandableRows initial={8}>
+            <ExpandableRows initial={5}>
               {highWorkOrders.map((w) => (
                 <Row key={w.id} href={`/properties/${w.propertyId}`}>
                   <div className="min-w-0">
