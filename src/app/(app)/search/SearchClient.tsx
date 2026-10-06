@@ -26,6 +26,7 @@ const TYPES = [
   { key: "note", label: "Note" },
   { key: "chat", label: "Chat" },
   { key: "task", label: "Task" },
+  { key: "payment", label: "Payment" },
 ];
 
 const TYPE_BADGE: Record<string, string> = {
@@ -35,6 +36,7 @@ const TYPE_BADGE: Record<string, string> = {
   note: "bg-orange-100 text-orange-700",
   chat: "bg-sky-100 text-sky-700",
   task: "bg-purple-100 text-purple-700",
+  payment: "bg-teal-100 text-teal-700",
 };
 
 const PAGE_SIZES = [20, 40, 60, 100];
@@ -247,7 +249,7 @@ export function SearchClient() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Search Communications</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Full-text search across your communication history — emails, texts, calls, notes, chats and tasks.
+            Full-text search across your communication history — emails, texts, calls, notes, chats, tasks and payments.
           </p>
         </div>
         {fresh.updatedAt && (
