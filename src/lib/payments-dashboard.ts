@@ -50,7 +50,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf 
           AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date)))::int AS "pendingCount",
         COALESCE(sum(amount) FILTER (WHERE date_posted <= ${asOf}::date
           AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date))), 0)::float8 AS "pendingTotal",
-        count(*) FILTER (WHERE date_posted <= ${asOf}::date - ${STALE_DAYS}
+        count(*) FILTER (WHERE date_posted <= ${asOf}::date - ${STALE_DAYS}::int
           AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date)))::int AS "pendingStale",
         count(*) FILTER (WHERE status = 'cleared' AND clear_date = ${asOf}::date)::int AS "clearedCount",
         COALESCE(sum(amount) FILTER (WHERE status = 'cleared' AND clear_date = ${asOf}::date), 0)::float8 AS "clearedTotal"
