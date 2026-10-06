@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { SQUATTER_WATCH } from "@/lib/programs";
-import { loadPaymentSummary, PAYMENTS_WINDOWS } from "@/lib/payments-dashboard";
+import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
+import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function DashboardPage() {
       include: { property: true },
       orderBy: { externalId: "desc" },
     }),
-    loadPaymentSummary(), // null until the payments table exists / sync runs
+    paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
   ]);
 
   const now = Date.now();
@@ -112,50 +113,16 @@ export default async function DashboardPage() {
         <Stat label="Deposits held" value={formatCurrency(totalDeposits)} href="/leases" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
         <Stat label="High-priority WOs" value={String(highWorkOrders.length)} href="/work-orders" accent={highWorkOrders.length > 0} />
+        {payments && (
+          <>
+            <Stat label="Payments pending" value={formatCurrency(payments.pendingTotal)} href="/search?types=payment" accent={payments.pendingTotal > 0} />
+            <Stat label="Cleared today" value={formatCurrency(payments.clearedTotal)} href="/search?types=payment" />
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {payments && (
-          <Panel title="Payments — settlement status" href="/search?types=payment" linkLabel="Search payments">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <PayFig label="Pending" sub="in-flight" count={payments.summary.pendingCount} amount={payments.summary.pendingTotal} tone="amber" />
-              <PayFig label="Cleared" sub={`last ${PAYMENTS_WINDOWS.CLEARED_WINDOW_DAYS}d`} count={payments.summary.clearedCount} amount={payments.summary.clearedTotal} tone="green" />
-              <PayFig label="Returns" sub={`last ${PAYMENTS_WINDOWS.RETURNED_WINDOW_DAYS}d`} count={payments.summary.returnedCount} amount={payments.summary.returnedTotal} tone="red" />
-            </div>
-            {payments.summary.pendingStale > 0 && (
-              <div className="mt-3 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700">
-                ⚠ {payments.summary.pendingStale} pending over {PAYMENTS_WINDOWS.STALE_DAYS} days — worth chasing
-              </div>
-            )}
-            <div className="mt-3">
-              {payments.pending.length === 0 ? (
-                <Empty>No payments in flight.</Empty>
-              ) : (
-                <ExpandableRows initial={5}>
-                  {payments.pending.map((p) => {
-                    const days = p.date_posted
-                      ? Math.round((now - new Date(p.date_posted).getTime()) / 86_400_000)
-                      : null;
-                    const ageTone =
-                      days != null && days > PAYMENTS_WINDOWS.STALE_DAYS ? "text-amber-600" : "text-slate-400";
-                    return (
-                      <div key={p.source_id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0">
-                        <div className="min-w-0">
-                          <div className="truncate font-medium text-slate-800">{p.tenant || "Unknown tenant"}</div>
-                          <div className="truncate text-xs text-slate-500">{p.property_address || "—"}</div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <div className="font-medium text-slate-700">{formatCurrency(p.amount)}</div>
-                          {days != null && <div className={`text-xs ${ageTone}`}>{days}d in flight</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </ExpandableRows>
-              )}
-            </div>
-          </Panel>
-        )}
+        {payments && <PaymentsPane initial={payments} />}
 
         <Panel
           title="Delinquencies"
@@ -314,16 +281,3 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className="py-6 text-center text-sm text-slate-400">{children}</div>;
 }
 
-function PayFig({ label, sub, count, amount, tone }: {
-  label: string; sub: string; count: number; amount: number; tone: "amber" | "green" | "red";
-}) {
-  const toneClass =
-    tone === "amber" ? "text-amber-600" : tone === "green" ? "text-emerald-600" : "text-red-600";
-  return (
-    <div className="rounded-md border border-slate-100 bg-slate-50/60 p-2">
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-0.5 text-sm font-semibold ${toneClass}`}>{formatCurrency(amount)}</div>
-      <div className="text-[11px] text-slate-400">{count} · {sub}</div>
-    </div>
-  );
-}
