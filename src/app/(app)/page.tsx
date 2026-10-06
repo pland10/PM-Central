@@ -93,6 +93,9 @@ export default async function DashboardPage() {
   const vacantSorted = [...vacancies].sort((a, b) => a.address.localeCompare(b.address));
   const topDelinquencies = [...delinquencies].sort((a, b) => b.amount - a.amount);
   const delinquenciesTotal = delinquencies.reduce((s, d) => s + d.amount, 0);
+  const delinquentCount = delinquencies.length;
+  const largestDelinquency = topDelinquencies[0]?.amount ?? 0;
+  const delinquencyRate = activeLeases > 0 ? Math.round((delinquentCount / activeLeases) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -134,17 +137,24 @@ export default async function DashboardPage() {
           {topDelinquencies.length === 0 ? (
             <Empty>No outstanding balances.</Empty>
           ) : (
-            <ExpandableRows initial={8}>
-              {topDelinquencies.map((d) => (
-                <Row key={d.key} href={`/properties/${d.propertyId}`}>
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-slate-800">{d.tenant}</div>
-                    <div className="truncate text-xs text-slate-500">{d.address}</div>
-                  </div>
-                  <span className="shrink-0 font-medium text-red-600">{formatCurrency(d.amount)}</span>
-                </Row>
-              ))}
-            </ExpandableRows>
+            <>
+              <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                <MiniStat label="Delinquent" value={String(delinquentCount)} sub="leases" />
+                <MiniStat label="Largest" value={formatCurrency(largestDelinquency)} />
+                <MiniStat label="Of leases" value={`${delinquencyRate}%`} sub="delinquent" />
+              </div>
+              <ExpandableRows initial={8}>
+                {topDelinquencies.map((d) => (
+                  <Row key={d.key} href={`/properties/${d.propertyId}`}>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-slate-800">{d.tenant}</div>
+                      <div className="truncate text-xs text-slate-500">{d.address}</div>
+                    </div>
+                    <span className="shrink-0 font-medium text-red-600">{formatCurrency(d.amount)}</span>
+                  </Row>
+                ))}
+              </ExpandableRows>
+            </>
           )}
         </Panel>
 
@@ -279,5 +289,15 @@ function Row({ href, children }: { href: string; children: React.ReactNode }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <div className="py-6 text-center text-sm text-slate-400">{children}</div>;
+}
+
+function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-md border border-slate-100 bg-slate-50/60 p-2">
+      <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-800">{value}</div>
+      {sub && <div className="text-[11px] text-slate-400">{sub}</div>}
+    </div>
+  );
 }
 
