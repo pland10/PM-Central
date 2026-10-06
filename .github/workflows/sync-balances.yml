@@ -1,0 +1,40 @@
+name: Sync delinquency balances
+
+# Pulls each lease's current outstanding balance from Rentvine and writes it to
+# the DB (Lease.balanceDue), so the dashboard's Delinquencies panel stays
+# current without running anything on a PC. Runs every morning, and on demand
+# from the Actions tab (Run workflow).
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL          - prod Neon connection string (the DB the site reads)
+#   RENTVINE_BASE_URL      - e.g. https://pmilighthouse.rentvine.com/api/manager
+#   RENTVINE_API_KEY
+#   RENTVINE_API_SECRET
+#   RENTVINE_BALANCE_REPORT_ID  - optional; the script defaults to 27 if unset
+
+on:
+  schedule:
+    - cron: '45 11 * * *'   # ~7:45am ET (EDT); shifts an hour in winter. Tune as needed.
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-balances
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:               ${{ secrets.DATABASE_URL }}
+      RENTVINE_BASE_URL:          ${{ secrets.RENTVINE_BASE_URL }}
+      RENTVINE_API_KEY:           ${{ secrets.RENTVINE_API_KEY }}
+      RENTVINE_API_SECRET:        ${{ secrets.RENTVINE_API_SECRET }}
+      RENTVINE_BALANCE_REPORT_ID: ${{ secrets.RENTVINE_BALANCE_REPORT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install          # runs postinstall -> prisma generate
+      - run: npm run sync:balances
