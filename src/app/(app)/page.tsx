@@ -92,7 +92,6 @@ export default async function DashboardPage() {
   const topOwners = [...ownerAgg.values()].sort((a, b) => b.rentRoll - a.rentRoll).slice(0, 6);
   const vacantSorted = [...vacancies].sort((a, b) => a.address.localeCompare(b.address));
   const topDelinquencies = [...delinquencies].sort((a, b) => b.amount - a.amount);
-  const delinquenciesTotal = delinquencies.reduce((s, d) => s + d.amount, 0);
   const delinquentCount = delinquencies.length;
   const largestDelinquency = topDelinquencies[0]?.amount ?? 0;
   const delinquencyRate = activeLeases > 0 ? Math.round((delinquentCount / activeLeases) * 100) : 0;
@@ -131,8 +130,6 @@ export default async function DashboardPage() {
           title="Delinquencies"
           href="/leases"
           linkLabel="All leases"
-          badge={topDelinquencies.length}
-          amount={delinquenciesTotal}
         >
           {topDelinquencies.length === 0 ? (
             <Empty>No outstanding balances.</Empty>
