@@ -25,6 +25,7 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
   const [data, setData] = useState<PaymentAsOf>(initial);
   const [date, setDate] = useState(initial.asOf);
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const today = initial.asOf;
 
   async function pick(d: string) {
@@ -99,25 +100,35 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
         {data.pending.length === 0 ? (
           <div className="py-5 text-center text-sm text-slate-400">Nothing in flight as of {whenLabel}.</div>
         ) : (
-          data.pending.map((p) => {
-            const days = ageDays(p.date_posted, data.asOf);
-            const tone = days != null && days > STALE_DAYS ? "text-amber-600" : "text-slate-400";
-            return (
-              <div
-                key={p.source_id}
-                className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0"
+          <>
+            {(showAll ? data.pending : data.pending.slice(0, 5)).map((p) => {
+              const days = ageDays(p.date_posted, data.asOf);
+              const tone = days != null && days > STALE_DAYS ? "text-amber-600" : "text-slate-400";
+              return (
+                <div
+                  key={p.source_id}
+                  className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-slate-800">{p.tenant || "Unknown tenant"}</div>
+                    <div className="truncate text-xs text-slate-500">{p.property_address || "—"}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-medium text-slate-700">{formatCurrency(p.amount)}</div>
+                    {days != null && <div className={`text-xs ${tone}`}>{days}d in flight</div>}
+                  </div>
+                </div>
+              );
+            })}
+            {data.pending.length > 5 && (
+              <button
+                onClick={() => setShowAll((v) => !v)}
+                className="mt-2 w-full text-center text-xs font-medium text-brand-600 hover:underline"
               >
-                <div className="min-w-0">
-                  <div className="truncate font-medium text-slate-800">{p.tenant || "Unknown tenant"}</div>
-                  <div className="truncate text-xs text-slate-500">{p.property_address || "—"}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-medium text-slate-700">{formatCurrency(p.amount)}</div>
-                  {days != null && <div className={`text-xs ${tone}`}>{days}d in flight</div>}
-                </div>
-              </div>
-            );
-          })
+                {showAll ? "Show less" : `Show all ${data.pending.length} →`}
+              </button>
+            )}
+          </>
         )}
       </div>
 
