@@ -153,10 +153,20 @@ export async function loadCanonical(
           startDate: u.lease.startDate ? new Date(u.lease.startDate) : null,
           endDate: u.lease.endDate ? new Date(u.lease.endDate) : null,
         };
+        // In sync mode, don't overwrite the financial snapshot on update:
+        // balanceDue is owned by the separate balance sync (sync-balances),
+        // and depositBalance by the rent-roll import. The core sync has no
+        // authoritative figures for them, so clobbering to 0 here would wipe
+        // delinquencies. New leases still start at the defaults below.
+        const leaseUpdate: Record<string, unknown> = { unitId: unit.id, ...leaseData };
+        if (syncMode) {
+          delete leaseUpdate.balanceDue;
+          delete leaseUpdate.depositBalance;
+        }
         const lease = await prisma.lease.upsert({
           where: { source_externalId: { source, externalId: lExt } },
           create: { source, externalId: lExt, unitId: unit.id, ...leaseData },
-          update: { unitId: unit.id, ...leaseData },
+          update: leaseUpdate,
         });
         seenLeases.push(lExt);
         counts.leases++;
