@@ -19,6 +19,20 @@ function timeAgo(d: Date | null): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+// Absolute timestamp in the business timezone (Eastern), with the zone spelled
+// out so it's unambiguous — e.g. "Oct 7, 2:04 PM EDT". Fixed TZ keeps the
+// server-rendered value stable (no client/server hydration mismatch).
+function formatTimestamp(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+  }).format(d);
+}
+
 export default async function AdminDataPage() {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") notFound();
@@ -37,7 +51,7 @@ export default async function AdminDataPage() {
     const detail = present.find((r) => /stuck/i.test(r.detail || ""))?.detail
       ?? present[0]?.detail
       ?? null;
-    return { s, lastRun: oldest, stuck, detail, everRan: present.length > 0 };
+    return { s, lastRun: oldest, stuck, detail };
   });
 
   return (
@@ -61,7 +75,7 @@ export default async function AdminDataPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map(({ s, lastRun, stuck, detail, everRan }) => (
+            {rows.map(({ s, lastRun, stuck, detail }) => (
               <tr key={s.id} className={s.comingSoon ? "opacity-60" : ""}>
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-800">{s.label}</div>
@@ -72,9 +86,16 @@ export default async function AdminDataPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-600">{s.cadence}</td>
                 <td className="px-4 py-3">
-                  <span className={everRan ? "text-slate-700" : "text-slate-400"}>
-                    {s.comingSoon ? "—" : timeAgo(lastRun)}
-                  </span>
+                  {s.comingSoon ? (
+                    <span className="text-slate-400">—</span>
+                  ) : lastRun ? (
+                    <div className="leading-tight">
+                      <div className="text-slate-700">{formatTimestamp(lastRun)}</div>
+                      <div className="text-xs text-slate-400">{timeAgo(lastRun)}</div>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">Never</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <RefreshButton source={s.id} disabled={s.comingSoon} />
