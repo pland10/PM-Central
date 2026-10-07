@@ -7,7 +7,8 @@ export type DataSource = {
   id: string;
   label: string;
   description: string;
-  cadence: string; // human-readable schedule
+  cadence: string; // human-readable schedule (for display)
+  tier: "hourly" | "daily"; // machine-readable schedule, for the external scheduler
   jobs: string[]; // sync_status.job names; freshness = the OLDEST of these
   comingSoon?: boolean; // listed for visibility, but no refresh workflow yet
   dispatch: {
@@ -24,6 +25,7 @@ export const DATA_SOURCES: DataSource[] = [
     label: "Properties, leases & tenants",
     description: "Properties, units, owners, active leases, and tenants from Rentvine.",
     cadence: "Daily",
+    tier: "daily",
     jobs: ["rentvine_core"],
     dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-rentvine.yml", ref: "main" },
   },
@@ -32,6 +34,7 @@ export const DATA_SOURCES: DataSource[] = [
     label: "Delinquency balances",
     description: "Each lease's current outstanding balance (powers Delinquencies).",
     cadence: "Daily",
+    tier: "daily",
     jobs: ["balances"],
     dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-balances.yml", ref: "main" },
   },
@@ -40,6 +43,7 @@ export const DATA_SOURCES: DataSource[] = [
     label: "Communications — tasks & chat",
     description: "LeadSimple tasks and Rentvine chat messages.",
     cadence: "Hourly",
+    tier: "hourly",
     jobs: ["tasks", "rentvine_chat"],
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "sync.yml", ref: "master" },
   },
@@ -48,6 +52,7 @@ export const DATA_SOURCES: DataSource[] = [
     label: "Payments & settlements",
     description: "Rentvine rent payments and ACH settlement status.",
     cadence: "Hourly",
+    tier: "hourly",
     jobs: ["rent_settlements"],
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "sync.yml", ref: "master" },
   },
@@ -56,6 +61,7 @@ export const DATA_SOURCES: DataSource[] = [
     label: "Emails, notes, calls & texts",
     description: "Activity history crawled from LeadSimple (browser session).",
     cadence: "Hourly (business hrs), every 2h overnight",
+    tier: "hourly",
     jobs: ["activity_refresh"],
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "backfill.yml", ref: "master" },
   },
