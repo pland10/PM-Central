@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { getBalanceProvider } from "../src/import/sources/balances";
 
 // Live balance sync — pull every lease's current outstanding balance from the
@@ -70,6 +70,21 @@ async function main() {
           `run \`npm run import\` if you expect them, then sync again.`
       );
     }
+    // Heartbeat for the admin Data page (never fatal).
+    try {
+      const detail = `${updated} changed, ${zeroed} cleared, $${total.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} outstanding`;
+      await prisma.$executeRaw(Prisma.sql`
+        INSERT INTO sync_status (job, last_run_at, detail)
+        VALUES ('balances', now(), ${detail})
+        ON CONFLICT (job) DO UPDATE
+          SET last_run_at = EXCLUDED.last_run_at, detail = EXCLUDED.detail`);
+    } catch (e) {
+      console.log(`  [warn] could not write sync_status heartbeat: ${e instanceof Error ? e.message : e}`);
+    }
+
     console.log("\nDone. Reload the dashboard to see updated balances.");
   } finally {
     await prisma.$disconnect();
