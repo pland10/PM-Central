@@ -12,6 +12,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "import": "tsx scripts/import.ts",
     "sync:balances": "tsx scripts/sync-balances.ts",
+    "sync:rentvine": "tsx scripts/sync-rentvine.ts",
     "migrate:invoices": "tsx scripts/migrate-invoices-to-neon.ts",
     "migrate:inspections": "tsx scripts/migrate-inspections-to-neon.ts",
     "db:studio": "prisma studio",

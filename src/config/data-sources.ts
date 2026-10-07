@@ -21,11 +21,10 @@ export type DataSource = {
 export const DATA_SOURCES: DataSource[] = [
   {
     id: "properties",
-    label: "Properties, leases & work orders",
-    description: "Properties, units, owners, leases, tenants, and work orders from Rentvine.",
+    label: "Properties, leases & tenants",
+    description: "Properties, units, owners, active leases, and tenants from Rentvine.",
     cadence: "Daily",
     jobs: ["rentvine_core"],
-    comingSoon: true, // wired up in the live-Rentvine-sync PR
     dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-rentvine.yml", ref: "main" },
   },
   {
