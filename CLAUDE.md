@@ -28,9 +28,12 @@ Flow is **feature branch → `dev` → `main`**. `main` is production
 dispatches (e.g. the admin Data page Refresh buttons) also require the workflow
 to be on `main`.
 
-Claude **always opens the pull requests** (the user reviews and merges):
-1. Open the **feature → `dev`** PR for the change.
-2. Once it's merged to `dev`, open the **`dev` → `main`** promotion PR.
+Claude **always opens the pull requests**:
+1. Open the **feature → `dev`** PR for the change. Claude may merge this one
+   when the user asks.
+2. Once it's on `dev`, open the **`dev` → `main`** promotion PR — but the user
+   always performs the final `dev` → `main` (production) merge themselves.
+   Claude does not merge to `main`.
 
 Never leave a promotion for the user to open manually, and never push straight
 to `dev` or `main`.
