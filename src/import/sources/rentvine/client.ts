@@ -1,4 +1,4 @@
-import type { RentvineExport, RentvineSource } from "./raw";
+import type { RentvineExport, RentvineSource, RvLease, RvProperty } from "./raw";
 
 // Live Rentvine extraction, per company account.
 //
@@ -31,7 +31,87 @@ export function accountConfigFromEnv(account: string): RentvineAccountConfig {
   };
 }
 
+// Rentvine's primary lease-status category id for the "Active" family (2;
+// confirmed against list_lease_statuses). Pending (1) and Closed (6) are
+// excluded — only currently-active leases flow into the app.
+const ACTIVE_PRIMARY_STATUS = "2";
+
+// Map Rentvine propertyTypeID -> the type NAME the transform's RV_TYPE table
+// understands. Rentvine exposes ids, not names, on the property record. This is
+// a best-effort fallback; the extractor first tries to fetch the live type list
+// (see below) and only falls back to this table if that endpoint isn't present.
+const PROPERTY_TYPE_NAMES: Record<string, string> = {
+  "1": "Single Family Home",
+};
+
+function toNum(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function toStr(v: unknown): string {
+  return v == null ? "" : String(v);
+}
+
 export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
+  const base = `https://${config.subdomain}.rentvine.com/api/manager`;
+  const auth = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString("base64");
+
+  async function rvGet(path: string): Promise<{ json: unknown; headers: Headers }> {
+    const res = await fetch(base + path, {
+      headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Rentvine GET ${path} -> HTTP ${res.status} ${res.statusText}`);
+    }
+    return { json: await res.json(), headers: res.headers };
+  }
+
+  // Page through `?page=N` until the Pagination-Total-Pages header is exhausted
+  // (falling back to "stop on empty page" if the header is absent).
+  async function rvGetAll(path: string): Promise<Record<string, unknown>[]> {
+    const sep = path.includes("?") ? "&" : "?";
+    const rows: Record<string, unknown>[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const { json, headers } = await rvGet(`${path}${sep}page=${page}`);
+      const arr = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+      rows.push(...arr);
+      const tp = toNum(headers.get("Pagination-Total-Pages"));
+      totalPages = tp && tp > 0 ? tp : page >= 1 && arr.length > 0 ? page + 1 : page;
+      page++;
+    } while (page <= totalPages);
+    return rows;
+  }
+
+  // Rentvine wraps each row in a singular key (e.g. { property: {...} }). Pull
+  // out the record whichever way it comes.
+  function unwrap(row: Record<string, unknown>, key: string): Record<string, unknown> {
+    const inner = row[key];
+    return inner && typeof inner === "object" ? (inner as Record<string, unknown>) : row;
+  }
+
+  async function loadPropertyTypeNames(): Promise<Record<string, string>> {
+    for (const path of ["/property-types", "/propertyTypes"]) {
+      try {
+        const rows = await rvGetAll(path);
+        const map: Record<string, string> = {};
+        for (const row of rows) {
+          const t = unwrap(row, "propertyType");
+          const id = toStr(t.propertyTypeID ?? t.id);
+          const name = toStr(t.name);
+          if (id && name) map[id] = name;
+        }
+        if (Object.keys(map).length) return map;
+      } catch {
+        // endpoint not available on this account — try the next spelling
+      }
+    }
+    return PROPERTY_TYPE_NAMES;
+  }
+
   return {
     async extract(): Promise<RentvineExport> {
       if (!config.apiKey || !config.apiSecret) {
@@ -41,13 +121,83 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
             `or import from a bundled snapshot instead.`
         );
       }
-      // TODO: implement against the Rentvine API.
-      //   const base = `https://${config.subdomain}.rentvine.com/api/manager`;
-      //   const auth = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString("base64");
-      //   fetch(`${base}/properties`, { headers: { Authorization: `Basic ${auth}` } })
-      // Map the responses into RvProperty / RvLease / RvWorkOrder and return a
-      // RentvineExport. Paginate through all pages so the import is complete.
-      throw new Error("liveRentvineSource: Rentvine API extraction not implemented yet.");
+
+      const [propRows, pfRows, leaseRows, typeNames] = await Promise.all([
+        rvGetAll("/properties"),
+        rvGetAll("/portfolios"),
+        rvGetAll("/leases"),
+        loadPropertyTypeNames(),
+      ]);
+
+      // portfolioID -> owner (portfolio) name, for the owning entity.
+      const ownerByPortfolio = new Map<string, string>();
+      for (const row of pfRows) {
+        const pf = unwrap(row, "portfolio");
+        const id = toStr(pf.portfolioID);
+        const name = toStr(pf.name);
+        if (id && name) ownerByPortfolio.set(id, name);
+      }
+
+      const properties: RvProperty[] = propRows.map((row) => {
+        const p = unwrap(row, "property");
+        const portfolioId = toNum(p.portfolioID);
+        const typeId = toStr(p.propertyTypeID);
+        return {
+          id: Number(p.propertyID),
+          street: toStr(p.address),
+          city: toStr(p.city),
+          state: toStr(p.stateID),
+          zip: toStr(p.postalCode),
+          type: typeNames[typeId] ?? typeId,
+          portfolioId,
+          owner: portfolioId != null ? ownerByPortfolio.get(String(portfolioId)) : undefined,
+          status: toStr(p.isActive) === "0" ? "inactive" : "active",
+        };
+      });
+
+      // Active leases only. Rent + deposit come off the embedded unit; dates and
+      // the primary tenant name are on the lease itself.
+      const activeLeases: RvLease[] = [];
+      for (const row of leaseRows) {
+        const l = unwrap(row, "lease");
+        if (toStr(l.primaryLeaseStatusID) !== ACTIVE_PRIMARY_STATUS) continue;
+        const unit = unwrap(row, "unit");
+        const tenants = Array.isArray(l.tenants) ? (l.tenants as unknown[]) : [];
+        activeLeases.push({
+          prop: Number(l.propertyID),
+          leaseId: toNum(l.leaseID),
+          tenant: toStr(tenants[0]),
+          start: toStr(l.startDate),
+          end: toStr(l.endDate),
+          rent: toNum(unit.rent) ?? toNum(l.rentAmount) ?? toNum(l.baseRentAmount),
+          depositBalance: toNum(unit.deposit),
+        });
+      }
+
+      // Enrich each active lease's primary tenant with email/phone from the
+      // lease's contact link. Best-effort: a failure keeps the name-only tenant.
+      for (const lease of activeLeases) {
+        if (lease.leaseId == null) continue;
+        try {
+          const { json } = await rvGet(`/leases/${lease.leaseId}/tenants`);
+          const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+          const primary =
+            rows.find((r) => toStr(unwrap(r, "leaseTenant").isPrimary) === "1") ?? rows[0];
+          const contact = primary ? unwrap(primary, "contact") : undefined;
+          if (contact) {
+            lease.tenant = toStr(contact.name) || lease.tenant;
+            lease.email = contact.email ? toStr(contact.email) : undefined;
+            lease.phone = contact.phone ? toStr(contact.phone) : undefined;
+          }
+        } catch {
+          // keep the name from the lease row
+        }
+      }
+
+      // Work orders + property-group tags are synced separately (they need their
+      // own Rentvine endpoints) and the "sync" load mode preserves them, so they
+      // are left empty here rather than wiped.
+      return { account: config.account, properties, activeLeases, workOrders: [] };
     },
   };
 }

@@ -1,0 +1,39 @@
+name: Sync Rentvine core data
+
+# Pulls properties, units, owners, active leases and tenants from the Rentvine
+# API and reconciles them into the DB, so the app's core records stay current
+# without running anything on a PC. Non-destructive: it never touches work
+# orders or group tags (those sync separately). Runs every morning, and on
+# demand from the admin Data page / Actions tab (Run workflow).
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL          - prod Neon connection string (the DB the site reads)
+#   RENTVINE_SUBDOMAIN     - optional; defaults to the account name
+#   RENTVINE_API_KEY
+#   RENTVINE_API_SECRET
+
+on:
+  schedule:
+    - cron: '20 10 * * *'   # ~6:20am ET (EDT); shifts an hour in winter. Tune as needed.
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-rentvine
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+      RENTVINE_SUBDOMAIN:  ${{ secrets.RENTVINE_SUBDOMAIN }}
+      RENTVINE_API_KEY:    ${{ secrets.RENTVINE_API_KEY }}
+      RENTVINE_API_SECRET: ${{ secrets.RENTVINE_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install          # runs postinstall -> prisma generate
+      - run: npm run sync:rentvine
