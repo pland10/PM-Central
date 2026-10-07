@@ -86,11 +86,39 @@ it checks out.**
    Properties, Search, Inspections, and Invoicing (create a *draft* invoice,
    print it, delete it in the fallback app). Only proceed once this is clean.
 
-### Keeping balances fresh
+### Scheduling syncs (external scheduler)
+
+The data syncs run as GitHub Actions workflows, but **GitHub's cron is
+best-effort and regularly drops scheduled runs** — so scheduling is driven by a
+reliable external scheduler that calls an endpoint on the app, which dispatches
+the due workflows. (GitHub's own `schedule:` triggers stay in the workflows as a
+backstop; runs are idempotent, so an occasional double-trigger is harmless.)
+
+**Endpoint:** `POST /api/cron/sync` — auth via `Authorization: Bearer <CRON_SECRET>`
+(or `?key=<CRON_SECRET>` for pingers that can't send headers).
+- `?tier=hourly` → communications, payments, emails
+- `?tier=daily` → properties, balances
+- `?source=<id>` → one source (`properties`, `balances`, `communications`,
+  `payments`, `emails`)
+
+**Setup:**
+1. Set `CRON_SECRET` (a long random string) and `GITHUB_DISPATCH_TOKEN` (a
+   fine-grained GitHub token with Actions: write on PM-Central +
+   leadsimple-search) in the app's environment.
+2. In a managed scheduler with retries + delivery logs — **Upstash QStash**
+   recommended (cron-job.org works too) — create two schedules:
+   - **Hourly** → `POST https://pmilighthouse.app/api/cron/sync?tier=hourly`
+   - **Daily** (early AM) → `POST https://pmilighthouse.app/api/cron/sync?tier=daily`
+
+   Both with header `Authorization: Bearer <CRON_SECRET>`. A managed scheduler
+   (vs. GitHub/host cron) gives guaranteed delivery, automatic retries, and a
+   log of every fire — none of which plain cron offers.
+
+### Keeping balances fresh after an import
 
 `npm run import` reloads the snapshot and resets balances, so run
-`npm run sync:balances` after any import. To keep balances current on their own,
-schedule `npm run sync:balances` (e.g. a Railway cron) — see TODO.md.
+`npm run sync:balances` after any manual import (the scheduled balance sync also
+corrects it on its next run).
 
 ---
 

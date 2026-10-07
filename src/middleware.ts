@@ -83,6 +83,10 @@ function basicGate(req: NextRequest): NextResponse {
 }
 
 export async function middleware(req: NextRequest): Promise<NextResponse> {
+  // The external-scheduler endpoint authenticates itself with CRON_SECRET, so
+  // it bypasses the app login gate (a scheduler has no Supabase/Basic session).
+  if (req.nextUrl.pathname.startsWith("/api/cron/")) return NextResponse.next();
+
   const mode = (process.env.AUTH_MODE || "basic").toLowerCase();
   if (mode === "supabase") return supabaseGate(req);
   return basicGate(req);
