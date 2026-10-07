@@ -11,6 +11,16 @@ export interface LoadOptions {
   // (safe for multi-company: other accounts are untouched). When false, pure
   // upsert. A full local reset is done by the caller (see prisma/seed.ts).
   fresh?: boolean;
+  // "replace" (default): the fresh/upsert behavior above — used by the static
+  // import + seed, which carry the complete dataset (properties, leases, AND
+  // work orders + group tags).
+  // "sync": non-destructive live refresh. Upserts properties/units/leases/
+  // tenants, then sweeps away only the ones that vanished from the source
+  // (ended leases, removed properties). It deliberately does NOT touch work
+  // orders, and preserves a property's existing tags when the source row
+  // carries none — so a partial live sync never wipes data it isn't
+  // responsible for. See scripts/sync-rentvine.ts.
+  mode?: "replace" | "sync";
 }
 
 export interface LoadCounts {
@@ -33,6 +43,13 @@ export async function loadCanonical(
 ): Promise<LoadCounts> {
   const { source, account } = dataset;
   const prefix = `${account}:`;
+  const syncMode = opts.mode === "sync";
+
+  // In sync mode we track every namespaced id we touch so we can delete the
+  // records that disappeared from the source afterwards (orphan sweep).
+  const seenProps: string[] = [];
+  const seenUnits: string[] = [];
+  const seenLeases: string[] = [];
 
   if (opts.fresh) {
     // Scoped reset: only this source + account. Property deletes cascade to
@@ -95,12 +112,17 @@ export async function loadCanonical(
       tags: (p.tags ?? []).join(","),
       portfolioId,
     };
+    // In sync mode, don't overwrite existing tags when the source row carries
+    // none — group/program tags (e.g. squatterwatch) are synced separately.
+    const propUpdate: Record<string, unknown> = { ...propData };
+    if (syncMode && (p.tags ?? []).length === 0) delete propUpdate.tags;
     const property = await prisma.property.upsert({
       where: { source_externalId: { source, externalId } },
       create: { source, externalId, ...propData },
-      update: propData,
+      update: propUpdate,
     });
     propIdByExt.set(p.externalId, property.id);
+    seenProps.push(externalId);
     counts.properties++;
 
     for (const u of p.units) {
@@ -118,6 +140,7 @@ export async function loadCanonical(
         create: { source, externalId: uExt, propertyId: property.id, ...unitData },
         update: { propertyId: property.id, ...unitData },
       });
+      seenUnits.push(uExt);
       counts.units++;
 
       if (u.lease) {
@@ -135,6 +158,7 @@ export async function loadCanonical(
           create: { source, externalId: lExt, unitId: unit.id, ...leaseData },
           update: { unitId: unit.id, ...leaseData },
         });
+        seenLeases.push(lExt);
         counts.leases++;
 
         for (let i = 0; i < u.lease.tenants.length; i++) {
@@ -183,6 +207,23 @@ export async function loadCanonical(
       update: { propertyId, ...woData },
     });
     counts.workOrders++;
+  }
+
+  // Sync mode: remove records that vanished from the source. Guarded on having
+  // actually loaded properties, so an upstream API hiccup (0 rows) can never
+  // wipe the table. Deletes cascade property -> unit -> lease -> lease-tenant,
+  // so order from narrowest to widest. Work orders are intentionally left
+  // alone (not part of this sync) except where their property is gone.
+  if (syncMode && seenProps.length > 0) {
+    await prisma.lease.deleteMany({
+      where: { source, externalId: { startsWith: `${account}:lease:`, notIn: seenLeases } },
+    });
+    await prisma.unit.deleteMany({
+      where: { source, externalId: { startsWith: `${account}:unit:`, notIn: seenUnits } },
+    });
+    await prisma.property.deleteMany({
+      where: { source, externalId: { startsWith: `${account}:property:`, notIn: seenProps } },
+    });
   }
 
   return counts;
