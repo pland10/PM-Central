@@ -22,6 +22,19 @@ data from many sources and could be sold as a product.
   `AUTH_MODE=basic` (default/dev) uses a shared `BASIC_AUTH_USER` /
   `BASIC_AUTH_PASSWORD`.
 
+## Branching & deploys
+Flow is **feature branch → `dev` → `main`**. `main` is production
+(pmilighthouse.app); nothing is live until it reaches `main`. Some workflow
+dispatches (e.g. the admin Data page Refresh buttons) also require the workflow
+to be on `main`.
+
+Claude **always opens the pull requests** (the user reviews and merges):
+1. Open the **feature → `dev`** PR for the change.
+2. Once it's merged to `dev`, open the **`dev` → `main`** promotion PR.
+
+Never leave a promotion for the user to open manually, and never push straight
+to `dev` or `main`.
+
 ## Commands
 - `npm run db:push` after editing the schema
 - `npm run db:seed` to reload sample data
