@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { SQUATTER_WATCH } from "@/lib/programs";
 import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
+import { workOrderStageSummary } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 
@@ -18,7 +19,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, highWorkOrders, payments] = await Promise.all([
+  const [properties, woSummary, payments] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -30,11 +31,7 @@ export default async function DashboardPage() {
         },
       },
     }),
-    prisma.workOrder.findMany({
-      where: { priority: "high", status: { not: "completed" } },
-      include: { property: true },
-      orderBy: { externalId: "desc" },
-    }),
+    workOrderStageSummary(), // null until the work_orders table exists / sync runs
     paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
   ]);
 
@@ -119,7 +116,7 @@ export default async function DashboardPage() {
         <Stat label="Outstanding" value={formatCurrency(totalBalanceDue)} href="/leases" accent={totalBalanceDue > 0} />
         <Stat label="Deposits held" value={formatCurrency(totalDeposits)} href="/leases" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
-        <Stat label="High-priority WOs" value={String(highWorkOrders.length)} href="/work-orders" accent={highWorkOrders.length > 0} />
+        <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/work-orders" accent={(woSummary?.openTotal ?? 0) > 0} />
         {payments && (
           <>
             <Stat label="Payments pending" value={formatCurrency(payments.pendingTotal)} href="/search?types=payment" accent={payments.pendingTotal > 0} />
@@ -206,23 +203,19 @@ export default async function DashboardPage() {
           )}
         </Panel>
 
-        <Panel title="High-priority work orders" href="/work-orders" linkLabel="All work orders" badge={highWorkOrders.length}>
-          {highWorkOrders.length === 0 ? (
-            <Empty>Nothing high-priority open.</Empty>
+        <Panel title="Work orders by stage" href="/work-orders" linkLabel="All work orders" badge={woSummary?.openTotal ?? 0}>
+          {!woSummary || woSummary.stages.length === 0 ? (
+            <Empty>No work orders yet.</Empty>
           ) : (
-            <ExpandableRows initial={5}>
-              {highWorkOrders.map((w) => (
-                <Row key={w.id} href={`/properties/${w.propertyId}`}>
-                  <div className="min-w-0">
-                    <div className="truncate text-slate-800">{w.description || w.title}</div>
-                    <div className="truncate text-xs text-slate-500">{formatAddress(w.property)}</div>
-                  </div>
-                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium capitalize text-amber-700">
-                    high
-                  </span>
-                </Row>
-              ))}
-            </ExpandableRows>
+            woSummary.stages.map((s) => (
+              <div
+                key={s.stage}
+                className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0"
+              >
+                <span className="min-w-0 truncate text-slate-800">{s.stage}</span>
+                <span className="shrink-0 font-medium text-slate-700">{s.count}</span>
+              </div>
+            ))
           )}
         </Panel>
 
