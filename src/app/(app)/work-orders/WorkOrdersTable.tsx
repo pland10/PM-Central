@@ -1,46 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { STAGE_ORDER, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
 
-export type WorkOrderRow = {
-  id: string;
-  number: string;
-  issue: string;
-  propertyId: string;
-  propertyAddress: string;
-  priority: string;
-  state: "open" | "closed";
-};
+export type { WorkOrderRow };
 
-const PRIORITY_RANK: Record<string, number> = { emergency: 4, high: 3, normal: 2, low: 1 };
-
-function priorityBadge(priority: string) {
-  const styles: Record<string, string> = {
-    low: "bg-slate-100 text-slate-600",
-    normal: "bg-blue-100 text-blue-700",
-    high: "bg-amber-100 text-amber-700",
-    emergency: "bg-red-100 text-red-700",
-  };
+function stageBadge(stage: string, terminal: boolean) {
+  const cls = terminal
+    ? "bg-slate-100 text-slate-500"
+    : "bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-500/20";
   return (
-    <span
-      className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${
-        styles[priority] ?? "bg-slate-100 text-slate-600"
-      }`}
-    >
-      {priority}
-    </span>
-  );
-}
-
-function statusBadge(state: "open" | "closed") {
-  return state === "open" ? (
-    <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-      Open
-    </span>
-  ) : (
-    <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-      Closed
+    <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
+      {stage}
     </span>
   );
 }
@@ -52,7 +23,19 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       header: "#",
       sortable: true,
       sortValue: (r) => Number(r.number) || 0,
-      render: (r) => <span className="font-mono text-xs text-slate-400">{r.number}</span>,
+      render: (r) =>
+        r.link ? (
+          <a
+            href={r.link}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brand-600 hover:underline"
+          >
+            {r.number}
+          </a>
+        ) : (
+          <span className="font-mono text-xs text-slate-400">{r.number}</span>
+        ),
     },
     {
       key: "issue",
@@ -62,51 +45,68 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       render: (r) => <span className="text-slate-800">{r.issue}</span>,
     },
     {
+      key: "stage",
+      header: "Stage",
+      sortable: true,
+      // Pipeline order, latest stage first (matches the dashboard). Terminal
+      // stages (rank -1) fall to the bottom of a descending sort.
+      sortValue: (r) => pipelineRank(r.stage),
+      render: (r) => stageBadge(r.stage, r.terminal),
+    },
+    {
       key: "property",
       header: "Property",
       sortable: true,
-      sortValue: (r) => r.propertyAddress.toLowerCase(),
-      render: (r) => (
-        <Link href={`/properties/${r.propertyId}`} className="text-slate-600 hover:text-brand-600">
-          {r.propertyAddress}
-        </Link>
-      ),
+      sortValue: (r) => r.property.toLowerCase(),
+      render: (r) => <span className="text-slate-600">{r.property}</span>,
     },
     {
-      key: "status",
-      header: "Status",
+      key: "vendor",
+      header: "Vendor",
       sortable: true,
-      sortValue: (r) => (r.state === "open" ? 1 : 0),
-      render: (r) => statusBadge(r.state),
+      sortValue: (r) => r.vendor.toLowerCase(),
+      render: (r) =>
+        r.vendor ? (
+          <span className="text-slate-600">{r.vendor}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
     },
     {
-      key: "priority",
-      header: "Priority",
+      key: "assignee",
+      header: "Assignee",
       sortable: true,
-      sortValue: (r) => PRIORITY_RANK[r.priority] ?? 0,
-      render: (r) => priorityBadge(r.priority),
+      sortValue: (r) => r.assignee.toLowerCase(),
+      render: (r) =>
+        r.assignee ? (
+          <span className="text-slate-600">{r.assignee}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
     },
   ];
 
-  const priorityOptions = Array.from(new Set(rows.map((r) => r.priority)))
-    .sort((a, b) => (PRIORITY_RANK[b] ?? 0) - (PRIORITY_RANK[a] ?? 0))
-    .map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+  // Stage facet in pipeline order (latest first), listing only stages present.
+  const present = new Set(rows.map((r) => r.stage));
+  const ordered = [...STAGE_ORDER].reverse().filter((s) => present.has(s));
+  const extras = [...present].filter((s) => !STAGE_ORDER.includes(s)).sort();
+  const stageOptions = [...ordered, ...extras].map((s) => ({ value: s, label: s }));
 
   const facets: Facet<WorkOrderRow>[] = [
     {
       key: "status",
       label: "Status",
       options: [
-        { value: "open", label: "Open" },
+        { value: "active", label: "Active" },
         { value: "closed", label: "Closed" },
       ],
-      match: (r, v) => r.state === v,
+      match: (r, v) => (v === "active" ? !r.terminal : r.terminal),
     },
     {
-      key: "priority",
-      label: "Priority",
-      options: priorityOptions,
-      match: (r, v) => r.priority === v,
+      key: "stage",
+      label: "Stage",
+      options: stageOptions,
+      match: (r, v) => r.stage === v,
     },
   ];
 
@@ -115,10 +115,11 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       rows={rows}
       columns={columns}
       rowKey={(r) => r.id}
-      search={(r) => `${r.issue} ${r.propertyAddress}`}
-      searchPlaceholder="Search issue or property…"
+      search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee}`}
+      searchPlaceholder="Search WO#, issue, property, vendor…"
       facets={facets}
-      initialSort={{ key: "status", dir: "desc" }}
+      initialSort={{ key: "stage", dir: "desc" }}
+      initialFacets={{ status: "active" }}
     />
   );
 }

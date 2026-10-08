@@ -1,9 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isTerminal, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
 
 // Work-order summary for the dashboard, read from the Neon `work_orders` table
 // that work_order_sync.py (LeadSimple) populates. Server-only. Returns null if
-// the table isn't there yet, so the pane hides instead of erroring.
+// the table isn't there yet, so the pane hides instead of erroring. The stage
+// ordering + terminal rules live in @/lib/work-orders (shared with the full
+// /work-orders page).
 
 export type StageCount = { stage: string; count: number };
 
@@ -12,31 +15,6 @@ export type WorkOrderSummary = {
   total: number; // all work orders, including terminal
   openTotal: number; // sum of the open stages shown
 };
-
-// Stages that mean the work order is off the active board — not shown on the
-// dashboard (completed / cancelled / deferred, etc.).
-function isTerminal(stage: string): boolean {
-  return /complete|cancel|closed|lost|defer/i.test(stage);
-}
-
-// The Work Orders process stages in LeadSimple pipeline order, earliest →
-// latest (from GET /process_types/{id}/stages). The dashboard lists them in
-// REVERSE of this (latest stage first) so the ones that have progressed but
-// aren't closed — the follow-ups — sit at the top. Unknown stages sort last.
-const STAGE_ORDER = [
-  "New WO",
-  "Troubleshooting",
-  "Assigning in Progress",
-  "Scheduling in Progress",
-  "Work Scheduled & Confirm Completion",
-  "Work Completed - Awaiting Invoice",
-  "Invoice Received",
-];
-
-function pipelineRank(stage: string): number {
-  const i = STAGE_ORDER.indexOf(stage);
-  return i === -1 ? -1 : i; // unknown → -1, sorts last in a descending sort
-}
 
 export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> {
   try {
@@ -58,6 +36,46 @@ export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> 
     const openTotal = stages.reduce((s, r) => s + r.count, 0);
 
     return { stages, total, openTotal };
+  } catch {
+    return null;
+  }
+}
+
+type RawRow = {
+  source_id: string;
+  wo_number: string | null;
+  title: string | null;
+  name: string | null;
+  stage: string | null;
+  property_address: string | null;
+  vendor_name: string | null;
+  assignee_name: string | null;
+  link: string | null;
+};
+
+// Full work-order list for the /work-orders page. Returns null if the table
+// isn't there yet (so the page can degrade gracefully instead of erroring).
+export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
+  try {
+    const rows = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
+      SELECT source_id, wo_number, title, name, stage,
+             property_address, vendor_name, assignee_name, link
+      FROM work_orders`);
+
+    return rows.map((r) => {
+      const stage = r.stage ?? "—";
+      return {
+        id: r.source_id,
+        number: r.wo_number ?? "—",
+        issue: r.title || r.name || "Work order",
+        stage,
+        terminal: isTerminal(stage),
+        property: r.property_address ?? "—",
+        vendor: r.vendor_name ?? "",
+        assignee: r.assignee_name ?? "",
+        link: r.link ?? "",
+      };
+    });
   } catch {
     return null;
   }
