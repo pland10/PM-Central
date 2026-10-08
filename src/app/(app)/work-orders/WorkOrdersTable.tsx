@@ -17,12 +17,19 @@ function stageBadge(stage: string, terminal: boolean) {
 }
 
 export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
+  // Stage dropdown in pipeline order (latest first), listing only stages present.
+  const present = new Set(rows.map((r) => r.stage));
+  const ordered = [...STAGE_ORDER].reverse().filter((s) => present.has(s));
+  const extras = [...present].filter((s) => !STAGE_ORDER.includes(s)).sort();
+  const stageOptions = [...ordered, ...extras].map((s) => ({ value: s, label: s }));
+
   const columns: Column<WorkOrderRow>[] = [
     {
       key: "number",
       header: "#",
       sortable: true,
       sortValue: (r) => Number(r.number) || 0,
+      filter: { type: "text", value: (r) => r.number },
       render: (r) =>
         r.link ? (
           <a
@@ -42,6 +49,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       header: "Issue",
       sortable: true,
       sortValue: (r) => r.issue.toLowerCase(),
+      filter: { type: "text", value: (r) => r.issue },
       render: (r) => <span className="text-slate-800">{r.issue}</span>,
     },
     {
@@ -51,6 +59,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       // Pipeline order, latest stage first (matches the dashboard). Terminal
       // stages (rank -1) fall to the bottom of a descending sort.
       sortValue: (r) => pipelineRank(r.stage),
+      filter: { type: "select", value: (r) => r.stage, options: stageOptions },
       render: (r) => stageBadge(r.stage, r.terminal),
     },
     {
@@ -58,6 +67,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       header: "Property",
       sortable: true,
       sortValue: (r) => r.property.toLowerCase(),
+      filter: { type: "text", value: (r) => r.property },
       render: (r) => <span className="text-slate-600">{r.property}</span>,
     },
     {
@@ -65,6 +75,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       header: "Vendor",
       sortable: true,
       sortValue: (r) => r.vendor.toLowerCase(),
+      filter: { type: "select", value: (r) => r.vendor },
       render: (r) =>
         r.vendor ? (
           <span className="text-slate-600">{r.vendor}</span>
@@ -77,6 +88,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       header: "Assignee",
       sortable: true,
       sortValue: (r) => r.assignee.toLowerCase(),
+      filter: { type: "select", value: (r) => r.assignee },
       render: (r) =>
         r.assignee ? (
           <span className="text-slate-600">{r.assignee}</span>
@@ -86,12 +98,8 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
     },
   ];
 
-  // Stage facet in pipeline order (latest first), listing only stages present.
-  const present = new Set(rows.map((r) => r.stage));
-  const ordered = [...STAGE_ORDER].reverse().filter((s) => present.has(s));
-  const extras = [...present].filter((s) => !STAGE_ORDER.includes(s)).sort();
-  const stageOptions = [...ordered, ...extras].map((s) => ({ value: s, label: s }));
-
+  // Active/closed is a cross-cutting view toggle (terminal is derived, not a
+  // column), so it stays a top-level facet defaulting to active.
   const facets: Facet<WorkOrderRow>[] = [
     {
       key: "status",
@@ -102,12 +110,6 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       ],
       match: (r, v) => (v === "active" ? !r.terminal : r.terminal),
     },
-    {
-      key: "stage",
-      label: "Stage",
-      options: stageOptions,
-      match: (r, v) => r.stage === v,
-    },
   ];
 
   return (
@@ -116,7 +118,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       columns={columns}
       rowKey={(r) => r.id}
       search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee}`}
-      searchPlaceholder="Search WO#, issue, property, vendor…"
+      searchPlaceholder="Search all fields…"
       facets={facets}
       initialSort={{ key: "stage", dir: "desc" }}
       initialFacets={{ status: "active" }}
