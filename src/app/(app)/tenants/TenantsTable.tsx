@@ -22,12 +22,17 @@ function fmtMonth(iso: string | null) {
 }
 
 export function TenantsTable({ rows }: { rows: TenantRow[] }) {
+  const statusOptions = Array.from(new Set(rows.map((r) => r.status)))
+    .sort()
+    .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
+
   const columns: Column<TenantRow>[] = [
     {
       key: "name",
       header: "Tenant",
       sortable: true,
       sortValue: (r) => r.name.toLowerCase(),
+      filter: { type: "text", value: (r) => r.name },
       render: (r) => (
         <Link href={`/tenants/${r.contactId}`} className="font-medium text-slate-900 hover:text-brand-600">
           {r.name}
@@ -37,6 +42,7 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
     {
       key: "contact",
       header: "Contact",
+      filter: { type: "text", value: (r) => `${r.email ?? ""} ${r.phone ?? ""}` },
       render: (r) => (
         <>
           {r.email && (
@@ -54,6 +60,7 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
       header: "Property",
       sortable: true,
       sortValue: (r) => r.propertyAddress.toLowerCase(),
+      filter: { type: "text", value: (r) => r.propertyAddress },
       render: (r) => (
         <Link href={`/properties/${r.propertyId}`} className="text-slate-700 hover:text-brand-600">
           {r.propertyAddress}
@@ -74,6 +81,9 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
     {
       key: "status",
       header: "Status",
+      sortable: true,
+      sortValue: (r) => r.status,
+      filter: { type: "select", value: (r) => r.status, options: statusOptions },
       render: (r) => (
         <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium capitalize text-emerald-700">
           {r.status}

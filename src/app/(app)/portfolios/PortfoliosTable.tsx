@@ -20,6 +20,7 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       header: "Portfolio / Owner",
       sortable: true,
       sortValue: (r) => r.name.toLowerCase(),
+      filter: { type: "text", value: (r) => r.name },
       render: (r) => (
         <Link href={`/portfolios/${r.id}`} className="font-medium text-slate-900 hover:text-brand-600">
           {r.name}
