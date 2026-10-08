@@ -82,6 +82,7 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.unitCount,
+      filter: { type: "number", value: (r) => r.unitCount },
       render: (r) => <span className="text-slate-600">{r.unitCount}</span>,
     },
     {
@@ -116,6 +117,7 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.rentRoll,
+      filter: { type: "number", value: (r) => r.rentRoll },
       render: (r) => <span className="text-slate-600">{formatCurrency(r.rentRoll)}</span>,
     },
     {

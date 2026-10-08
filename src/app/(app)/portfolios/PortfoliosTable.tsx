@@ -33,6 +33,7 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.propertyCount,
+      filter: { type: "number", value: (r) => r.propertyCount },
       render: (r) => <span className="text-slate-600">{r.propertyCount}</span>,
     },
     {
@@ -41,6 +42,7 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.unitCount,
+      filter: { type: "number", value: (r) => r.unitCount },
       render: (r) => (
         <span className="text-slate-600">
           {r.occupied}/{r.unitCount}
@@ -53,6 +55,7 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.rentRoll,
+      filter: { type: "number", value: (r) => r.rentRoll },
       render: (r) => <span className="text-slate-700">{formatCurrency(r.rentRoll)}</span>,
     },
   ];

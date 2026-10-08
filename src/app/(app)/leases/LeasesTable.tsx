@@ -77,6 +77,7 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.rent,
+      filter: { type: "number", value: (r) => r.rent },
       render: (r) => <span className="text-slate-700">{formatCurrency(r.rent)}</span>,
     },
     {
@@ -84,6 +85,7 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       header: "Term",
       sortable: true,
       sortValue: (r) => r.endISO ?? "",
+      filter: { type: "date", value: (r) => r.endISO },
       render: (r) => (
         <span className="text-slate-600">
           {fmtMonth(r.startISO)} – {fmtMonth(r.endISO)}
