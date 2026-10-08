@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { DataTable, type Column } from "@/components/DataTable";
 import {
   type InvoiceRow,
   type InvoiceStatus,
@@ -77,6 +77,7 @@ export function InvoicingTable({
       header: "Invoice #",
       sortable: true,
       sortValue: (r) => r.number.toLowerCase(),
+      filter: { type: "text", value: (r) => r.number },
       render: (r) => (
         <Link href={`/invoicing/${r.id}/edit`} className="font-mono text-xs text-brand-600 hover:underline">
           {r.number}
@@ -95,6 +96,7 @@ export function InvoicingTable({
       header: "Billed to",
       sortable: true,
       sortValue: (r) => billToName(r).toLowerCase(),
+      filter: { type: "text", value: (r) => billToName(r) },
       render: (r) => <span className="text-slate-800">{billToName(r)}</span>,
     },
     {
@@ -102,6 +104,7 @@ export function InvoicingTable({
       header: "Property",
       sortable: true,
       sortValue: (r) => propertyName(r, propertyLabels).toLowerCase(),
+      filter: { type: "text", value: (r) => propertyName(r, propertyLabels) },
       render: (r) => {
         const name = propertyName(r, propertyLabels);
         return name ? (
@@ -116,6 +119,7 @@ export function InvoicingTable({
       header: "Period",
       sortable: true,
       sortValue: (r) => r.period ?? "",
+      filter: { type: "text", value: (r) => r.period ?? "" },
       render: (r) => <span className="text-slate-500">{r.period || "—"}</span>,
     },
     {
@@ -123,6 +127,15 @@ export function InvoicingTable({
       header: "Status",
       sortable: true,
       sortValue: (r) => r.status,
+      filter: {
+        type: "select",
+        value: (r) => r.status,
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "sent", label: "Sent" },
+          { value: "paid", label: "Paid" },
+        ],
+      },
       render: (r) => <StatusBadge status={r.status} />,
     },
     {
@@ -141,19 +154,6 @@ export function InvoicingTable({
       render: (r) => (
         <span className="font-medium text-ink">{formatMoney(invoiceTotals(r.items, r.tax_rate).total)}</span>
       ),
-    },
-  ];
-
-  const facets: Facet<InvoiceRow>[] = [
-    {
-      key: "status",
-      label: "Status",
-      options: [
-        { value: "draft", label: "Draft" },
-        { value: "sent", label: "Sent" },
-        { value: "paid", label: "Paid" },
-      ],
-      match: (r, v) => r.status === v,
     },
   ];
 
@@ -180,7 +180,6 @@ export function InvoicingTable({
         rowKey={(r) => r.id}
         search={(r) => `${r.number} ${billToName(r)} ${propertyName(r, propertyLabels)} ${r.period ?? ""}`}
         searchPlaceholder="Search number, customer, property, period…"
-        facets={facets}
         initialSort={{ key: "date", dir: "desc" }}
       />
     </div>
