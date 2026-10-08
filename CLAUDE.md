@@ -29,14 +29,14 @@ dispatches (e.g. the admin Data page Refresh buttons) also require the workflow
 to be on `main`.
 
 Claude **always opens the pull requests**:
-1. Open the **feature → `dev`** PR for the change. Claude may merge this one
-   when the user asks.
-2. Once it's on `dev`, open the **`dev` → `main`** promotion PR — but the user
-   always performs the final `dev` → `main` (production) merge themselves.
-   Claude does not merge to `main`.
+1. Open the **feature → `dev`** PR for the change.
+2. Once it's on `dev`, open the **`dev` → `main`** promotion PR.
 
-Never leave a promotion for the user to open manually, and never push straight
-to `dev` or `main`.
+Claude **performs the merges** (both feature → `dev` and `dev` → `main`), but
+**always asks the user for approval first and merges only after they say yes** —
+every merge, including the final `dev` → `main` to production. Never merge
+without asking first, never leave a promotion for the user to open manually,
+and never push straight to `dev` or `main`.
 
 **Railway env/settings don't apply until a redeploy.** Changing a variable (or
 any service setting) in Railway only takes effect after that service redeploys

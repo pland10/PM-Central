@@ -61,7 +61,8 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
   const isToday = data.asOf === today;
   const whenLabel = isToday ? "today" : fmtDate(data.asOf);
 
-  const owners = showAllCleared ? data.clearedByOwner : data.clearedByOwner.slice(0, 4);
+  const clearedLines = data.clearedByOwner.flatMap((g) => g.lines);
+  const cleared = showAllCleared ? clearedLines : clearedLines.slice(0, 5);
   const returns = showAllReturns ? data.returned : data.returned.slice(0, 5);
   const pending = showAllPending ? data.pending : data.pending.slice(0, 5);
 
@@ -105,34 +106,24 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
         </div>
       )}
 
-      {/* Cleared — funds now available, grouped by owner (who can be paid) */}
+      {/* Cleared — funds now available, one row per tenant */}
       <div className="mt-3">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
           Cleared — funds now available
         </div>
-        {data.clearedByOwner.length === 0 ? (
+        {clearedLines.length === 0 ? (
           <div className="py-4 text-center text-sm text-slate-400">Nothing new cleared {isToday ? "today" : "then"}.</div>
         ) : (
           <>
-            {owners.map((g) => (
-              <div key={g.owner} className="border-b border-slate-100 py-2 last:border-0">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate font-medium text-slate-800">{g.owner}</span>
-                  <span className="shrink-0 font-semibold text-emerald-700">{formatCurrency(g.total)}</span>
-                </div>
-                <div className="mt-1 pl-3">
-                  {g.lines.map((l) => (
-                    <PaymentRow key={l.source_id} p={l} asOf={data.asOf} whenField="none" />
-                  ))}
-                </div>
-              </div>
+            {cleared.map((l) => (
+              <PaymentRow key={l.source_id} p={l} asOf={data.asOf} whenField="none" />
             ))}
-            {data.clearedByOwner.length > 4 && (
+            {clearedLines.length > 5 && (
               <button
                 onClick={() => setShowAllCleared((v) => !v)}
                 className="mt-2 w-full text-center text-xs font-medium text-brand-600 hover:underline"
               >
-                {showAllCleared ? "Show less" : `Show all ${data.clearedByOwner.length} owners →`}
+                {showAllCleared ? "Show less" : `Show all ${clearedLines.length} →`}
               </button>
             )}
           </>
