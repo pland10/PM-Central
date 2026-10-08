@@ -72,6 +72,7 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
       header: "Lease term",
       sortable: true,
       sortValue: (r) => r.endISO ?? "",
+      filter: { type: "date", value: (r) => r.endISO },
       render: (r) => (
         <span className="text-slate-600">
           {fmtMonth(r.startISO)} – {fmtMonth(r.endISO)}
