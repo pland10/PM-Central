@@ -35,6 +35,7 @@ function toRow(r: any): InspectionRow {
     created_at: iso(r.created_at),
     updated_at: iso(r.updated_at),
     deleted_at: iso(r.deleted_at),
+    summary_sent_at: iso(r.summary_sent_at),
   };
 }
 
