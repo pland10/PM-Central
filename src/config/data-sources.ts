@@ -48,6 +48,15 @@ export const DATA_SOURCES: DataSource[] = [
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "sync.yml", ref: "master" },
   },
   {
+    id: "work_orders",
+    label: "Work orders",
+    description: "Work orders and their stages from LeadSimple.",
+    cadence: "Hourly",
+    tier: "hourly",
+    jobs: ["work_orders"],
+    dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "sync.yml", ref: "master" },
+  },
+  {
     id: "payments",
     label: "Payments & settlements",
     description: "Rentvine rent payments and ACH settlement status.",
