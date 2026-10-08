@@ -89,6 +89,7 @@ export function InvoicingTable({
       header: "Date",
       sortable: true,
       sortValue: (r) => r.invoice_date ?? "",
+      filter: { type: "date", value: (r) => r.invoice_date ?? null },
       render: (r) => <span className="text-slate-600">{formatDate(r.invoice_date)}</span>,
     },
     {
@@ -143,6 +144,7 @@ export function InvoicingTable({
       header: "Due",
       sortable: true,
       sortValue: (r) => r.due_date ?? "",
+      filter: { type: "date", value: (r) => r.due_date ?? null },
       render: (r) => <span className="text-slate-600">{formatDate(r.due_date)}</span>,
     },
     {
@@ -151,6 +153,7 @@ export function InvoicingTable({
       align: "right",
       sortable: true,
       sortValue: (r) => invoiceTotals(r.items, r.tax_rate).total,
+      filter: { type: "number", value: (r) => invoiceTotals(r.items, r.tax_rate).total },
       render: (r) => (
         <span className="font-medium text-ink">{formatMoney(invoiceTotals(r.items, r.tax_rate).total)}</span>
       ),

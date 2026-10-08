@@ -62,6 +62,7 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.workOrders,
+      filter: { type: "number", value: (r) => r.workOrders },
       render: (r) => <span className="text-slate-600">{r.workOrders}</span>,
     },
     {

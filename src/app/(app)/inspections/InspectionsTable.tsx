@@ -35,6 +35,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       header: "Date",
       sortable: true,
       sortValue: (r) => r.inspection_date ?? "",
+      filter: { type: "date", value: (r) => r.inspection_date ?? null },
       render: (r) => (
         <Link href={`/inspections/${r.id}`} className="font-medium text-brand-600 hover:underline">
           {formatInspectionDate(r.inspection_date)}
@@ -86,6 +87,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       align: "right",
       sortable: true,
       sortValue: (r) => r.photo_count ?? 0,
+      filter: { type: "number", value: (r) => r.photo_count ?? 0 },
       render: (r) =>
         r.photo_count ? (
           <span className="text-slate-600">{r.photo_count}</span>
