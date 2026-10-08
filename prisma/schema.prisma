@@ -393,6 +393,7 @@ model InspectVisit {
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
   deleted_at           DateTime?
+  summary_sent_at      DateTime?
 
   @@map("pmi_inspect_inspections")
   @@index([property_id])

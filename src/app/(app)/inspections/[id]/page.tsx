@@ -8,6 +8,7 @@ import {
   parseSpecialInstructions,
 } from "@/lib/inspections/types";
 import { InspectionActions } from "../InspectionActions";
+import { CompleteAndSend } from "../CompleteAndSend";
 import { PhotoUploader } from "../PhotoUploader";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +58,11 @@ export default async function InspectionDetailPage({
             </span>
           )}
           <InspectionActions id={insp.id} />
+          <CompleteAndSend
+            id={insp.id}
+            photos={photos.map((p) => ({ id: p.id, url: p.url, original_name: p.original_name }))}
+            sentAt={insp.summary_sent_at}
+          />
         </div>
       </div>
 

@@ -15,6 +15,7 @@ export type InspectionRow = {
   created_at: string | null;
   updated_at: string | null;
   deleted_at: string | null;
+  summary_sent_at: string | null;
   // joined / derived for the list view
   property_name?: string;
   property_address?: string;
