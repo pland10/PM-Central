@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 export type StageCount = { stage: string; count: number };
 
 export type WorkOrderSummary = {
-  stages: StageCount[]; // open stages only (terminal ones filtered out), most common first
+  stages: StageCount[]; // open stages only, in pipeline order (latest stage first)
   total: number; // all work orders, including terminal
   openTotal: number; // sum of the open stages shown
 };
@@ -17,6 +17,25 @@ export type WorkOrderSummary = {
 // dashboard (completed / cancelled / deferred, etc.).
 function isTerminal(stage: string): boolean {
   return /complete|cancel|closed|lost|defer/i.test(stage);
+}
+
+// The Work Orders process stages in LeadSimple pipeline order, earliest →
+// latest (from GET /process_types/{id}/stages). The dashboard lists them in
+// REVERSE of this (latest stage first) so the ones that have progressed but
+// aren't closed — the follow-ups — sit at the top. Unknown stages sort last.
+const STAGE_ORDER = [
+  "New WO",
+  "Troubleshooting",
+  "Assigning in Progress",
+  "Scheduling in Progress",
+  "Work Scheduled & Confirm Completion",
+  "Work Completed - Awaiting Invoice",
+  "Invoice Received",
+];
+
+function pipelineRank(stage: string): number {
+  const i = STAGE_ORDER.indexOf(stage);
+  return i === -1 ? -1 : i; // unknown → -1, sorts last in a descending sort
 }
 
 export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> {
@@ -31,8 +50,11 @@ export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> 
       .filter((r) => r.stage)
       .map((r) => ({ stage: r.stage as string, count: Number(r.count) }));
     const total = all.reduce((s, r) => s + r.count, 0);
-    // Show only open/active stages on the dashboard.
-    const stages = all.filter((r) => !isTerminal(r.stage));
+    // Open/active stages only, ordered by pipeline sequence descending
+    // (latest stage first).
+    const stages = all
+      .filter((r) => !isTerminal(r.stage))
+      .sort((a, b) => pipelineRank(b.stage) - pipelineRank(a.stage));
     const openTotal = stages.reduce((s, r) => s + r.count, 0);
 
     return { stages, total, openTotal };
