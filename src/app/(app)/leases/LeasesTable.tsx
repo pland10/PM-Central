@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { DataTable, type Column } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 
 export type LeaseRow = {
@@ -40,12 +40,17 @@ function statusBadge(status: string) {
 }
 
 export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
+  const statusOptions = Array.from(new Set(rows.map((r) => r.status)))
+    .sort()
+    .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
+
   const columns: Column<LeaseRow>[] = [
     {
       key: "property",
       header: "Property",
       sortable: true,
       sortValue: (r) => r.propertyAddress.toLowerCase(),
+      filter: { type: "text", value: (r) => r.propertyAddress },
       render: (r) => (
         <Link href={`/properties/${r.propertyId}`} className="font-medium text-slate-900 hover:text-brand-600">
           {r.propertyAddress}
@@ -55,6 +60,7 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
     {
       key: "unit",
       header: "Unit",
+      filter: { type: "text", value: (r) => r.unit },
       render: (r) => <span className="text-slate-600">{r.unit}</span>,
     },
     {
@@ -62,6 +68,7 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       header: "Tenant",
       sortable: true,
       sortValue: (r) => r.tenant.toLowerCase(),
+      filter: { type: "text", value: (r) => r.tenant },
       render: (r) => <span className="text-slate-700">{r.tenant}</span>,
     },
     {
@@ -88,20 +95,8 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       header: "Status",
       sortable: true,
       sortValue: (r) => r.status,
+      filter: { type: "select", value: (r) => r.status, options: statusOptions },
       render: (r) => statusBadge(r.status),
-    },
-  ];
-
-  const statusOptions = Array.from(new Set(rows.map((r) => r.status)))
-    .sort()
-    .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
-
-  const facets: Facet<LeaseRow>[] = [
-    {
-      key: "status",
-      label: "Status",
-      options: statusOptions,
-      match: (r, v) => r.status === v,
     },
   ];
 
@@ -112,7 +107,6 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.propertyAddress} ${r.tenant}`}
       searchPlaceholder="Search property or tenant…"
-      facets={facets}
       initialSort={{ key: "term", dir: "desc" }}
     />
   );

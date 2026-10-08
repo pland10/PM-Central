@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { DataTable, type Column } from "@/components/DataTable";
 
 export type SwRow = {
   id: string;
@@ -14,12 +14,20 @@ export type SwRow = {
 };
 
 export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
+  const typeOptions = Array.from(new Set(rows.map((r) => r.type)))
+    .sort()
+    .map((t) => ({ value: t, label: t.replace("-", " ") }));
+  const sourceOptions = Array.from(new Set(rows.map((r) => r.source)))
+    .sort()
+    .map((s) => ({ value: s, label: s }));
+
   const columns: Column<SwRow>[] = [
     {
       key: "title",
       header: "Property",
       sortable: true,
       sortValue: (r) => r.title.toLowerCase(),
+      filter: { type: "text", value: (r) => `${r.title} ${r.address}` },
       render: (r) => (
         <>
           <Link
@@ -37,6 +45,7 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
       header: "Owner",
       sortable: true,
       sortValue: (r) => r.owner.toLowerCase(),
+      filter: { type: "text", value: (r) => r.owner },
       render: (r) => <span className="text-slate-600">{r.owner}</span>,
     },
     {
@@ -44,6 +53,7 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
       header: "Type",
       sortable: true,
       sortValue: (r) => r.type,
+      filter: { type: "select", value: (r) => r.type, options: typeOptions },
       render: (r) => <span className="capitalize text-slate-600">{r.type.replace("-", " ")}</span>,
     },
     {
@@ -57,20 +67,15 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
     {
       key: "source",
       header: "Source",
+      sortable: true,
+      sortValue: (r) => r.source,
+      filter: { type: "select", value: (r) => r.source, options: sourceOptions },
       render: (r) => (
         <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium capitalize text-emerald-700">
           {r.source}
         </span>
       ),
     },
-  ];
-
-  const typeOptions = Array.from(new Set(rows.map((r) => r.type)))
-    .sort()
-    .map((t) => ({ value: t, label: t.replace("-", " ") }));
-
-  const facets: Facet<SwRow>[] = [
-    { key: "type", label: "Type", options: typeOptions, match: (r, v) => r.type === v },
   ];
 
   return (
@@ -80,7 +85,6 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.title} ${r.address} ${r.owner}`}
       searchPlaceholder="Search address or owner…"
-      facets={facets}
       initialSort={{ key: "title", dir: "asc" }}
     />
   );

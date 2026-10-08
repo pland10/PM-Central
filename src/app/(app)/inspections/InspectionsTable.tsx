@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { DataTable, type Column } from "@/components/DataTable";
 import {
   type InspectionRow,
   statusTone,
@@ -46,6 +46,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       header: "Property",
       sortable: true,
       sortValue: (r) => (r.property_name || r.property_address || "").toLowerCase(),
+      filter: { type: "text", value: (r) => `${r.property_name ?? ""} ${r.property_address ?? ""}` },
       render: (r) => (
         <div>
           <div className="text-slate-800">{r.property_name || "—"}</div>
@@ -60,6 +61,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       header: "Reason",
       sortable: true,
       sortValue: (r) => (r.inspection_reason || "").toLowerCase(),
+      filter: { type: "select", value: (r) => r.inspection_reason || "" },
       render: (r) => <span className="text-slate-600">{r.inspection_reason || "—"}</span>,
     },
     {
@@ -67,6 +69,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       header: "Inspector",
       sortable: true,
       sortValue: (r) => (r.inspector_name || "").toLowerCase(),
+      filter: { type: "select", value: (r) => r.inspector_name || "" },
       render: (r) => <span className="text-slate-600">{r.inspector_name || "—"}</span>,
     },
     {
@@ -74,6 +77,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       header: "Status",
       sortable: true,
       sortValue: (r) => r.overall_status ?? "",
+      filter: { type: "select", value: (r) => r.overall_status ?? "" },
       render: (r) => <StatusBadge status={r.overall_status} />,
     },
     {
@@ -91,19 +95,6 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
     },
   ];
 
-  const statusValues = Array.from(
-    new Set(rows.map((r) => r.overall_status).filter(Boolean) as string[])
-  ).sort();
-
-  const facets: Facet<InspectionRow>[] = [
-    {
-      key: "status",
-      label: "Status",
-      options: statusValues.map((s) => ({ value: s, label: s })),
-      match: (r, v) => r.overall_status === v,
-    },
-  ];
-
   return (
     <DataTable
       rows={rows}
@@ -113,7 +104,6 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
         `${r.property_name ?? ""} ${r.property_address ?? ""} ${r.inspector_name ?? ""} ${r.inspection_reason ?? ""}`
       }
       searchPlaceholder="Search property, inspector, reason…"
-      facets={facets}
       initialSort={{ key: "date", dir: "desc" }}
     />
   );

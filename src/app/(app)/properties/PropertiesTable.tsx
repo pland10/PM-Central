@@ -35,12 +35,20 @@ function sourceBadge(source: string) {
 }
 
 export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
+  const typeOptions = Array.from(new Set(rows.map((r) => r.type)))
+    .sort()
+    .map((t) => ({ value: t, label: t.replace("-", " ") }));
+  const sourceOptions = Array.from(new Set(rows.map((r) => r.source)))
+    .sort()
+    .map((s) => ({ value: s, label: s }));
+
   const columns: Column<PropertyRow>[] = [
     {
       key: "title",
       header: "Property",
       sortable: true,
       sortValue: (r) => r.title.toLowerCase(),
+      filter: { type: "text", value: (r) => `${r.title} ${r.address}` },
       render: (r) => (
         <>
           <div className="flex items-center gap-2">
@@ -65,6 +73,7 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       header: "Owner",
       sortable: true,
       sortValue: (r) => r.owner.toLowerCase(),
+      filter: { type: "text", value: (r) => r.owner },
       render: (r) => <span className="text-slate-600">{r.owner}</span>,
     },
     {
@@ -114,21 +123,18 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       header: "Type",
       sortable: true,
       sortValue: (r) => r.type,
+      filter: { type: "select", value: (r) => r.type, options: typeOptions },
       render: (r) => <span className="capitalize text-slate-600">{r.type.replace("-", " ")}</span>,
     },
     {
       key: "source",
       header: "Source",
+      sortable: true,
+      sortValue: (r) => r.source,
+      filter: { type: "select", value: (r) => r.source, options: sourceOptions },
       render: (r) => sourceBadge(r.source),
     },
   ];
-
-  const typeOptions = Array.from(new Set(rows.map((r) => r.type)))
-    .sort()
-    .map((t) => ({ value: t, label: t.replace("-", " ") }));
-  const sourceOptions = Array.from(new Set(rows.map((r) => r.source)))
-    .sort()
-    .map((s) => ({ value: s, label: s }));
 
   const facets: Facet<PropertyRow>[] = [
     {
@@ -150,18 +156,6 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       ],
       match: (r, v) =>
         v === "full" ? r.occupancy === 100 : v === "vacant" ? r.occupancy === 0 : r.occupancy > 0 && r.occupancy < 100,
-    },
-    {
-      key: "type",
-      label: "Type",
-      options: typeOptions,
-      match: (r, v) => r.type === v,
-    },
-    {
-      key: "source",
-      label: "Source",
-      options: sourceOptions,
-      match: (r, v) => r.source === v,
     },
   ];
 
