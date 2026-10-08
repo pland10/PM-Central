@@ -38,6 +38,13 @@ Claude **always opens the pull requests**:
 Never leave a promotion for the user to open manually, and never push straight
 to `dev` or `main`.
 
+**Railway env/settings don't apply until a redeploy.** Changing a variable (or
+any service setting) in Railway only takes effect after that service redeploys
+or restarts — a runtime env var like `RESEND_API_KEY` stays invisible to the
+app until then. Whenever the user says they changed a Railway variable or
+setting, remind them to redeploy that service (and set it on the right
+service — dev and prod are separate).
+
 ## Commands
 - `npm run db:push` after editing the schema
 - `npm run db:seed` to reload sample data
