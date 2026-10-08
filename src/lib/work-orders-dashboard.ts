@@ -8,14 +8,15 @@ import { prisma } from "@/lib/prisma";
 export type StageCount = { stage: string; count: number };
 
 export type WorkOrderSummary = {
-  stages: StageCount[]; // every stage, most common first
-  total: number;
-  openTotal: number; // excludes terminal (completed / cancelled) stages
+  stages: StageCount[]; // open stages only (terminal ones filtered out), most common first
+  total: number; // all work orders, including terminal
+  openTotal: number; // sum of the open stages shown
 };
 
-// Stages that mean the work order is done — excluded from the "open" headline.
+// Stages that mean the work order is off the active board — not shown on the
+// dashboard (completed / cancelled / deferred, etc.).
 function isTerminal(stage: string): boolean {
-  return /complete|cancel|closed|lost/i.test(stage);
+  return /complete|cancel|closed|lost|defer/i.test(stage);
 }
 
 export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> {
@@ -26,13 +27,13 @@ export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> 
       GROUP BY stage
       ORDER BY count(*) DESC`);
 
-    const stages = rows
+    const all = rows
       .filter((r) => r.stage)
       .map((r) => ({ stage: r.stage as string, count: Number(r.count) }));
-    const total = stages.reduce((s, r) => s + r.count, 0);
-    const openTotal = stages
-      .filter((r) => !isTerminal(r.stage))
-      .reduce((s, r) => s + r.count, 0);
+    const total = all.reduce((s, r) => s + r.count, 0);
+    // Show only open/active stages on the dashboard.
+    const stages = all.filter((r) => !isTerminal(r.stage));
+    const openTotal = stages.reduce((s, r) => s + r.count, 0);
 
     return { stages, total, openTotal };
   } catch {
