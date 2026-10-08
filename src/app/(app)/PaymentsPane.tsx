@@ -120,18 +120,9 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
                   <span className="truncate font-medium text-slate-800">{g.owner}</span>
                   <span className="shrink-0 font-semibold text-emerald-700">{formatCurrency(g.total)}</span>
                 </div>
-                <div className="mt-1 space-y-0.5 pl-3">
+                <div className="mt-1 pl-3">
                   {g.lines.map((l) => (
-                    <div key={l.source_id} className="flex items-baseline justify-between gap-3 text-xs text-slate-500">
-                      <span className="min-w-0 truncate">
-                        {l.tenant || "Unknown tenant"}
-                        <span className="text-slate-400"> · {l.property_address || "—"}</span>
-                      </span>
-                      <span className="shrink-0 text-slate-600">
-                        {formatCurrency(l.amount)}
-                        <span className="text-slate-400"> · {fmtShort(l.clear_date)}</span>
-                      </span>
-                    </div>
+                    <PaymentRow key={l.source_id} p={l} asOf={data.asOf} whenField="none" />
                   ))}
                 </div>
               </div>
@@ -201,7 +192,15 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
   );
 }
 
-function PaymentRow({ p, asOf, whenField }: { p: PaymentLine; asOf: string; whenField: "age" | "posted" }) {
+function PaymentRow({
+  p,
+  asOf,
+  whenField,
+}: {
+  p: PaymentLine;
+  asOf: string;
+  whenField: "age" | "posted" | "none";
+}) {
   const days = ageDays(p.date_posted, asOf);
   const tone = days != null && days > STALE_DAYS ? "text-amber-600" : "text-slate-400";
   return (
