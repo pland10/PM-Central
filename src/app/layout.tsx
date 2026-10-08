@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BRAND, brandCssVars } from "@/config/brand";
+import { APP_ENV, IS_PRODUCTION } from "@/config/environment";
+
+// Non-prod deployments get an env suffix in the browser-tab title so prod and
+// dev tabs are easy to tell apart. Prod stays plain "PMI Lighthouse".
+const ENV_TITLE_SUFFIX = IS_PRODUCTION ? "" : APP_ENV === "staging" ? " - Staging" : " - Dev";
+const BASE_TITLE = `${BRAND.name}${ENV_TITLE_SUFFIX}`;
 
 export const metadata: Metadata = {
-  title: BRAND.name,
+  // default: pages without their own title. template: "%s · PMI Lighthouse - Dev".
+  title: { default: BASE_TITLE, template: `%s · ${BASE_TITLE}` },
   description: `${BRAND.name} — ${BRAND.tagline}`,
 };
 
