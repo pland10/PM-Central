@@ -33,7 +33,7 @@ export type Facet<T> = {
 };
 
 type SortKey = { key: string; dir: "asc" | "desc" };
-type FilterVal = { q?: string; sel?: string; from?: string; to?: string; min?: string; max?: string };
+type FilterVal = { q?: string; sels?: string[]; from?: string; to?: string; min?: string; max?: string };
 type OpenFilter = { key: string; x: number; y: number };
 
 function filterActive(type: ColumnFilter<unknown>["type"], v?: FilterVal): boolean {
@@ -42,7 +42,7 @@ function filterActive(type: ColumnFilter<unknown>["type"], v?: FilterVal): boole
     case "text":
       return !!v.q && v.q.trim() !== "";
     case "select":
-      return !!v.sel;
+      return !!v.sels && v.sels.length > 0;
     case "date":
       return !!(v.from || v.to);
     case "number":
@@ -157,7 +157,8 @@ export function DataTable<T>({
         const needle = v.q!.toLowerCase();
         r = r.filter((row) => String(get(row) ?? "").toLowerCase().includes(needle));
       } else if (c.filter.type === "select") {
-        r = r.filter((row) => String(get(row) ?? "") === v.sel);
+        const sels = v.sels!;
+        r = r.filter((row) => sels.includes(String(get(row) ?? "")));
       } else if (c.filter.type === "date") {
         r = r.filter((row) => {
           const raw = get(row);
@@ -229,10 +230,11 @@ export function DataTable<T>({
     });
   }
 
-  const filtersActive =
-    q.trim() !== "" ||
-    Object.values(facetValues).some(Boolean) ||
-    columns.some((c) => c.filter && filterActive(c.filter.type, colFilters[c.key]));
+  const activeCount =
+    (q.trim() !== "" ? 1 : 0) +
+    Object.values(facetValues).filter(Boolean).length +
+    columns.filter((c) => c.filter && filterActive(c.filter.type, colFilters[c.key])).length;
+  const filtersActive = activeCount > 0;
 
   function clearAll() {
     setQ("");
@@ -270,12 +272,17 @@ export function DataTable<T>({
           </select>
         ))}
         {filtersActive && (
-          <button
-            onClick={clearAll}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-500 hover:text-slate-700"
-          >
-            Clear
-          </button>
+          <>
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-500/20">
+              {activeCount} filter{activeCount === 1 ? "" : "s"} active
+            </span>
+            <button
+              onClick={clearAll}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-500 hover:text-slate-700"
+            >
+              Clear
+            </button>
+          </>
         )}
         <span className="ml-auto text-xs text-slate-500">
           {filtered.length} of {rows.length}
@@ -388,7 +395,14 @@ export function DataTable<T>({
               const shown = showSearch
                 ? opts.filter((o) => o.label.toLowerCase().includes(optSearch.toLowerCase()))
                 : opts;
-              const sel = colFilters[open.key]?.sel;
+              const sels = colFilters[open.key]?.sels ?? [];
+              function toggle(value: string) {
+                const next = sels.includes(value)
+                  ? sels.filter((s) => s !== value)
+                  : [...sels, value];
+                if (next.length) setFilter(open!.key, { sels: next });
+                else clearFilter(open!.key);
+              }
               return (
                 <div>
                   {showSearch && (
@@ -401,27 +415,23 @@ export function DataTable<T>({
                     />
                   )}
                   <div className="max-h-56 overflow-auto">
-                    <button
-                      onClick={() => {
-                        clearFilter(open.key);
-                        setOpen(null);
-                      }}
-                      className={`block w-full rounded px-2 py-1 text-left hover:bg-slate-100 ${!sel ? "font-medium text-brand-700" : "text-slate-600"}`}
-                    >
-                      All
-                    </button>
-                    {shown.map((o) => (
-                      <button
-                        key={o.value}
-                        onClick={() => {
-                          setFilter(open.key, { sel: o.value });
-                          setOpen(null);
-                        }}
-                        className={`block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 ${sel === o.value ? "font-medium text-brand-700" : "text-slate-700"}`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
+                    {shown.map((o) => {
+                      const on = sels.includes(o.value);
+                      return (
+                        <button
+                          key={o.value}
+                          onClick={() => toggle(o.value)}
+                          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-slate-100 ${on ? "text-brand-700" : "text-slate-700"}`}
+                        >
+                          <span
+                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] ${on ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300"}`}
+                          >
+                            {on ? "✓" : ""}
+                          </span>
+                          <span className="truncate">{o.label}</span>
+                        </button>
+                      );
+                    })}
                     {shown.length === 0 && (
                       <div className="px-2 py-1 text-xs text-slate-400">No matches.</div>
                     )}

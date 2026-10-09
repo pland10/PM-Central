@@ -38,11 +38,14 @@ every merge, including the final `dev` → `main` to production. Never merge
 without asking first, never leave a promotion for the user to open manually,
 and never push straight to `dev` or `main`.
 
-**Railway env/settings don't apply until a redeploy.** Changing a variable (or
-any service setting) in Railway only takes effect after that service redeploys
-or restarts — a runtime env var like `RESEND_API_KEY` stays invisible to the
-app until then. Whenever the user says they changed a Railway variable or
-setting, remind them to redeploy that service (and set it on the right
+**Railway auto-deploys code; env/settings changes need a manual redeploy.**
+Railway watches each service's branch (`main` → prod, `dev` → dev) and
+redeploys automatically on every push there, so **code merges deploy
+themselves** — no reminder needed. But changing a **variable or any service
+setting** in Railway pushes no code, so nothing triggers a deploy: a runtime
+env var like `RESEND_API_KEY` stays invisible to the app until that service
+redeploys or restarts. Whenever the user says they changed a Railway variable
+or setting, remind them to redeploy that service (and to set it on the right
 service — dev and prod are separate).
 
 ## Commands
