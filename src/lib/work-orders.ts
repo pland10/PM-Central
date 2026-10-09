@@ -47,4 +47,13 @@ export type WorkOrderRow = {
   vendor: string;
   assignee: string;
   link: string; // LeadSimple deep link
+  // Enrichment from Rentvine, merged on the work-order number (null when the WO
+  // isn't in Rentvine or its property isn't a record we hold).
+  priority: string; // Low | Medium | High | ""
+  propertyId: string | null; // our Property.id, for a clickable link
 };
+
+// Sort rank for priority (High first); unknown/none sorts last.
+export function priorityRank(p: string): number {
+  return p === "High" ? 3 : p === "Medium" ? 2 : p === "Low" ? 1 : 0;
+}

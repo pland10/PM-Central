@@ -53,20 +53,57 @@ type RawRow = {
   link: string | null;
 };
 
-// Full work-order list for the /work-orders page. Returns null if the table
-// isn't there yet (so the page can degrade gracefully instead of erroring).
+// Rentvine enrichment keyed by work-order number: priority + a link to our
+// Property record. Best-effort — the rv_work_orders table may not exist yet
+// (before the first Rentvine WO sync), so this never fails the main listing.
+async function rentvineEnrichment(): Promise<
+  Map<string, { priority: string; propertyId: string | null }>
+> {
+  const out = new Map<string, { priority: string; propertyId: string | null }>();
+  try {
+    const [rvRows, props] = await Promise.all([
+      prisma.$queryRaw<{ wo_number: string; property_external_id: string | null; priority: string | null }[]>(
+        Prisma.sql`SELECT wo_number, property_external_id, priority FROM rv_work_orders`
+      ),
+      prisma.property.findMany({
+        where: { source: "rentvine" },
+        select: { id: true, externalId: true },
+      }),
+    ]);
+    const propByExt = new Map(props.map((p) => [p.externalId ?? "", p.id]));
+    for (const r of rvRows) {
+      out.set(r.wo_number, {
+        priority: r.priority ?? "",
+        propertyId: r.property_external_id ? propByExt.get(r.property_external_id) ?? null : null,
+      });
+    }
+  } catch {
+    // No rv_work_orders table yet (or query failed) — return what we have.
+  }
+  return out;
+}
+
+// Full work-order list for the /work-orders page, LeadSimple rows (which carry
+// the stage) enriched with Rentvine priority + property link by WO number.
+// Returns null if the LeadSimple table isn't there yet (so the page can degrade
+// gracefully instead of erroring).
 export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
   try {
-    const rows = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
-      SELECT source_id, wo_number, title, name, stage,
-             property_address, vendor_name, assignee_name, link
-      FROM work_orders`);
+    const [rows, rv] = await Promise.all([
+      prisma.$queryRaw<RawRow[]>(Prisma.sql`
+        SELECT source_id, wo_number, title, name, stage,
+               property_address, vendor_name, assignee_name, link
+        FROM work_orders`),
+      rentvineEnrichment(),
+    ]);
 
     return rows.map((r) => {
       const stage = r.stage ?? "—";
+      const number = r.wo_number ?? "—";
+      const enrich = rv.get(number);
       return {
         id: r.source_id,
-        number: r.wo_number ?? "—",
+        number,
         issue: r.title || r.name || "Work order",
         stage,
         terminal: isTerminal(stage),
@@ -74,6 +111,8 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         vendor: r.vendor_name ?? "",
         assignee: r.assignee_name ?? "",
         link: r.link ?? "",
+        priority: enrich?.priority ?? "",
+        propertyId: enrich?.propertyId ?? null,
       };
     });
   } catch {

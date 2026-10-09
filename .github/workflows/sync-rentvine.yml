@@ -2,9 +2,11 @@ name: Sync Rentvine core data
 
 # Pulls properties, units, owners, active leases and tenants from the Rentvine
 # API and reconciles them into the DB, so the app's core records stay current
-# without running anything on a PC. Non-destructive: it never touches work
-# orders or group tags (those sync separately). Runs every morning, and on
-# demand from the admin Data page / Actions tab (Run workflow).
+# without running anything on a PC. The core sync is non-destructive: it never
+# touches work orders or group tags. Work orders sync in a separate step into
+# the rv_work_orders table (property + priority, merged with LeadSimple stages
+# on the Work Orders page). Runs every morning, and on demand from the admin
+# Data page / Actions tab (Run workflow).
 #
 # Secrets required (repo -> Settings -> Secrets and variables -> Actions):
 #   DATABASE_URL          - prod Neon connection string (the DB the site reads)
@@ -37,3 +39,6 @@ jobs:
           node-version: '22'
       - run: npm install          # runs postinstall -> prisma generate
       - run: npm run sync:rentvine
+      # Work orders sync separately into rv_work_orders (property + priority),
+      # merged with LeadSimple stages on the Work Orders page.
+      - run: npm run sync:rentvine:wos
