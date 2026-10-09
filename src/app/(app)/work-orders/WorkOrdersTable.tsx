@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
-import { STAGE_ORDER, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
+import { STAGE_ORDER, pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
 
 export type { WorkOrderRow };
 
@@ -12,6 +13,24 @@ function stageBadge(stage: string, terminal: boolean) {
   return (
     <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
       {stage}
+    </span>
+  );
+}
+
+function priorityBadge(priority: string) {
+  if (!priority) return <span className="text-slate-300">—</span>;
+  const styles: Record<string, string> = {
+    Low: "bg-slate-100 text-slate-600",
+    Medium: "bg-amber-100 text-amber-700",
+    High: "bg-red-100 text-red-700",
+  };
+  return (
+    <span
+      className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium ${
+        styles[priority] ?? "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {priority}
     </span>
   );
 }
@@ -68,7 +87,30 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       sortable: true,
       sortValue: (r) => r.property.toLowerCase(),
       filter: { type: "text", value: (r) => r.property },
-      render: (r) => <span className="text-slate-600">{r.property}</span>,
+      render: (r) =>
+        r.propertyId ? (
+          <Link href={`/properties/${r.propertyId}`} className="text-slate-600 hover:text-brand-600">
+            {r.property}
+          </Link>
+        ) : (
+          <span className="text-slate-600">{r.property}</span>
+        ),
+    },
+    {
+      key: "priority",
+      header: "Priority",
+      sortable: true,
+      sortValue: (r) => priorityRank(r.priority),
+      filter: {
+        type: "select",
+        value: (r) => r.priority,
+        options: [
+          { value: "High", label: "High" },
+          { value: "Medium", label: "Medium" },
+          { value: "Low", label: "Low" },
+        ],
+      },
+      render: (r) => priorityBadge(r.priority),
     },
     {
       key: "vendor",
