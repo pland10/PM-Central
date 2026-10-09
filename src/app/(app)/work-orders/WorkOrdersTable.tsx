@@ -17,6 +17,16 @@ function stageBadge(stage: string, terminal: boolean) {
   );
 }
 
+function shortWhen(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function priorityBadge(priority: string) {
   if (!priority) return <span className="text-slate-300">—</span>;
   const styles: Record<string, string> = {
@@ -138,6 +148,25 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
           <span className="text-slate-300">—</span>
         ),
     },
+    {
+      key: "lastUpdate",
+      header: "Latest update",
+      sortable: true,
+      // Most recent update first; WOs with no update sort last (empty string).
+      sortValue: (r) => r.lastUpdateAt ?? "",
+      filter: { type: "text", value: (r) => r.lastUpdate },
+      render: (r) =>
+        r.lastUpdate ? (
+          <div className="max-w-[260px]">
+            <div className="truncate text-slate-700" title={r.lastUpdate}>
+              {r.lastUpdate}
+            </div>
+            <div className="text-xs text-slate-400">{shortWhen(r.lastUpdateAt)}</div>
+          </div>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
+    },
   ];
 
   // Active/closed is a cross-cutting view toggle (terminal is derived, not a
@@ -159,7 +188,7 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       rows={rows}
       columns={columns}
       rowKey={(r) => r.id}
-      search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee}`}
+      search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.lastUpdate}`}
       searchPlaceholder="Search all fields…"
       facets={facets}
       initialSort={{ key: "stage", dir: "desc" }}

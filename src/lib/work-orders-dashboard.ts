@@ -83,24 +83,61 @@ async function rentvineEnrichment(): Promise<
   return out;
 }
 
+// Latest update per work order, from the Rentvine work-order chat/updates thread
+// that rentvine_chat_sync.py syncs into `activities` (type 'chat', subject
+// "Work order chat — Work Order #<number>"). Keyed by WO number. Best-effort:
+// the activities table or these rows may be absent, so this never throws.
+async function latestWoUpdates(): Promise<Map<string, { text: string; at: string | null }>> {
+  const out = new Map<string, { text: string; at: string | null }>();
+  try {
+    // Newest first; the first row seen per WO number is its latest update.
+    const rows = await prisma.$queryRaw<{ deal_name: string | null; content: string | null; created_at: Date | null }[]>(
+      Prisma.sql`
+        SELECT deal_name, content, created_at
+        FROM activities
+        WHERE type = 'chat' AND subject LIKE 'Work order chat%'
+        ORDER BY created_at DESC NULLS LAST`
+    );
+    for (const r of rows) {
+      const m = /#(\d+)/.exec(r.deal_name ?? "");
+      if (!m) continue;
+      const number = m[1];
+      if (out.has(number)) continue; // already have the newest for this WO
+      // content is "<body>\n\nFrom: <author>" — keep the body for display.
+      const raw = r.content ?? "";
+      const cut = raw.lastIndexOf("\n\nFrom:");
+      const text = (cut >= 0 ? raw.slice(0, cut) : raw).trim();
+      out.set(number, {
+        text,
+        at: r.created_at ? new Date(r.created_at).toISOString() : null,
+      });
+    }
+  } catch {
+    // No activities table / no such rows — return what we have.
+  }
+  return out;
+}
+
 // Full work-order list for the /work-orders page, LeadSimple rows (which carry
-// the stage) enriched with Rentvine priority + property link by WO number.
-// Returns null if the LeadSimple table isn't there yet (so the page can degrade
-// gracefully instead of erroring).
+// the stage) enriched with Rentvine priority + property link + the latest update
+// note, all merged by WO number. Returns null if the LeadSimple table isn't
+// there yet (so the page can degrade gracefully instead of erroring).
 export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
   try {
-    const [rows, rv] = await Promise.all([
+    const [rows, rv, updates] = await Promise.all([
       prisma.$queryRaw<RawRow[]>(Prisma.sql`
         SELECT source_id, wo_number, title, name, stage,
                property_address, vendor_name, assignee_name, link
         FROM work_orders`),
       rentvineEnrichment(),
+      latestWoUpdates(),
     ]);
 
     return rows.map((r) => {
       const stage = r.stage ?? "—";
       const number = r.wo_number ?? "—";
       const enrich = rv.get(number);
+      const update = updates.get(number);
       return {
         id: r.source_id,
         number,
@@ -113,6 +150,8 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         link: r.link ?? "",
         priority: enrich?.priority ?? "",
         propertyId: enrich?.propertyId ?? null,
+        lastUpdate: update?.text ?? "",
+        lastUpdateAt: update?.at ?? null,
       };
     });
   } catch {
