@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ENV_INDICATOR, IDLE_LOGOUT_MINUTES } from "@/config/environment";
 import { IdleLogout } from "@/components/IdleLogout";
+import { MobileNav, type MobileNavSection } from "./MobileNav";
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
@@ -178,6 +179,22 @@ function NavLink({ item }: { item: (typeof nav)[number] }) {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
 
+  // Same visible nav the desktop sidebar renders, flattened for the mobile drawer.
+  const mobileSections = navLayout
+    .map((entry): MobileNavSection | null => {
+      if ("item" in entry) {
+        const it = navByFeature[entry.item];
+        if (!it || !isFeatureEnabled(it.feature)) return null;
+        return { heading: null, items: [{ href: it.href, label: it.label, icon: it.icon }] };
+      }
+      const items = entry.items
+        .map((f) => navByFeature[f])
+        .filter((it) => it && isFeatureEnabled(it.feature))
+        .map((it) => ({ href: it.href, label: it.label, icon: it.icon }));
+      return items.length ? { heading: entry.heading, items } : null;
+    })
+    .filter((s): s is MobileNavSection => s !== null);
+
   return (
     <div className="flex h-screen overflow-hidden">
       {user && IDLE_LOGOUT_MINUTES > 0 && <IdleLogout minutes={IDLE_LOGOUT_MINUTES} />}
@@ -266,6 +283,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           }
         >
           <div className="flex items-center gap-3">
+            <MobileNav sections={mobileSections} isAdmin={user?.role === "admin"} light={!!ENV_INDICATOR} />
             {ENV_INDICATOR && (
               <span
                 className="rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider"
