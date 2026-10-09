@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 //   - Cleared (now payable): status=cleared, clear_date within the last 1 day
 //     as of the view date — grouped by owner so it's clear who can be paid.
 //   - Pending (in flight):   status=pending, posted on/before the view date.
-//   - Returns / NSF (14d):   status=returned, posted within the last 14 days.
+//   - Returns / NSF (5d):    status=returned, posted within the last 5 days.
 // A pending payment older than STALE_DAYS is almost certainly stuck, not in
 // flight, so it's flagged.
 
@@ -41,12 +41,12 @@ export type PaymentAsOf = {
   pending: PaymentLine[]; // in-flight as of asOf, oldest first
   returnedCount: number;
   returnedTotal: number;
-  returned: PaymentLine[]; // returned / NSF within 14 days, newest first
+  returned: PaymentLine[]; // returned / NSF within 5 days, newest first
 };
 
 const STALE_DAYS = 10;
 const CLEARED_WINDOW_DAYS = 1; // "now payable" = cleared today or yesterday
-const RETURNS_WINDOW_DAYS = 14;
+const RETURNS_WINDOW_DAYS = 5;
 export const PAYMENTS_WINDOWS = { STALE_DAYS, CLEARED_WINDOW_DAYS, RETURNS_WINDOW_DAYS };
 
 export function todayStr(): string {
