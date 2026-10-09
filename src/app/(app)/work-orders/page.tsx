@@ -3,7 +3,12 @@ import { WorkOrdersTable } from "./WorkOrdersTable";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkOrdersPage() {
+export default async function WorkOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ stage?: string }>;
+}) {
+  const { stage } = await searchParams;
   const rows = await listWorkOrders();
 
   if (!rows) {
@@ -31,7 +36,7 @@ export default async function WorkOrdersPage() {
         </p>
       </div>
 
-      <WorkOrdersTable rows={rows} />
+      <WorkOrdersTable rows={rows} stage={stage} />
     </div>
   );
 }

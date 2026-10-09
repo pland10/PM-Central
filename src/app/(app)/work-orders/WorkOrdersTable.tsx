@@ -45,7 +45,7 @@ function priorityBadge(priority: string) {
   );
 }
 
-export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
+export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?: string }) {
   // Stage dropdown in pipeline order (latest first), listing only stages present.
   const present = new Set(rows.map((r) => r.stage));
   const ordered = [...STAGE_ORDER].reverse().filter((s) => present.has(s));
@@ -183,6 +183,10 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
     },
   ];
 
+  // Drilling in from a dashboard stage: land pre-filtered to that stage, and
+  // let the stage filter be authoritative (show all statuses, not just active).
+  const drill = stage && present.has(stage);
+
   return (
     <DataTable
       rows={rows}
@@ -192,7 +196,8 @@ export function WorkOrdersTable({ rows }: { rows: WorkOrderRow[] }) {
       searchPlaceholder="Search all fields…"
       facets={facets}
       initialSort={{ key: "stage", dir: "desc" }}
-      initialFacets={{ status: "active" }}
+      initialFacets={drill ? {} : { status: "active" }}
+      initialColumnFilters={drill ? { stage: { sels: [stage] } } : undefined}
     />
   );
 }

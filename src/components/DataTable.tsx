@@ -75,6 +75,7 @@ export function DataTable<T>({
   facets,
   initialSort,
   initialFacets,
+  initialColumnFilters,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -84,10 +85,13 @@ export function DataTable<T>({
   facets?: Facet<T>[];
   initialSort?: { key: string; dir: "asc" | "desc" };
   initialFacets?: Record<string, string>;
+  // Pre-set per-column filters (e.g. a drill-in link that lands with one column
+  // already filtered). Keyed by column key; same shape the popover produces.
+  initialColumnFilters?: Record<string, FilterVal>;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
-  const [colFilters, setColFilters] = useState<Record<string, FilterVal>>({});
+  const [colFilters, setColFilters] = useState<Record<string, FilterVal>>(initialColumnFilters ?? {});
   const [sort, setSort] = useState<SortKey[]>(initialSort ? [initialSort] : []);
   const [open, setOpen] = useState<OpenFilter | null>(null);
   const [optSearch, setOptSearch] = useState("");
