@@ -208,13 +208,14 @@ export default async function DashboardPage() {
             <Empty>No work orders yet.</Empty>
           ) : (
             woSummary.stages.map((s) => (
-              <div
+              <Link
                 key={s.stage}
-                className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0"
+                href={`/work-orders?stage=${encodeURIComponent(s.stage)}`}
+                className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0 hover:text-brand-600"
               >
                 <span className="min-w-0 truncate text-slate-800">{s.stage}</span>
                 <span className="shrink-0 font-medium text-slate-700">{s.count}</span>
-              </div>
+              </Link>
             ))
           )}
         </Panel>
