@@ -54,7 +54,9 @@ function toStr(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
+// Low-level Rentvine Manager REST helpers (auth + pagination + row unwrap),
+// shared by the core extractor and the work-order fetcher.
+function rvHttp(config: RentvineAccountConfig) {
   const base = `https://${config.subdomain}.rentvine.com/api/manager`;
   const auth = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString("base64");
 
@@ -92,6 +94,53 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
     const inner = row[key];
     return inner && typeof inner === "object" ? (inner as Record<string, unknown>) : row;
   }
+
+  return { rvGet, rvGetAll, unwrap };
+}
+
+// Rentvine priorityID -> display name (confirmed against the work-order API:
+// 1=Low, 2=Medium, 3=High).
+const PRIORITY_NAMES: Record<string, string> = { "1": "Low", "2": "Medium", "3": "High" };
+
+// A live Rentvine work order, reduced to the fields that enrich the LeadSimple
+// work-order list. Keyed by `number` (= Rentvine workOrderNumber = the WO # that
+// LeadSimple parses into work_orders.wo_number), which is the cross-source join.
+export interface RvWorkOrderLive {
+  number: string;
+  propertyExternalId: string; // String(propertyID); matches Property.externalId
+  priority: string; // Low | Medium | High | ""
+}
+
+// Fetch all work orders for an account from the Rentvine Manager API. Separate
+// from the core extractor: work orders are their own sync (the core sync never
+// touches them), and they feed a raw `rv_work_orders` table rather than Prisma.
+export async function fetchRentvineWorkOrders(
+  config: RentvineAccountConfig
+): Promise<RvWorkOrderLive[]> {
+  if (!config.apiKey || !config.apiSecret) {
+    throw new Error(
+      `Rentvine credentials missing for account "${config.account}". ` +
+        `Set RENTVINE_${config.account.toUpperCase()}_API_KEY / _API_SECRET.`
+    );
+  }
+  const { rvGetAll, unwrap } = rvHttp(config);
+  const rows = await rvGetAll("/maintenance/work-orders");
+  const out: RvWorkOrderLive[] = [];
+  for (const row of rows) {
+    const w = unwrap(row, "workOrder");
+    const number = toStr(w.workOrderNumber);
+    if (!number) continue;
+    out.push({
+      number,
+      propertyExternalId: toStr(w.propertyID),
+      priority: PRIORITY_NAMES[toStr(w.priorityID)] ?? "",
+    });
+  }
+  return out;
+}
+
+export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
+  const { rvGet, rvGetAll, unwrap } = rvHttp(config);
 
   async function loadPropertyTypeNames(): Promise<Record<string, string>> {
     for (const path of ["/property-types", "/propertyTypes"]) {
