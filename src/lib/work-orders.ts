@@ -51,6 +51,10 @@ export type WorkOrderRow = {
   // isn't in Rentvine or its property isn't a record we hold).
   priority: string; // Low | Medium | High | ""
   propertyId: string | null; // our Property.id, for a clickable link
+  // Latest update from the Rentvine work-order chat/updates thread (from the
+  // synced `activities` feed), or "" / null when the WO has no updates.
+  lastUpdate: string;
+  lastUpdateAt: string | null; // ISO
 };
 
 // Sort rank for priority (High first); unknown/none sorts last.
