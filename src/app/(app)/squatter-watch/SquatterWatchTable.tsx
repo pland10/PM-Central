@@ -86,6 +86,7 @@ export function SquatterWatchTable({ rows }: { rows: SwRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.title} ${r.address} ${r.owner}`}
       searchPlaceholder="Search address or owner…"
+      exportName="Squatter Watch"
       initialSort={{ key: "title", dir: "asc" }}
     />
   );

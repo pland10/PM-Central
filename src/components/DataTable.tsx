@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { downloadXlsx, todayStamp, type ExportCell } from "@/lib/export-excel";
 
 // Per-column filter config. Opt-in: a column only gets a filter control if it
 // declares one. The control lives in a popover behind a funnel icon in the
@@ -23,6 +24,12 @@ export type Column<T> = {
   sortValue?: (row: T) => string | number;
   render: (row: T) => ReactNode;
   filter?: ColumnFilter<T>;
+  // Plain cell value for the Excel export. Falls back to the filter value, then
+  // the sort value, so most columns need nothing here; set it when neither is
+  // the human-readable value (e.g. a column that sorts by a numeric rank).
+  exportValue?: (row: T) => string | number | null;
+  // Set false to leave a column out of the export (e.g. a pure action column).
+  exportable?: boolean;
 };
 
 export type Facet<T> = {
@@ -76,6 +83,7 @@ export function DataTable<T>({
   initialSort,
   initialFacets,
   initialColumnFilters,
+  exportName,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -88,6 +96,9 @@ export function DataTable<T>({
   // Pre-set per-column filters (e.g. a drill-in link that lands with one column
   // already filtered). Keyed by column key; same shape the popover produces.
   initialColumnFilters?: Record<string, FilterVal>;
+  // When set, an Export button appears that downloads the current (filtered +
+  // sorted) view as an .xlsx named after this. Omit to hide the button.
+  exportName?: string;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
@@ -222,6 +233,30 @@ export function DataTable<T>({
     setOpen({ key, x: Math.max(8, x), y: rect.bottom + 4 });
   }
 
+  // Export the current (filtered + sorted) view to .xlsx. Each column's cell
+  // value falls back filter.value → sortValue when exportValue isn't given.
+  const [exporting, setExporting] = useState(false);
+  async function handleExport() {
+    if (!exportName) return;
+    const cols = columns.filter((c) => c.exportable !== false);
+    const headers = cols.map((c) => c.header);
+    const cellOf = (c: Column<T>, row: T): ExportCell => {
+      if (c.exportValue) return c.exportValue(row);
+      if (c.filter) return c.filter.value(row);
+      if (c.sortValue) return c.sortValue(row);
+      return "";
+    };
+    const body = filtered.map((row) => cols.map((c) => cellOf(c, row)));
+    setExporting(true);
+    try {
+      await downloadXlsx(`${exportName} ${todayStamp()}`, [
+        { name: exportName, headers, rows: body },
+      ]);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function setFilter(key: string, patch: FilterVal) {
     setColFilters((v) => ({ ...v, [key]: { ...v[key], ...patch } }));
   }
@@ -291,6 +326,21 @@ export function DataTable<T>({
         <span className="ml-auto text-xs text-slate-500">
           {filtered.length} of {rows.length}
         </span>
+        {exportName && (
+          <button
+            onClick={handleExport}
+            disabled={exporting || filtered.length === 0}
+            title="Export the current view to Excel"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+            {exporting ? "Exporting…" : "Export"}
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

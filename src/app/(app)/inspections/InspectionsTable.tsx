@@ -106,6 +106,7 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
         `${r.property_name ?? ""} ${r.property_address ?? ""} ${r.inspector_name ?? ""} ${r.inspection_reason ?? ""}`
       }
       searchPlaceholder="Search property, inspector, reason…"
+      exportName="Inspections"
       initialSort={{ key: "date", dir: "desc" }}
     />
   );

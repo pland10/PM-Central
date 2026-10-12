@@ -6,6 +6,8 @@ import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
 import { workOrderStageSummary } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
+import { DashboardExport } from "./DashboardExport";
+import type { ExportSheet } from "@/lib/export-excel";
 
 export const dynamic = "force-dynamic";
 
@@ -98,13 +100,88 @@ export default async function DashboardPage() {
   const largestDelinquency = topDelinquencies[0]?.amount ?? 0;
   const delinquencyRate = activeLeases > 0 ? Math.round((delinquentCount / activeLeases) * 100) : 0;
 
+  // Multi-sheet workbook for the dashboard Export button.
+  const exportSheets: ExportSheet[] = [
+    {
+      name: "Summary",
+      headers: ["Metric", "Value"],
+      rows: [
+        ["Properties", properties.length],
+        ["Units", totalUnits],
+        ["Occupancy %", occupancy],
+        ["Rent roll / mo", rentRoll],
+        ["Outstanding", totalBalanceDue],
+        ["Deposits held", totalDeposits],
+        ["Active leases", activeLeases],
+        ["Open work orders", woSummary?.openTotal ?? 0],
+        ["Delinquent leases", delinquentCount],
+        ...(payments
+          ? ([
+              ["Payments pending", payments.pendingTotal],
+              ["Cleared today", payments.clearedTotal],
+            ] as [string, number][])
+          : []),
+      ],
+    },
+    {
+      name: "Delinquencies",
+      headers: ["Tenant", "Property", "Amount"],
+      rows: topDelinquencies.map((d) => [d.tenant, d.address, d.amount]),
+    },
+    {
+      name: "Expirations",
+      headers: ["Tenant", "Property", "Lease end", "Rent / mo"],
+      rows: expirationsSorted.map((e) => [
+        e.tenant,
+        e.address,
+        new Date(e.endMs).toISOString().slice(0, 10),
+        e.rent,
+      ]),
+    },
+    {
+      name: "Vacancies",
+      headers: ["Property", "Unit"],
+      rows: vacantSorted.map((v) => [v.address, v.unit]),
+    },
+    {
+      name: "Top owners",
+      headers: ["Owner", "Properties", "Rent roll / mo"],
+      rows: topOwners.map((o) => [o.name, o.properties, o.rentRoll]),
+    },
+  ];
+  if (woSummary) {
+    exportSheets.push({
+      name: "Work orders by stage",
+      headers: ["Stage", "Count"],
+      rows: woSummary.stages.map((s) => [s.stage, s.count]),
+    });
+  }
+  if (payments) {
+    const payRows: (string | number)[][] = [];
+    for (const g of payments.clearedByOwner)
+      for (const l of g.lines)
+        payRows.push(["Now payable", l.tenant ?? "", l.property_address ?? "", l.amount, l.clear_date ?? ""]);
+    for (const l of payments.pending)
+      payRows.push(["In flight", l.tenant ?? "", l.property_address ?? "", l.amount, l.date_posted ?? ""]);
+    for (const l of payments.returned)
+      payRows.push(["Returned / NSF", l.tenant ?? "", l.property_address ?? "", l.amount, l.date_posted ?? ""]);
+    exportSheets.push({
+      name: "Payments",
+      headers: ["Status", "Tenant", "Property", "Amount", "Date"],
+      rows: payRows,
+    });
+  }
+
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Portfolio at a glance — {properties.length} properties across {ownerAgg.size} owners.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Portfolio at a glance — {properties.length} properties across {ownerAgg.size} owners.
+          </p>
+        </div>
+        <DashboardExport sheets={exportSheets} />
       </div>
 
       {/* KPIs */}
