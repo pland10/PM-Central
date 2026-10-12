@@ -7,6 +7,8 @@ import { workOrderStageSummary } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 import { DashboardExport } from "./DashboardExport";
+import { DraggablePanels } from "./DraggablePanels";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
 import type { ExportSheet } from "@/lib/export-excel";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +23,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, payments] = await Promise.all([
+  const [properties, woSummary, payments, me] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -35,6 +37,7 @@ export default async function DashboardPage() {
     }),
     workOrderStageSummary(), // null until the work_orders table exists / sync runs
     paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
+    getCurrentUser(), // for the saved dashboard panel order (null in Basic Auth)
   ]);
 
   const now = Date.now();
@@ -202,9 +205,12 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {payments && <PaymentsPane initial={payments} />}
-
+      <DraggablePanels
+        initialOrder={me?.dashboardOrder ?? null}
+        canPersist={!!me}
+        items={[
+          ...(payments ? [{ id: "payments", node: <PaymentsPane initial={payments} /> }] : []),
+          { id: "delinquencies", node: (
         <Panel
           title="Delinquencies"
           href="/leases"
@@ -233,7 +239,9 @@ export default async function DashboardPage() {
             </>
           )}
         </Panel>
+          ) },
 
+          { id: "expirations", node: (
         <Panel title="Upcoming lease expirations" href="/leases" linkLabel="All leases" badge={expirationsSorted.length}>
           {expirationsSorted.length === 0 ? (
             <Empty>No dated leases.</Empty>
@@ -259,7 +267,9 @@ export default async function DashboardPage() {
             </ExpandableRows>
           )}
         </Panel>
+          ) },
 
+          { id: "vacancies", node: (
         <Panel title="Vacant units" href="/properties" linkLabel="Properties" badge={vacancies.length}>
           {vacantSorted.length === 0 ? (
             <Empty>No vacancies — fully occupied.</Empty>
@@ -279,7 +289,9 @@ export default async function DashboardPage() {
             </ExpandableRows>
           )}
         </Panel>
+          ) },
 
+          { id: "workorders", node: (
         <Panel title="Work orders by stage" href="/work-orders" linkLabel="All work orders" badge={woSummary?.openTotal ?? 0}>
           {!woSummary || woSummary.stages.length === 0 ? (
             <Empty>No work orders yet.</Empty>
@@ -296,7 +308,9 @@ export default async function DashboardPage() {
             ))
           )}
         </Panel>
+          ) },
 
+          { id: "topowners", node: (
         <Panel title="Top owners by rent roll" href="/portfolios" linkLabel="All portfolios">
           {topOwners.map((o, i) => (
             <div key={o.name} className="flex items-center justify-between border-b border-slate-100 py-2 last:border-0 text-sm">
@@ -311,7 +325,9 @@ export default async function DashboardPage() {
             </div>
           ))}
         </Panel>
-      </div>
+          ) },
+        ]}
+      />
     </div>
   );
 }
