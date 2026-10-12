@@ -168,6 +168,7 @@ export function PropertiesTable({ rows }: { rows: PropertyRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.title} ${r.address} ${r.owner}`}
       searchPlaceholder="Search address or owner…"
+      exportName="Properties"
       facets={facets}
       initialSort={{ key: "title", dir: "asc" }}
       initialFacets={{ program: "managed" }}

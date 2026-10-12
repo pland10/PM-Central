@@ -194,6 +194,7 @@ export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?:
       rowKey={(r) => r.id}
       search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.lastUpdate}`}
       searchPlaceholder="Search all fields…"
+      exportName="Work Orders"
       facets={facets}
       initialSort={{ key: "stage", dir: "desc" }}
       initialFacets={drill ? {} : { status: "active" }}
