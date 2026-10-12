@@ -156,6 +156,9 @@ export function SearchClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fresh, setFresh] = useState<{ updatedAt?: string; stuck?: boolean; detail?: string }>({});
+  // Which result rows are expanded to show their full message instead of the
+  // 3-line preview (long chat/email bodies otherwise look cut off).
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const seq = useRef(0);
 
@@ -403,12 +406,40 @@ export function SearchClient() {
               </div>
             )}
             <div className="text-xs text-slate-500">{[r.contact_names, r.property_address].filter(Boolean).join(" · ")}</div>
-            {(r.subject || r.content) && (
-              <div className="mt-1 line-clamp-3 text-sm text-slate-600">
-                {r.subject ? <span className="font-medium">{r.subject}: </span> : null}
-                {r.content}
-              </div>
-            )}
+            {(r.subject || r.content) && (() => {
+              const isOpen = expanded.has(r.id);
+              // Offer expand when the body is long enough to be clipped at 3 lines.
+              const longish = (r.content?.length ?? 0) > 160 || (r.content?.includes("\n") ?? false);
+              return (
+                <>
+                  <div
+                    className={
+                      isOpen
+                        ? "mt-1 whitespace-pre-wrap text-sm text-slate-600"
+                        : "mt-1 line-clamp-3 text-sm text-slate-600"
+                    }
+                  >
+                    {r.subject ? <span className="font-medium">{r.subject}: </span> : null}
+                    {r.content}
+                  </div>
+                  {longish && (
+                    <button
+                      onClick={() =>
+                        setExpanded((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(r.id)) next.delete(r.id);
+                          else next.add(r.id);
+                          return next;
+                        })
+                      }
+                      className="mt-1 text-xs font-medium text-brand-600 hover:underline"
+                    >
+                      {isOpen ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                </>
+              );
+            })()}
           </div>
         ))}
       </div>
