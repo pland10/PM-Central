@@ -67,6 +67,7 @@ export function PortfoliosTable({ rows }: { rows: PortfolioRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => r.name}
       searchPlaceholder="Search owner…"
+      exportName="Portfolios"
       initialSort={{ key: "rentRoll", dir: "desc" }}
     />
   );

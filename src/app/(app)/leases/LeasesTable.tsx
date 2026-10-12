@@ -109,6 +109,7 @@ export function LeasesTable({ rows }: { rows: LeaseRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.propertyAddress} ${r.tenant}`}
       searchPlaceholder="Search property or tenant…"
+      exportName="Leases"
       initialSort={{ key: "term", dir: "desc" }}
     />
   );

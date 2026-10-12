@@ -100,6 +100,7 @@ export function TenantsTable({ rows }: { rows: TenantRow[] }) {
       rowKey={(r) => r.id}
       search={(r) => `${r.name} ${r.email ?? ""} ${r.phone ?? ""} ${r.propertyAddress}`}
       searchPlaceholder="Search tenant, email, phone, address…"
+      exportName="Tenants"
       initialSort={{ key: "name", dir: "asc" }}
     />
   );

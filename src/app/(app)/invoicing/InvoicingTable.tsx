@@ -183,6 +183,7 @@ export function InvoicingTable({
         rowKey={(r) => r.id}
         search={(r) => `${r.number} ${billToName(r)} ${propertyName(r, propertyLabels)} ${r.period ?? ""}`}
         searchPlaceholder="Search number, customer, property, period…"
+        exportName="Invoices"
         initialSort={{ key: "date", dir: "desc" }}
       />
     </div>
