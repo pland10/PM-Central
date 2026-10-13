@@ -35,6 +35,10 @@ export type AppUser = {
   role: "admin" | "inspector" | "user";
   canDelete: boolean;
   canEditAll: boolean;
+  // Saved dashboard panel order (user_metadata.dashboard_order), or null. The
+  // user writes this to their own account from the dashboard, so it follows
+  // them across devices.
+  dashboardOrder: string[] | null;
 };
 
 // Resolve the current user (or null) plus a simple role. Role comes from the
@@ -77,6 +81,11 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     user.email ??
     null;
 
+  const rawOrder = meta.dashboard_order;
+  const dashboardOrder = Array.isArray(rawOrder)
+    ? rawOrder.filter((x): x is string => typeof x === "string")
+    : null;
+
   return {
     id: user.id,
     email: user.email ?? null,
@@ -84,5 +93,6 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     role,
     canDelete,
     canEditAll,
+    dashboardOrder,
   };
 }
