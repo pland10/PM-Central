@@ -70,6 +70,22 @@ function fmtWhen(iso: string | null): { abs: string; rel: string } {
   return { abs, rel };
 }
 
+// A short calendar date, e.g. "Jun 3, 2026". Empty string when absent.
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// move-in comes through as an ISO date (backfill) or free text (rare). Show a
+// clean date when it parses, otherwise the raw value.
+function fmtMoveIn(v: string | null): string {
+  if (!v) return "";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : fmtDate(v);
+}
+
 function isUpcoming(r: ShowingRow): boolean {
   if (!r.startTime) return false;
   if (["cancelled", "no-show", "completed"].includes(r.status)) return false;
@@ -98,21 +114,59 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
     },
     {
       key: "when",
-      header: "When",
+      header: "Showing time",
       sortable: true,
       // Soonest upcoming first when ascending; showings with no time sort last.
       sortValue: (r) => (r.startTime ? new Date(r.startTime).getTime() : Number.MAX_SAFE_INTEGER),
       exportValue: (r) => r.startTime ?? "",
       render: (r) => {
-        if (!r.startTime) return <span className="text-slate-300">—</span>;
+        if (!r.startTime) {
+          return r.bookedAt ? (
+            <div className="whitespace-nowrap text-xs text-slate-400">booked {fmtDate(r.bookedAt)}</div>
+          ) : (
+            <span className="text-slate-300">—</span>
+          );
+        }
         const { abs, rel } = fmtWhen(r.startTime);
         return (
           <div className="whitespace-nowrap">
             <div className="text-slate-700">{abs}</div>
-            <div className="text-xs text-slate-400">{rel}</div>
+            <div className="text-xs text-slate-400">
+              {rel}
+              {r.bookedAt ? ` · booked ${fmtDate(r.bookedAt)}` : ""}
+            </div>
           </div>
         );
       },
+    },
+    {
+      key: "submitted",
+      header: "Submitted",
+      sortable: true,
+      sortValue: (r) => (r.leadSubmittedAt ? new Date(r.leadSubmittedAt).getTime() : 0),
+      exportValue: (r) => r.leadSubmittedAt ?? "",
+      render: (r) =>
+        r.leadSubmittedAt ? (
+          <span className="whitespace-nowrap text-slate-600">{fmtDate(r.leadSubmittedAt)}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
+    },
+    {
+      key: "moveIn",
+      header: "Move-in",
+      sortable: true,
+      sortValue: (r) => {
+        const t = r.moveIn ? new Date(r.moveIn).getTime() : NaN;
+        return Number.isNaN(t) ? 0 : t;
+      },
+      exportValue: (r) => r.moveIn ?? "",
+      render: (r) =>
+        r.moveIn ? (
+          <span className="whitespace-nowrap text-slate-600">{fmtMoveIn(r.moveIn)}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
     },
     {
       key: "status",
