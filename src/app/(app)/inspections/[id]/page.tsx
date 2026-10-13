@@ -10,6 +10,8 @@ import {
 import { InspectionActions } from "../InspectionActions";
 import { CompleteAndSend } from "../CompleteAndSend";
 import { PhotoUploader } from "../PhotoUploader";
+import { PhotoGallery } from "../PhotoGallery";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,11 @@ export default async function InspectionDetailPage({
   const detail = await getInspectionDetail(inspectionId);
   if (!detail) notFound();
   const { inspection: insp, property, checklist, photos, workItems } = detail;
+
+  // Photos can be deleted by an admin or by the inspection's owner (its creator).
+  const me = await getCurrentUser();
+  const canDeletePhotos =
+    me?.role === "admin" || (!!me?.id && me.id === insp.created_by_user_id);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -161,30 +168,11 @@ export default async function InspectionDetailPage({
         <div className="mb-3">
           <PhotoUploader inspectionId={insp.id} />
         </div>
-        {photos.length === 0 ? (
-          <p className="text-sm text-slate-400">No photos.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {photos.map((ph) =>
-              ph.url ? (
-                <a
-                  key={ph.id}
-                  href={ph.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group block overflow-hidden rounded-lg border border-slate-200"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={ph.url}
-                    alt={ph.original_name || "Inspection photo"}
-                    className="h-32 w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                </a>
-              ) : null
-            )}
-          </div>
-        )}
+        <PhotoGallery
+          inspectionId={insp.id}
+          photos={photos.map((p) => ({ id: p.id, url: p.url, original_name: p.original_name }))}
+          canDelete={canDeletePhotos}
+        />
       </Section>
     </div>
   );
