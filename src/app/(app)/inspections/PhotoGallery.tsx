@@ -5,9 +5,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PhotoUploader } from "./PhotoUploader";
 
-// Inspection photo grid. For users who can delete (the inspection's owner or an
-// admin), a "Select" mode turns the tiles into a multiselect and deletes the
-// chosen photos in one request. Everyone else gets the plain grid (tap to open).
+// Inspection photo grid. A "Select" mode turns the tiles into a multiselect so
+// anyone can select photos and download them as a zip; deleting the selected
+// photos is additionally available to the inspection's owner or an admin.
 
 type Photo = { id: number; url: string | null; original_name: string | null };
 
@@ -67,43 +67,113 @@ export function PhotoGallery({
     }
   }
 
+  const allSelected = shown.length > 0 && selected.size === shown.length;
+  function selectAll() {
+    setSelected(allSelected ? new Set() : new Set(shown.map((p) => p.id)));
+  }
+
+  function fileNameFor(p: Photo, i: number): string {
+    const base =
+      p.original_name && /\.[a-z0-9]+$/i.test(p.original_name)
+        ? p.original_name
+        : `photo-${p.id}.jpg`;
+    return `${String(i + 1).padStart(2, "0")}-${base}`.replace(/[\\/]/g, "_");
+  }
+
+  // Zip the selected photos (full-resolution originals) and download as one file.
+  // Supabase URLs are cross-origin, so a plain <a download> won't save them —
+  // fetch each blob and bundle it instead.
+  async function downloadSelected() {
+    const chosen = shown.filter((p) => selected.has(p.id));
+    if (chosen.length === 0) return;
+    setBusy(true);
+    setError("");
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      let ok = 0;
+      for (const p of chosen) {
+        try {
+          const res = await fetch(p.url!);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          zip.file(fileNameFor(p, ok), await res.blob());
+          ok++;
+        } catch {
+          /* skip a photo that won't fetch; keep the rest */
+        }
+      }
+      if (ok === 0) throw new Error("Couldn't fetch any photos to download.");
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `inspection-${inspectionId}-photos.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       {/* Upload (left) and the delete/select controls (right) share one row so
           the toolbar doesn't take two lines. */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <PhotoUploader inspectionId={inspectionId} />
-        {canDelete && shown.length > 0 && (
+        {shown.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {!selecting ? (
-            <button
-              type="button"
-              onClick={() => setSelecting(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-brand-500 hover:text-brand-600"
-            >
-              Select photos
-            </button>
-          ) : (
-            <>
               <button
                 type="button"
-                onClick={deleteSelected}
-                disabled={busy || selected.size === 0}
-                className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setSelecting(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-brand-500 hover:text-brand-600"
               >
-                {busy ? "Deleting…" : `Delete${selected.size ? ` (${selected.size})` : ""}`}
+                Select photos
               </button>
-              <button
-                type="button"
-                onClick={exitSelect}
-                disabled={busy}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <span className="text-xs text-slate-400">Tap photos to select</span>
-            </>
-          )}
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  disabled={busy}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {allSelected ? "Deselect all" : "Select all"}
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadSelected}
+                  disabled={busy || selected.size === 0}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-brand-500 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {busy ? "Working…" : `Download${selected.size ? ` (${selected.size})` : ""}`}
+                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={deleteSelected}
+                    disabled={busy || selected.size === 0}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busy ? "Deleting…" : `Delete${selected.size ? ` (${selected.size})` : ""}`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={exitSelect}
+                  disabled={busy}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <span className="text-xs text-slate-400">Tap photos to select</span>
+              </>
+            )}
             {error && <span className="text-xs text-red-600">{error}</span>}
           </div>
         )}
