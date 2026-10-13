@@ -49,7 +49,14 @@ or setting, remind them to redeploy that service (and to set it on the right
 service — dev and prod are separate).
 
 ## Commands
-- `npm run db:push` after editing the schema
+- `npm run db:push` **only against an empty/throwaway database.** The shared
+  Neon DB also holds tables not modeled here (`activities`, `payments`,
+  `work_orders`, `rv_work_orders`, `sync_status` — written by the
+  leadsimple-search sync), and `db push` would try to **drop** them. To add or
+  change a Prisma model on a populated DB, write idempotent additive SQL in
+  `prisma/sql/*.sql` and apply it with
+  `prisma db execute --file prisma/sql/<file>.sql --schema prisma/schema.prisma`
+  (see `prisma/sql/showings.sql` and DEPLOY.md).
 - `npm run db:seed` to reload sample data
 - `npm run dev` to run
 

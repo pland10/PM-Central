@@ -130,9 +130,18 @@ upserts the `Showing` table.
 
 Setup:
 
-1. **`npm run db:push`** once after this ships, so the `Showing` table exists
-   (run it against **each** `DATABASE_URL` — dev and prod are separate Neon
-   branches). This is the only schema change here.
+1. Create the `Showing` table on **each** database (dev and prod are separate
+   Neon branches). **Do NOT use `npm run db:push` here** — this database also
+   holds tables that aren't in `schema.prisma` (`activities`, `payments`,
+   `work_orders`, …, written by the leadsimple-search sync), and `db push`
+   would try to **drop** them. Instead apply the additive DDL with
+   `prisma db execute` (via the Railway CLI so the right `DATABASE_URL` is
+   injected):
+   ```bash
+   railway run npx prisma db execute --file prisma/sql/showings.sql --schema prisma/schema.prisma
+   ```
+   `prisma/sql/showings.sql` is idempotent (`CREATE TABLE IF NOT EXISTS …`), so
+   it's safe to re-run and touches nothing but the `Showing` table.
 2. Set **`TENANT_TURNER_WEBHOOK_SECRET`** (a long random string) on both Railway
    services. Tenant Turner does **not** sign its webhooks, so this secret —
    carried in the URL — is what proves a request is really from Tenant Turner.
