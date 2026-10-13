@@ -9,7 +9,6 @@ import {
 } from "@/lib/inspections/types";
 import { InspectionActions } from "../InspectionActions";
 import { CompleteAndSend } from "../CompleteAndSend";
-import { PhotoUploader } from "../PhotoUploader";
 import { PhotoGallery } from "../PhotoGallery";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 
@@ -165,9 +164,6 @@ export default async function InspectionDetailPage({
       )}
 
       <Section title={`Photos${photos.length ? ` (${photos.length})` : ""}`}>
-        <div className="mb-3">
-          <PhotoUploader inspectionId={insp.id} />
-        </div>
         <PhotoGallery
           inspectionId={insp.id}
           photos={photos.map((p) => ({ id: p.id, url: p.url, original_name: p.original_name }))}

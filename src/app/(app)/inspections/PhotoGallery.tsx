@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { PhotoUploader } from "./PhotoUploader";
 
 // Inspection photo grid. For users who can delete (the inspection's owner or an
 // admin), a "Select" mode turns the tiles into a multiselect and deletes the
@@ -66,13 +67,15 @@ export function PhotoGallery({
     }
   }
 
-  if (shown.length === 0) return <p className="text-sm text-slate-400">No photos.</p>;
-
   return (
     <div>
-      {canDelete && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {!selecting ? (
+      {/* Upload (left) and the delete/select controls (right) share one row so
+          the toolbar doesn't take two lines. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <PhotoUploader inspectionId={inspectionId} />
+        {canDelete && shown.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {!selecting ? (
             <button
               type="button"
               onClick={() => setSelecting(true)}
@@ -101,10 +104,14 @@ export function PhotoGallery({
               <span className="text-xs text-slate-400">Tap photos to select</span>
             </>
           )}
-          {error && <span className="text-xs text-red-600">{error}</span>}
-        </div>
-      )}
+            {error && <span className="text-xs text-red-600">{error}</span>}
+          </div>
+        )}
+      </div>
 
+      {shown.length === 0 ? (
+        <p className="text-sm text-slate-400">No photos.</p>
+      ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {shown.map((ph) => {
           const isSel = selected.has(ph.id);
@@ -149,6 +156,7 @@ export function PhotoGallery({
           );
         })}
       </div>
+      )}
     </div>
   );
 }
