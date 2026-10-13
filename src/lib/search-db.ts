@@ -6,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 // prisma/sql/search.sql), so these run raw SQL via Prisma instead of the old
 // Supabase client. Keys never reach the browser — this is server-only.
 
+// Pipelines that are internal team chatter (e.g. RingCentral Team Messaging),
+// not owner/tenant communication. These are kept OUT of the main Search and
+// surfaced on their own "Team Comms" page instead.
+export const INTERNAL_PIPELINES = ["RingCentral"];
+
 export type SearchFilters = {
   q: string;
   dir: string;
@@ -14,6 +19,9 @@ export type SearchFilters = {
   contact: string;
   property: string;
   pipeline: string;
+  // "external" (default) = owner/tenant Search, hides INTERNAL_PIPELINES.
+  // "internal" = Team Comms, shows only INTERNAL_PIPELINES.
+  scope?: "external" | "internal";
 };
 
 // Every column except search_vector (a tsvector, not meant for the client).
@@ -29,6 +37,16 @@ export const SUGGEST_FIELDS = ["contact_names", "property_address", "pipeline_na
 
 function buildWhere(f: SearchFilters): Prisma.Sql {
   const conds: Prisma.Sql[] = [];
+
+  // Segregate internal team chatter from owner/tenant comms. Default (external)
+  // hides the internal pipelines; Team Comms asks for them explicitly.
+  if (f.scope === "internal") {
+    conds.push(Prisma.sql`pipeline_name IN (${Prisma.join(INTERNAL_PIPELINES)})`);
+  } else {
+    conds.push(
+      Prisma.sql`(pipeline_name IS NULL OR pipeline_name NOT IN (${Prisma.join(INTERNAL_PIPELINES)}))`
+    );
+  }
 
   if (f.types.length) conds.push(Prisma.sql`type IN (${Prisma.join(f.types)})`);
 
@@ -83,9 +101,16 @@ export async function countActivities(f: SearchFilters): Promise<number> {
 export async function suggestValues(field: string, val: string): Promise<string[]> {
   if (!SUGGEST_FIELDS.includes(field)) return [];
   const col = Prisma.raw(field); // safe: validated against the allow-list above
+  // The pipeline suggestions feed the main (external) Search, so never suggest
+  // an internal pipeline there — those belong to Team Comms.
+  const hideInternal =
+    field === "pipeline_name"
+      ? Prisma.sql`AND ${col} NOT IN (${Prisma.join(INTERNAL_PIPELINES)})`
+      : Prisma.empty;
   const rows = await prisma.$queryRaw<{ v: string | null }[]>(
     Prisma.sql`SELECT DISTINCT ${col} AS v FROM activities
                WHERE ${col} ILIKE ${`%${val}%`} AND ${col} IS NOT NULL AND ${col} <> ''
+               ${hideInternal}
                LIMIT 50`
   );
   return rows.map((r) => r.v ?? "").filter(Boolean);
@@ -101,4 +126,13 @@ export async function syncStatusRows(): Promise<SyncStatusRow[]> {
   // "_") — they aren't real heartbeats and their detail JSON contains
   // "stuck_since", which would false-match the stuck check in the status route.
   return rows.filter((r) => r.job && !String(r.job).startsWith("_"));
+}
+
+// Heartbeat for a single sync job (e.g. the RingCentral chat sync behind Team
+// Comms). Returns null when the job hasn't recorded a run yet.
+export async function syncStatusForJob(job: string): Promise<SyncStatusRow | null> {
+  const rows = await prisma.$queryRaw<SyncStatusRow[]>(
+    Prisma.sql`SELECT job, last_run_at, detail FROM sync_status WHERE job = ${job} LIMIT 1`
+  );
+  return rows[0] ?? null;
 }
