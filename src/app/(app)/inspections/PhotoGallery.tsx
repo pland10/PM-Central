@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 // Inspection photo grid. For users who can delete (the inspection's owner or an
@@ -111,14 +112,19 @@ export function PhotoGallery({
             isSel ? "border-brand-500 ring-2 ring-brand-500" : "border-slate-200"
           }`;
           const img = (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={ph.url!}
-              alt={ph.original_name || "Inspection photo"}
-              loading="lazy"
-              decoding="async"
-              className="h-32 w-full bg-slate-100 object-cover transition-transform group-hover:scale-105"
-            />
+            // next/image serves a resized, compressed thumbnail for the grid
+            // (full image opens on click) and lazy-loads by default, so the page
+            // isn't pulling down full-size photos.
+            <div className="relative h-32 w-full bg-slate-100">
+              <Image
+                src={ph.url!}
+                alt={ph.original_name || "Inspection photo"}
+                fill
+                sizes="(min-width: 640px) 33vw, 50vw"
+                quality={65}
+                className="object-cover transition-transform group-hover:scale-105"
+              />
+            </div>
           );
 
           if (selecting) {
