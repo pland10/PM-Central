@@ -13,6 +13,7 @@ export type FeatureKey =
   | "workOrders"
   | "showings"
   | "search"
+  | "teamComms"
   | "inspections"
   | "invoicing";
 
@@ -32,6 +33,7 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   workOrders: flag("WORK_ORDERS"),
   showings: flag("SHOWINGS"),
   search: flag("SEARCH"),
+  teamComms: flag("TEAM_COMMS"),
   inspections: flag("INSPECTIONS"),
   invoicing: flag("INVOICING"),
 };

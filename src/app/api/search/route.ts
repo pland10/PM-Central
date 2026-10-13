@@ -9,11 +9,17 @@ export const dynamic = "force-dynamic";
 const ALL_TYPES = ["email", "text", "call", "note", "chat", "task", "payment"];
 
 export async function GET(req: NextRequest) {
-  if (!isFeatureEnabled("search")) {
-    return NextResponse.json({ error: "Search is disabled." }, { status: 404 });
-  }
-
   const sp = req.nextUrl.searchParams;
+  const internal = sp.get("scope") === "internal";
+
+  // Internal scope is the Team Comms module; everything else is Search. Each is
+  // independently toggleable so the product can be sold in pieces.
+  if (internal ? !isFeatureEnabled("teamComms") : !isFeatureEnabled("search")) {
+    return NextResponse.json(
+      { error: `${internal ? "Team Comms" : "Search"} is disabled.` },
+      { status: 404 }
+    );
+  }
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(sp.get("pageSize") || "20", 10) || 20));
   const types = (sp.get("types") || ALL_TYPES.join(","))
@@ -29,6 +35,9 @@ export async function GET(req: NextRequest) {
     contact: (sp.get("contact") || "").trim(),
     property: (sp.get("property") || "").trim(),
     pipeline: (sp.get("pipeline") || "").trim(),
+    // Team Comms asks for the internal pipelines; everything else is the
+    // owner/tenant Search, which hides them.
+    scope: internal ? "internal" : "external",
   };
 
   if (types.length === 0) {
