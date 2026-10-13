@@ -8,6 +8,7 @@ import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 import { DashboardExport } from "./DashboardExport";
 import { DraggablePanels } from "./DraggablePanels";
+import { DashboardEditProvider, RearrangeButton } from "./DashboardEdit";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import type { ExportSheet } from "@/lib/export-excel";
 
@@ -176,6 +177,7 @@ export default async function DashboardPage() {
   }
 
   return (
+    <DashboardEditProvider>
     <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
@@ -184,7 +186,10 @@ export default async function DashboardPage() {
             Portfolio at a glance — {properties.length} properties across {ownerAgg.size} owners.
           </p>
         </div>
-        <DashboardExport sheets={exportSheets} />
+        <div className="flex items-center gap-2">
+          <RearrangeButton />
+          <DashboardExport sheets={exportSheets} />
+        </div>
       </div>
 
       {/* KPIs */}
@@ -329,6 +334,7 @@ export default async function DashboardPage() {
         ]}
       />
     </div>
+    </DashboardEditProvider>
   );
 }
 
