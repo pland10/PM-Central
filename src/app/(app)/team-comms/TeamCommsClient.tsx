@@ -19,6 +19,30 @@ type ChatRow = {
 
 const PAGE_SIZES = [20, 40, 60, 100];
 
+// A distinct, stable badge color per channel. Hashed from the channel name so
+// each channel (and each person's DM) always lands on the same color without
+// any configuration. Full literal class strings so Tailwind keeps them.
+const CHANNEL_COLORS = [
+  "bg-sky-100 text-sky-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700",
+  "bg-teal-100 text-teal-700",
+  "bg-indigo-100 text-indigo-700",
+  "bg-amber-100 text-amber-800",
+  "bg-pink-100 text-pink-700",
+  "bg-cyan-100 text-cyan-700",
+  "bg-lime-100 text-lime-700",
+  "bg-fuchsia-100 text-fuchsia-700",
+  "bg-blue-100 text-blue-700",
+];
+
+function channelClass(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return CHANNEL_COLORS[h % CHANNEL_COLORS.length];
+}
+
 function fmtDateTime(iso: string | null) {
   if (!iso) return "";
   return new Date(iso).toLocaleString("en-US", {
@@ -202,7 +226,7 @@ export function TeamCommsClient() {
           return (
             <div key={r.id} className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="mb-1 flex items-center gap-2 text-xs">
-                <span className="inline-flex rounded bg-sky-100 px-1.5 py-0.5 font-medium text-sky-700">
+                <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${channelClass(channel)}`}>
                   {channel}
                 </span>
                 {r.direction && (
