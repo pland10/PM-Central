@@ -49,6 +49,7 @@ locally.)
 | `RENTVINE_API_KEY` / `RENTVINE_API_SECRET` | Balance sync (Basic auth) | server/CLI only |
 | `PMS_PROVIDER` | Balance-sync source | `rentvine` (default) |
 | `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Only if `AUTH_MODE=basic` | not used in `supabase` mode |
+| `TENANT_TURNER_WEBHOOK_SECRET` | Gates the Tenant Turner showings webhook | long random string; set on **both** services. See "Tenant Turner showings" below |
 | `FEATURE_*` | Turn modules on/off | all on by default |
 
 `.env.example` documents each of these.
@@ -119,6 +120,42 @@ backstop; runs are idempotent, so an occasional double-trigger is harmless.)
 `npm run import` reloads the snapshot and resets balances, so run
 `npm run sync:balances` after any manual import (the scheduled balance sync also
 corrects it on its next run).
+
+### Tenant Turner showings (webhook)
+
+Showings come from Tenant Turner, which **pushes** a webhook on each viewing
+event (requested / scheduled / confirmed / cancelled / no-show / feedback) plus
+lockbox-code-sent. There's no polling sync — the app receives the events and
+upserts the `Showing` table.
+
+Setup:
+
+1. **`npm run db:push`** once after this ships, so the `Showing` table exists
+   (run it against **each** `DATABASE_URL` — dev and prod are separate Neon
+   branches). This is the only schema change here.
+2. Set **`TENANT_TURNER_WEBHOOK_SECRET`** (a long random string) on both Railway
+   services. Tenant Turner does **not** sign its webhooks, so this secret —
+   carried in the URL — is what proves a request is really from Tenant Turner.
+   *(Changing a Railway variable doesn't redeploy — restart the service so the
+   app picks it up.)*
+3. In the Tenant Turner portal (**Sign in → Webhooks**), register the receiver
+   URL and subscribe to the viewing + lockbox events:
+   ```
+   https://pmilighthouse.app/api/webhooks/tenantturner?key=<TENANT_TURNER_WEBHOOK_SECRET>
+   ```
+   (Use the dev service's URL + its own secret to test against dev first.)
+4. Verify: open the same URL in a browser — a correct secret returns
+   `{"ok":true,...}`; a wrong/missing one returns `401`.
+
+Notes:
+- **Forward-only:** webhooks capture showings from the moment they're turned on;
+  there's no historical backfill (Tenant Turner's REST list endpoint doesn't
+  include the property, so it can't backfill with property attribution anyway).
+- Each showing links to one of our properties **by address** (best effort); the
+  Tenant Turner address is always stored, so a showing is never dropped even
+  when it doesn't match a known property.
+- The `TENANT_TURNER_API_KEY` (Actions secret in `leadsimple-search`) is for
+  Tenant Turner's REST API and isn't needed by this webhook receiver.
 
 ---
 
