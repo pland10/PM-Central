@@ -10,6 +10,7 @@ import { DashboardExport } from "./DashboardExport";
 import { DraggablePanels } from "./DraggablePanels";
 import { DashboardEditProvider, RearrangeButton } from "./DashboardEdit";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { todaysShowings } from "@/lib/showings";
 import type { ExportSheet } from "@/lib/export-excel";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, payments, me] = await Promise.all([
+  const [properties, woSummary, payments, me, todayShow] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
     workOrderStageSummary(), // null until the work_orders table exists / sync runs
     paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
     getCurrentUser(), // for the saved dashboard panel order (null in Basic Auth)
+    todaysShowings(), // today's Tenant Turner showings; null until the table exists
   ]);
 
   const now = Date.now();
@@ -175,6 +177,13 @@ export default async function DashboardPage() {
       rows: payRows,
     });
   }
+  if (todayShow && todayShow.rows.length) {
+    exportSheets.push({
+      name: "Showings today",
+      headers: ["Time", "Property", "Lead", "Status"],
+      rows: todayShow.rows.map((s) => [nyTime(s.time), s.address, s.leadName ?? "", s.status]),
+    });
+  }
 
   return (
     <DashboardEditProvider>
@@ -202,6 +211,9 @@ export default async function DashboardPage() {
         <Stat label="Deposits held" value={formatCurrency(totalDeposits)} href="/leases" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
         <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/work-orders" accent={(woSummary?.openTotal ?? 0) > 0} />
+        {todayShow && (
+          <Stat label="Showings today" value={String(todayShow.count)} href="/showings" accent={todayShow.count > 0} />
+        )}
         {payments && (
           <>
             <Stat label="Payments pending" value={formatCurrency(payments.pendingTotal)} href="/search?types=payment" accent={payments.pendingTotal > 0} />
@@ -215,6 +227,30 @@ export default async function DashboardPage() {
         canPersist={!!me}
         items={[
           ...(payments ? [{ id: "payments", node: <PaymentsPane initial={payments} /> }] : []),
+          ...(todayShow
+            ? [{ id: "showings", node: (
+        <Panel title="Today's showings" href="/showings" linkLabel="All showings" badge={todayShow.count}>
+          {todayShow.rows.length === 0 ? (
+            <Empty>No showings scheduled today.</Empty>
+          ) : (
+            <ExpandableRows initial={6}>
+              {todayShow.rows.map((s) => (
+                <Row key={s.id} href={s.propertyId ? `/properties/${s.propertyId}` : "/showings"}>
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-slate-800">{s.address}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      {s.leadName || "—"}
+                      {s.viewingType ? ` · ${s.viewingType}` : ""}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-slate-600">{nyTime(s.time)}</span>
+                </Row>
+              ))}
+            </ExpandableRows>
+          )}
+        </Panel>
+            ) }]
+            : []),
           { id: "delinquencies", node: (
         <Panel
           title="Delinquencies"
@@ -384,6 +420,15 @@ function Row({ href, children }: { href: string; children: React.ReactNode }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <div className="py-6 text-center text-sm text-slate-400">{children}</div>;
+}
+
+// Showing start time in the business's timezone (Eastern), e.g. "1:30 PM".
+function nyTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
