@@ -190,6 +190,11 @@ export async function applyTenantTurnerEvent(payload: unknown): Promise<IngestRe
     lastEventAt: new Date(),
   };
 
+  // The webhook doesn't carry the showing's dateCreated, so approximate "booked"
+  // with the event time, set once on create and never overwritten by later
+  // events. (leadSubmittedAt isn't in the webhook at all — the backfill fills it.)
+  const bookedAt = dateOrNull(body.eventDate);
+
   await prisma.showing.upsert({
     where: { source_externalId: { source: SOURCE, externalId } },
     create: {
@@ -197,6 +202,7 @@ export async function applyTenantTurnerEvent(payload: unknown): Promise<IngestRe
       externalId,
       status: status ?? "scheduled",
       ...common,
+      ...(bookedAt ? { bookedAt } : {}),
     },
     update: common,
   });
@@ -216,6 +222,9 @@ export type ShowingRow = {
   leadName: string | null;
   leadEmail: string | null;
   leadPhone: string | null;
+  moveIn: string | null; // lead's desired move-in (ISO or free text)
+  leadSubmittedAt: string | null; // ISO — when the lead inquired (backfill only)
+  bookedAt: string | null; // ISO — when the showing was created/requested
   agentName: string | null;
   acquisitionSource: string | null;
   feedbackRating: number | null;
@@ -271,6 +280,9 @@ export async function listShowings(): Promise<ShowingRow[] | null> {
       leadName: r.leadName,
       leadEmail: r.leadEmail,
       leadPhone: r.leadPhone,
+      moveIn: r.moveIn,
+      leadSubmittedAt: r.leadSubmittedAt ? r.leadSubmittedAt.toISOString() : null,
+      bookedAt: r.bookedAt ? r.bookedAt.toISOString() : null,
       agentName: r.agentName,
       acquisitionSource: r.acquisitionSource,
       feedbackRating: r.feedbackRating,
