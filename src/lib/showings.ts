@@ -245,6 +245,73 @@ function fmtAddress(parts: {
   return [line1, rest].filter(Boolean).join(" · ") || "Unknown address";
 }
 
+// A calendar date (YYYY-MM-DD) in the business's timezone (Eastern), so "today"
+// lines up with how the team thinks about the day, not the server's UTC clock.
+function nyDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+export type TodayShowingRow = {
+  id: string;
+  time: string; // ISO start time
+  address: string; // compact: street + city
+  propertyId: string | null;
+  leadName: string | null;
+  status: string;
+  viewingType: string | null;
+};
+
+// Showings scheduled for today (Eastern), excluding cancelled / no-show. Returns
+// null if the table isn't there yet, so the dashboard can skip the panel.
+export async function todaysShowings(): Promise<{ count: number; rows: TodayShowingRow[] } | null> {
+  const now = new Date();
+  // Query a generous ±2-day window, then filter to the Eastern "today".
+  const from = new Date(now.getTime() - 2 * 86_400_000);
+  const to = new Date(now.getTime() + 2 * 86_400_000);
+  let rows;
+  try {
+    rows = await prisma.showing.findMany({
+      where: { startTime: { gte: from, lte: to } },
+      orderBy: { startTime: "asc" },
+      include: {
+        property: { select: { street1: true, city: true } },
+      },
+    });
+  } catch {
+    return null;
+  }
+
+  const today = nyDate(now);
+  const mapped = rows
+    .filter(
+      (r) =>
+        r.startTime &&
+        nyDate(r.startTime) === today &&
+        !["cancelled", "no-show"].includes(r.status)
+    )
+    .map((r): TodayShowingRow => {
+      const address = r.property
+        ? [r.property.street1, r.property.city].filter(Boolean).join(", ")
+        : [r.ttAddress, r.ttCity].filter(Boolean).join(", ") || "Unknown address";
+      return {
+        id: r.id,
+        time: r.startTime!.toISOString(),
+        address,
+        propertyId: r.propertyId,
+        leadName: r.leadName,
+        status: r.status,
+        viewingType: r.viewingType,
+      };
+    });
+
+  return { count: mapped.length, rows: mapped };
+}
+
 // All showings, newest activity first. Returns null if nothing has synced yet.
 export async function listShowings(): Promise<ShowingRow[] | null> {
   let rows;
