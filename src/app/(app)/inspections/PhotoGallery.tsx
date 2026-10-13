@@ -115,7 +115,9 @@ export function PhotoGallery({
             <img
               src={ph.url!}
               alt={ph.original_name || "Inspection photo"}
-              className="h-32 w-full object-cover transition-transform group-hover:scale-105"
+              loading="lazy"
+              decoding="async"
+              className="h-32 w-full bg-slate-100 object-cover transition-transform group-hover:scale-105"
             />
           );
 
