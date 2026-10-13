@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS "Showing" (
     "requestedTime1" TIMESTAMP(3),
     "requestedTime2" TIMESTAMP(3),
     "requestedTime3" TIMESTAMP(3),
+    "leadSubmittedAt" TIMESTAMP(3),
+    "bookedAt" TIMESTAMP(3),
     "leadName" TEXT,
     "leadEmail" TEXT,
     "leadPhone" TEXT,
@@ -61,3 +63,8 @@ BEGIN
       ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
+
+-- Columns added after the table first shipped. ADD COLUMN IF NOT EXISTS keeps
+-- this idempotent on tables created before these existed.
+ALTER TABLE "Showing" ADD COLUMN IF NOT EXISTS "leadSubmittedAt" TIMESTAMP(3);
+ALTER TABLE "Showing" ADD COLUMN IF NOT EXISTS "bookedAt" TIMESTAMP(3);

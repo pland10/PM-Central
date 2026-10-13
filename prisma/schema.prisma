@@ -238,6 +238,13 @@ model Showing {
   requestedTime2 DateTime?
   requestedTime3 DateTime?
 
+  // When the lead first inquired (Tenant Turner application dateCreated). Only
+  // the REST API exposes this, so it's populated by the backfill, not the live
+  // webhook. bookedAt is when the showing itself was created/requested (from the
+  // showing's dateCreated on backfill, or the first event's time via webhook).
+  leadSubmittedAt DateTime?
+  bookedAt        DateTime?
+
   // The prospect who booked (Tenant Turner "application" object). We don't get
   // a real prospect until they apply, so these are the lead's contact details.
   leadName          String?
