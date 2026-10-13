@@ -93,6 +93,18 @@ const nav: { href: string; label: string; feature: FeatureKey; icon: React.React
     ),
   },
   {
+    href: "/showings",
+    label: "Showings",
+    feature: "showings",
+    icon: (
+      <>
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4M8 2v4M3 10h18" />
+        <path d="m9 16 2 2 4-4" />
+      </>
+    ),
+  },
+  {
     href: "/search",
     label: "Search Communications",
     feature: "search",
@@ -142,6 +154,7 @@ type NavEntry = { item: FeatureKey } | { heading: string; items: FeatureKey[] };
 const navLayout: NavEntry[] = [
   { item: "dashboard" },
   { item: "search" },
+  { item: "showings" },
   { item: "invoicing" },
   { item: "inspections" },
   {

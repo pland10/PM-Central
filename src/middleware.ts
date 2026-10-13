@@ -87,6 +87,11 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   // it bypasses the app login gate (a scheduler has no Supabase/Basic session).
   if (req.nextUrl.pathname.startsWith("/api/cron/")) return NextResponse.next();
 
+  // Inbound webhooks (e.g. Tenant Turner) authenticate themselves with their
+  // own shared secret, so they bypass the login gate too — a third-party caller
+  // has no Supabase/Basic session.
+  if (req.nextUrl.pathname.startsWith("/api/webhooks/")) return NextResponse.next();
+
   const mode = (process.env.AUTH_MODE || "basic").toLowerCase();
   if (mode === "supabase") return supabaseGate(req);
   return basicGate(req);

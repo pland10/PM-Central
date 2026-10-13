@@ -63,6 +63,7 @@ model Property {
   units       Unit[]
   workOrders  WorkOrder[]
   inspections Inspection[]
+  showings    Showing[]
 
   @@unique([source, externalId])
   @@index([portfolioId])
@@ -209,6 +210,74 @@ model Inspection {
 
   @@unique([source, externalId])
   @@index([propertyId])
+}
+
+// A property showing (self-access or in-person viewing) from the leasing/
+// showing platform — Tenant Turner (source = "tenantturner"). Fed by Tenant
+// Turner webhooks (Viewing Scheduled/Confirmed/Cancelled/No Show/Feedback,
+// Lockbox Code Sent); see src/app/api/webhooks/tenantturner. Each event upserts
+// on (source, externalId) where externalId is Tenant Turner's showingId, so
+// re-deliveries are idempotent.
+//
+// The webhook payload carries the property only as a denormalized address (no
+// externalId), so we snapshot that address here AND best-effort link to our own
+// Property by address. Keeping the snapshot means a showing is never dropped
+// even when it doesn't match a known property.
+model Showing {
+  id          String   @id @default(cuid())
+  source      String   @default("tenantturner")
+  externalId  String? // Tenant Turner showingId
+
+  // scheduled | confirmed | requested | cancelled | no-show | completed.
+  // Mirrors Tenant Turner's showing status (lowercased).
+  status      String   @default("scheduled")
+  viewingType String? // self-access | in-person
+
+  startTime      DateTime? // the confirmed/scheduled slot, when set
+  requestedTime1 DateTime?
+  requestedTime2 DateTime?
+  requestedTime3 DateTime?
+
+  // The prospect who booked (Tenant Turner "application" object). We don't get
+  // a real prospect until they apply, so these are the lead's contact details.
+  leadName          String?
+  leadEmail         String?
+  leadPhone         String?
+  moveIn            String? // free-text move-in from the lead
+  acquisitionSource String? // how the lead found the listing
+
+  // Assigned Tenant Turner user / leasing agent (showing.user).
+  agentName  String?
+  agentEmail String?
+  agentPhone String?
+
+  feedbackRating   Int? // 1-5, when the prospect leaves feedback
+  feedbackComments String?
+
+  lockboxCodeSentAt DateTime? // set by the Lockbox Code Sent event
+
+  // Tenant Turner's property reference + a denormalized address snapshot so the
+  // showing is readable even when it isn't linked to one of our properties.
+  ttPropertyId String?
+  ttAddress    String?
+  ttCity       String?
+  ttState      String?
+  ttZip        String?
+
+  // Best-effort link to our own Property (matched by address). Nullable.
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
+
+  lastEventType String? // last webhook eventType applied (audit)
+  lastEventAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, externalId])
+  @@index([propertyId])
+  @@index([startTime])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------
