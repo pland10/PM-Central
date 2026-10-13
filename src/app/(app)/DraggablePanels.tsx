@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { useDashboardEdit } from "./DashboardEdit";
 
 // Drag-to-rearrange dashboard panels. The order is saved to the signed-in
 // user's Supabase user_metadata (follows them across devices) and mirrored to
@@ -46,6 +47,7 @@ export function DraggablePanels({
   initialOrder: string[] | null;
   canPersist: boolean;
 }) {
+  const { editing } = useDashboardEdit();
   const ids = useMemo(() => items.map((i) => i.id), [items]);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i.node])), [items]);
 
@@ -122,19 +124,22 @@ export function DraggablePanels({
 
   return (
     <div>
-      <div className="mb-1 flex h-4 items-center justify-end">
-        {isCustom && (
-          <button onClick={reset} className="text-xs text-slate-400 hover:text-brand-600">
-            Reset layout
-          </button>
-        )}
-      </div>
+      {editing && (
+        <div className="mb-3 flex items-center justify-between rounded-md border border-brand-500/30 bg-brand-50 px-3 py-2 text-sm text-brand-700">
+          <span>Drag any panel to reorder. Your layout saves automatically.</span>
+          {isCustom && (
+            <button onClick={reset} className="shrink-0 font-medium text-brand-600 hover:underline">
+              Reset to default
+            </button>
+          )}
+        </div>
+      )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={order} strategy={rectSortingStrategy}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {order.map((id) => {
               const node = byId.get(id);
-              return node ? <SortablePanel key={id} id={id} node={node} /> : null;
+              return node ? <SortablePanel key={id} id={id} node={node} editing={editing} /> : null;
             })}
           </div>
         </SortableContext>
@@ -143,33 +148,50 @@ export function DraggablePanels({
   );
 }
 
-function SortablePanel({ id, node }: { id: string; node: ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+function SortablePanel({ id, node, editing }: { id: string; node: ReactNode; editing: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: !editing,
+  });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 20 : undefined,
     opacity: isDragging ? 0.85 : 1,
   };
+
+  // Outside edit mode: a plain panel, fully interactive, no handles.
+  if (!editing) {
+    return (
+      <div ref={setNodeRef} style={style}>
+        {node}
+      </div>
+    );
+  }
+
+  // Edit mode: the whole panel is the drag handle. Its content is locked
+  // (pointer-events-none) so links/date pickers don't fire while dragging, and
+  // a ring + "Drag" badge make it obvious what's grabbable.
   return (
-    <div ref={setNodeRef} style={style} className="group relative">
-      <button
-        {...attributes}
-        {...listeners}
-        aria-label="Drag to reorder"
-        title="Drag to reorder"
-        className="absolute right-1.5 top-1.5 z-10 cursor-grab touch-none rounded p-1 text-slate-300 opacity-40 transition hover:bg-slate-100 hover:text-slate-500 group-hover:opacity-100 active:cursor-grabbing"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <circle cx="9" cy="6" r="1.6" />
-          <circle cx="15" cy="6" r="1.6" />
-          <circle cx="9" cy="12" r="1.6" />
-          <circle cx="15" cy="12" r="1.6" />
-          <circle cx="9" cy="18" r="1.6" />
-          <circle cx="15" cy="18" r="1.6" />
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="relative cursor-grab touch-none rounded-lg ring-2 ring-brand-500/50 active:cursor-grabbing"
+    >
+      <div className="pointer-events-none absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="8" cy="6" r="1.8" />
+          <circle cx="16" cy="6" r="1.8" />
+          <circle cx="8" cy="12" r="1.8" />
+          <circle cx="16" cy="12" r="1.8" />
+          <circle cx="8" cy="18" r="1.8" />
+          <circle cx="16" cy="18" r="1.8" />
         </svg>
-      </button>
-      {node}
+        Drag
+      </div>
+      <div className="pointer-events-none select-none">{node}</div>
     </div>
   );
 }
