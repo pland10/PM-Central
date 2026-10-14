@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 // Internal team chatter (RingCentral Team Messaging), kept separate from the
 // owner/tenant Search. Reuses the Search API with scope=internal, which only
@@ -146,11 +147,16 @@ export function TeamCommsClient() {
             nothing anyone asks falls through the cracks.
           </p>
         </div>
-        {fresh.updatedAt && (
-          <div className={`shrink-0 text-xs font-medium ${freshColor}`} title={fresh.detail || ""}>
-            ● {fresh.stuck ? fresh.detail || "sync stuck" : `Updated ${timeAgo(fresh.updatedAt)}`}
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          <Link href="/team-comms/capture" className="text-xs font-medium text-brand-600 hover:underline">
+            ⚙ Capture settings
+          </Link>
+          {fresh.updatedAt && (
+            <div className={`text-xs font-medium ${freshColor}`} title={fresh.detail || ""}>
+              ● {fresh.stuck ? fresh.detail || "sync stuck" : `Updated ${timeAgo(fresh.updatedAt)}`}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Keyword */}
