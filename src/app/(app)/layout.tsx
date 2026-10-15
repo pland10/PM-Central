@@ -166,9 +166,9 @@ const navLayout: NavEntry[] = [
   { item: "dashboard" },
   { item: "search" },
   { item: "teamComms" },
-  { item: "showings" },
   { item: "invoicing" },
   { item: "inspections" },
+  { item: "showings" },
   {
     heading: "Property Data",
     items: ["properties", "portfolios", "leases", "tenants", "workOrders"],

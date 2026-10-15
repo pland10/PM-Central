@@ -84,7 +84,7 @@ export function DataTable<T>({
   initialFacets,
   initialColumnFilters,
   exportName,
-  stickyHeader = false,
+  stickyHeader = true,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -101,7 +101,8 @@ export function DataTable<T>({
   // sorted) view as an .xlsx named after this. Omit to hide the button.
   exportName?: string;
   // Lock the header row and scroll the rows underneath it (the table body
-  // scrolls inside a bounded box). Opt-in so other tables are unchanged.
+  // scrolls inside a bounded box). On by default for all list tables; pass
+  // stickyHeader={false} to opt a table out.
   stickyHeader?: boolean;
 }) {
   const [q, setQ] = useState("");
