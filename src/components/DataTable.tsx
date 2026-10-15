@@ -84,6 +84,7 @@ export function DataTable<T>({
   initialFacets,
   initialColumnFilters,
   exportName,
+  stickyHeader = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -99,6 +100,9 @@ export function DataTable<T>({
   // When set, an Export button appears that downloads the current (filtered +
   // sorted) view as an .xlsx named after this. Omit to hide the button.
   exportName?: string;
+  // Lock the header row and scroll the rows underneath it (the table body
+  // scrolls inside a bounded box). Opt-in so other tables are unchanged.
+  stickyHeader?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
@@ -343,7 +347,11 @@ export function DataTable<T>({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div
+        className={`rounded-lg border border-slate-200 bg-white ${
+          stickyHeader ? "max-h-[calc(100vh-14rem)] overflow-auto" : "overflow-hidden"
+        }`}
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -357,6 +365,10 @@ export function DataTable<T>({
                     className={[
                       "px-4 py-3 font-medium",
                       c.align === "right" ? "text-right" : "",
+                      // Keep the header visible while the rows scroll. The cell
+                      // needs its own background + border since the <tr>'s don't
+                      // paint over sticky scrolling content.
+                      stickyHeader ? "sticky top-0 z-10 bg-slate-50 border-b border-slate-200" : "",
                     ].join(" ")}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.align === "right" ? "flex-row-reverse" : ""}`}>
