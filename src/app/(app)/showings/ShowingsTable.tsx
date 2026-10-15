@@ -296,7 +296,6 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       facets={facets}
       initialSort={{ key: "when", dir: "asc" }}
       initialFacets={{ window: "upcoming" }}
-      stickyHeader
     />
   );
 }
