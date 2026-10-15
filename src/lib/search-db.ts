@@ -29,7 +29,7 @@ const COLUMNS = Prisma.sql`
   id, source_id, type, content, subject, direction, outcome, duration,
   deal_id, deal_name, pipeline_name, contact_names, contact_emails,
   contact_phones, assignee_name, property_address, ls_link, due_at,
-  completed_at, created_at, synced_at`;
+  completed_at, created_at, synced_at, attachments`;
 
 // Fields the autocomplete can suggest over. Allow-listed so the column name can
 // be interpolated into SQL safely (never user-controlled).
@@ -77,11 +77,30 @@ function buildWhere(f: SearchFilters): Prisma.Sql {
   return conds.length ? Prisma.join(conds, " AND ") : Prisma.sql`TRUE`;
 }
 
+// The RingCentral chat sync adds activities.attachments; make sure the column
+// exists before SELECTing it, so Search/Team Comms don't break if PM-Central
+// deploys before that sync has run. Additive + idempotent; runs once per
+// process (cached promise).
+let attachmentsColumn: Promise<void> | null = null;
+function ensureAttachmentsColumn(): Promise<void> {
+  if (!attachmentsColumn) {
+    attachmentsColumn = prisma
+      .$executeRawUnsafe(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS attachments jsonb`)
+      .then(() => undefined)
+      .catch((e) => {
+        attachmentsColumn = null; // let a later call retry
+        throw e;
+      });
+  }
+  return attachmentsColumn;
+}
+
 export async function searchActivities(
   f: SearchFilters,
   offset: number,
   limit: number
 ): Promise<Record<string, unknown>[]> {
+  await ensureAttachmentsColumn();
   const where = buildWhere(f);
   return prisma.$queryRaw<Record<string, unknown>[]>(
     Prisma.sql`SELECT ${COLUMNS} FROM activities WHERE ${where}

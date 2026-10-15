@@ -2,10 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 // Internal team chatter (RingCentral Team Messaging), kept separate from the
 // owner/tenant Search. Reuses the Search API with scope=internal, which only
 // returns the internal pipelines.
+
+type Attachment = {
+  name?: string | null;
+  type?: string | null;
+  url?: string | null;
+  isImage?: boolean;
+  size?: number | null;
+};
 
 type ChatRow = {
   id: string;
@@ -16,6 +25,7 @@ type ChatRow = {
   contact_names: string | null; // author
   ls_link: string | null;
   created_at: string | null;
+  attachments: Attachment[] | null;
 };
 
 const PAGE_SIZES = [20, 40, 60, 100];
@@ -61,6 +71,13 @@ function timeAgo(iso: string) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function fmtSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // The content is stored as "<message>\n\nFrom: <author>"; the author is shown
@@ -282,6 +299,43 @@ export function TeamCommsClient() {
                     </button>
                   )}
                 </>
+              )}
+              {r.attachments && r.attachments.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {r.attachments.map((a, i) =>
+                    !a.url ? null : a.isImage ? (
+                      <a
+                        key={i}
+                        href={a.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={a.name || "image"}
+                        className="relative block h-24 w-24 overflow-hidden rounded border border-slate-200 bg-slate-100"
+                      >
+                        <Image
+                          src={a.url}
+                          alt={a.name || "Shared image"}
+                          fill
+                          sizes="96px"
+                          quality={65}
+                          className="object-cover transition-transform hover:scale-105"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        key={i}
+                        href={a.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600"
+                      >
+                        <span aria-hidden>📎</span>
+                        <span className="max-w-[200px] truncate">{a.name || "file"}</span>
+                        {a.size ? <span className="text-slate-400">· {fmtSize(a.size)}</span> : null}
+                      </a>
+                    )
+                  )}
+                </div>
               )}
             </div>
           );
