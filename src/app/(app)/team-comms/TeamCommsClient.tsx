@@ -80,6 +80,52 @@ function fmtSize(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function fmtTime(iso: string | null) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+// Consecutive messages from the same sender in the same channel are shown as one
+// grouped card, as long as the gap between them stays within this window.
+const GROUP_GAP_MS = 2 * 60 * 1000;
+
+type MsgGroup = {
+  key: string;
+  channel: string;
+  author: string | null;
+  direction: string | null;
+  link: string | null;
+  messages: ChatRow[]; // chronological (oldest first)
+};
+
+// rows arrive newest-first; groups stay newest-first, messages within a group
+// are ordered oldest→newest.
+function groupRows(rows: ChatRow[]): MsgGroup[] {
+  const groups: MsgGroup[] = [];
+  for (const r of rows) {
+    const channel = r.subject || r.deal_name || "Chat";
+    const author = r.contact_names || null;
+    const t = r.created_at ? new Date(r.created_at).getTime() : NaN;
+    const g = groups[groups.length - 1];
+    const prev = g ? g.messages[g.messages.length - 1] : null; // most recently added
+    const prevT = prev?.created_at ? new Date(prev.created_at).getTime() : NaN;
+    const mergeable =
+      !!g &&
+      g.channel === channel &&
+      (g.author || "") === (author || "") &&
+      Number.isFinite(t) &&
+      Number.isFinite(prevT) &&
+      Math.abs(prevT - t) <= GROUP_GAP_MS;
+    if (mergeable) {
+      g!.messages.push(r);
+    } else {
+      groups.push({ key: r.id, channel, author, direction: r.direction, link: r.ls_link, messages: [r] });
+    }
+  }
+  for (const g of groups) g.messages.reverse();
+  return groups;
+}
+
 // The content is stored as "<message>\n\nFrom: <author>"; the author is shown
 // separately, so strip that trailing line from the displayed body.
 function messageBody(content: string | null): string {
@@ -241,26 +287,25 @@ export function TeamCommsClient() {
             No messages.
           </div>
         )}
-        {rows.map((r) => {
-          const channel = r.subject || r.deal_name || "Chat";
-          const body = messageBody(r.content);
-          const isOpen = expanded.has(r.id);
-          const longish = body.length > 160 || body.includes("\n");
+        {groupRows(rows).map((g) => {
+          const multi = g.messages.length > 1;
           return (
-            <div key={r.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div key={g.key} className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="mb-1 flex items-center gap-2 text-xs">
-                <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${channelClass(channel)}`}>
-                  {channel}
+                <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${channelClass(g.channel)}`}>
+                  {g.channel}
                 </span>
-                {r.direction && (
+                {g.direction && (
                   <span className="text-slate-400">
-                    {r.direction === "outbound" ? "from me" : "inbound"}
+                    {g.direction === "outbound" ? "from me" : "inbound"}
                   </span>
                 )}
-                <span className="ml-auto text-slate-400">{fmtDateTime(r.created_at)}</span>
-                {r.ls_link && (
+                <span className="ml-auto text-slate-400">
+                  {fmtDateTime(g.messages[g.messages.length - 1].created_at)}
+                </span>
+                {g.link && (
                   <a
-                    href={r.ls_link}
+                    href={g.link}
                     target="_blank"
                     rel="noreferrer"
                     className="font-medium text-brand-600 hover:underline"
@@ -269,74 +314,92 @@ export function TeamCommsClient() {
                   </a>
                 )}
               </div>
-              {r.contact_names && (
-                <div className="text-sm font-medium text-slate-800">{r.contact_names}</div>
-              )}
-              {body && (
-                <>
-                  <div
-                    className={
-                      isOpen
-                        ? "mt-1 whitespace-pre-wrap text-sm text-slate-600"
-                        : "mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-slate-600"
-                    }
-                  >
-                    {body}
-                  </div>
-                  {longish && (
-                    <button
-                      onClick={() =>
-                        setExpanded((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(r.id)) next.delete(r.id);
-                          else next.add(r.id);
-                          return next;
-                        })
-                      }
-                      className="mt-1 text-xs font-medium text-brand-600 hover:underline"
-                    >
-                      {isOpen ? "Show less" : "Show more"}
-                    </button>
-                  )}
-                </>
-              )}
-              {r.attachments && r.attachments.length > 0 && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {r.attachments.map((a, i) =>
-                    !a.url ? null : a.isImage ? (
-                      <a
-                        key={i}
-                        href={a.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={a.name || "image"}
-                        className="relative block h-24 w-24 overflow-hidden rounded border border-slate-200 bg-slate-100"
-                      >
-                        <Image
-                          src={a.url}
-                          alt={a.name || "Shared image"}
-                          fill
-                          sizes="96px"
-                          quality={65}
-                          className="object-cover transition-transform hover:scale-105"
-                        />
-                      </a>
-                    ) : (
-                      <a
-                        key={i}
-                        href={a.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600"
-                      >
-                        <span aria-hidden>📎</span>
-                        <span className="max-w-[200px] truncate">{a.name || "file"}</span>
-                        {a.size ? <span className="text-slate-400">· {fmtSize(a.size)}</span> : null}
-                      </a>
-                    )
-                  )}
-                </div>
-              )}
+              {g.author && <div className="text-sm font-medium text-slate-800">{g.author}</div>}
+
+              <div className="mt-1 space-y-1.5">
+                {g.messages.map((r) => {
+                  const body = messageBody(r.content);
+                  const isOpen = expanded.has(r.id);
+                  const longish = body.length > 160 || body.includes("\n");
+                  const atts = r.attachments || [];
+                  return (
+                    <div key={r.id} className="flex gap-2">
+                      {multi && (
+                        <span className="mt-0.5 w-12 shrink-0 text-[11px] tabular-nums text-slate-400">
+                          {fmtTime(r.created_at)}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        {body && (
+                          <>
+                            <div
+                              className={
+                                isOpen
+                                  ? "whitespace-pre-wrap text-sm text-slate-600"
+                                  : "line-clamp-3 whitespace-pre-wrap text-sm text-slate-600"
+                              }
+                            >
+                              {body}
+                            </div>
+                            {longish && (
+                              <button
+                                onClick={() =>
+                                  setExpanded((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(r.id)) next.delete(r.id);
+                                    else next.add(r.id);
+                                    return next;
+                                  })
+                                }
+                                className="text-xs font-medium text-brand-600 hover:underline"
+                              >
+                                {isOpen ? "Show less" : "Show more"}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {atts.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {atts.map((a, i) =>
+                              !a.url ? null : a.isImage ? (
+                                <a
+                                  key={i}
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={a.name || "image"}
+                                  className="relative block h-24 w-24 overflow-hidden rounded border border-slate-200 bg-slate-100"
+                                >
+                                  <Image
+                                    src={a.url}
+                                    alt={a.name || "Shared image"}
+                                    fill
+                                    sizes="96px"
+                                    quality={65}
+                                    className="object-cover transition-transform hover:scale-105"
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={i}
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600"
+                                >
+                                  <span aria-hidden>📎</span>
+                                  <span className="max-w-[200px] truncate">{a.name || "file"}</span>
+                                  {a.size ? <span className="text-slate-400">· {fmtSize(a.size)}</span> : null}
+                                </a>
+                              )
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
