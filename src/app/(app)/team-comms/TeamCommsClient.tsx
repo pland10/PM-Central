@@ -126,6 +126,44 @@ function groupRows(rows: ChatRow[]): MsgGroup[] {
   return groups;
 }
 
+// Message body clamped to 3 lines, with a Show more/less toggle that appears
+// ONLY when the text actually overflows (measured), not just because it has a
+// line break — otherwise short multi-line messages showed a toggle that did
+// nothing.
+function ClampedText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) setOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [text]);
+
+  return (
+    <>
+      <div
+        ref={ref}
+        className={
+          open
+            ? "whitespace-pre-wrap text-sm text-slate-600"
+            : "line-clamp-3 whitespace-pre-wrap text-sm text-slate-600"
+        }
+      >
+        {text}
+      </div>
+      {(overflows || open) && (
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-xs font-medium text-brand-600 hover:underline"
+        >
+          {open ? "Show less" : "Show more"}
+        </button>
+      )}
+    </>
+  );
+}
+
 // The content is stored as "<message>\n\nFrom: <author>"; the author is shown
 // separately, so strip that trailing line from the displayed body.
 function messageBody(content: string | null): string {
@@ -144,7 +182,6 @@ export function TeamCommsClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fresh, setFresh] = useState<{ updatedAt?: string; stuck?: boolean; detail?: string }>({});
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const seq = useRef(0);
 
@@ -319,8 +356,6 @@ export function TeamCommsClient() {
               <div className="mt-1 space-y-1.5">
                 {g.messages.map((r) => {
                   const body = messageBody(r.content);
-                  const isOpen = expanded.has(r.id);
-                  const longish = body.length > 160 || body.includes("\n");
                   const atts = r.attachments || [];
                   return (
                     <div key={r.id} className="flex gap-2">
@@ -330,34 +365,7 @@ export function TeamCommsClient() {
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
-                        {body && (
-                          <>
-                            <div
-                              className={
-                                isOpen
-                                  ? "whitespace-pre-wrap text-sm text-slate-600"
-                                  : "line-clamp-3 whitespace-pre-wrap text-sm text-slate-600"
-                              }
-                            >
-                              {body}
-                            </div>
-                            {longish && (
-                              <button
-                                onClick={() =>
-                                  setExpanded((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(r.id)) next.delete(r.id);
-                                    else next.add(r.id);
-                                    return next;
-                                  })
-                                }
-                                className="text-xs font-medium text-brand-600 hover:underline"
-                              >
-                                {isOpen ? "Show less" : "Show more"}
-                              </button>
-                            )}
-                          </>
-                        )}
+                        {body && <ClampedText text={body} />}
                         {atts.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
                             {atts.map((a, i) =>
