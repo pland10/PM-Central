@@ -114,7 +114,7 @@ export default async function InspectionDetailPage({
         />
       )}
 
-      {moveIn && <MoveInDetailBody inspection={insp} checklist={checklist} />}
+      {moveIn && <MoveInDetailBody inspection={insp} checklist={checklist} photos={photos} />}
 
       {!moveIn && (
       <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-4">

@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { InspectionDetail, InspectionMeta, MoveInMeta } from "@/lib/inspections/types";
-import { MOVE_IN_TEMPLATE, type MoveInItem } from "@/lib/inspections/move-in-template";
+import type { InspectionDetail, InspectionMeta, MoveInMeta, MoveInRoom } from "@/lib/inspections/types";
+import {
+  buildMoveInSections,
+  defaultRoomLabel,
+  defaultRooms,
+  MAX_ROOMS,
+  type MoveInItem,
+} from "@/lib/inspections/move-in-template";
 
 // One answer per checklist item. For "condition"/"value" items only `note` is
 // used (the note is the value for "value" items); "working" items also use
@@ -41,14 +47,48 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
 
   const [answers, setAnswers] = useState<Record<string, Answer>>(() => seedAnswers(initial));
 
+  // Configurable rooms (1–6 each) with custom labels. Seed from saved meta, or
+  // the default layout for a new inspection.
+  const [bathrooms, setBathrooms] = useState<MoveInRoom[]>(
+    () => m.bathrooms?.length ? m.bathrooms : defaultRooms("bath")
+  );
+  const [bedrooms, setBedrooms] = useState<MoveInRoom[]>(
+    () => m.bedrooms?.length ? m.bedrooms : defaultRooms("bed")
+  );
+
+  function setRoomCount(kind: "bed" | "bath", n: number) {
+    const setter = kind === "bed" ? setBedrooms : setBathrooms;
+    setter((prev) => {
+      if (n <= prev.length) return prev.slice(0, n);
+      const next = [...prev];
+      for (let i = prev.length; i < n; i++) {
+        next.push({ id: `${kind}${i + 1}`, label: defaultRoomLabel(kind, i + 1) });
+      }
+      return next;
+    });
+  }
+  function setRoomLabel(id: string, label: string) {
+    const kind = id.startsWith("bath") ? "bath" : "bed";
+    const setter = kind === "bed" ? setBedrooms : setBathrooms;
+    setter((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
+  }
+
+  // The ordered sections (fixed + the chosen rooms, with live labels).
+  const sections = buildMoveInSections({ bathrooms, bedrooms });
+  const roomLabelById = new Map(
+    [...bathrooms, ...bedrooms].map((r) => [r.id, r.label] as const)
+  );
+
   // Typed signatures (name + date) for tenant and PM.
   const [tenantSigName, setTenantSigName] = useState(m.tenantSigName ?? "");
   const [tenantSigDate, setTenantSigDate] = useState(m.tenantSigDate ?? "");
   const [pmSigName, setPmSigName] = useState(m.pmSigName ?? "");
   const [pmSigDate, setPmSigDate] = useState(m.pmSigDate ?? "");
 
-  // Photos staged on a NEW inspection (uploaded after it has an id).
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  // Photos staged on a NEW inspection (uploaded after it has an id). `label`
+  // ties a photo to a specific item (appliance plate / utility label); "" is a
+  // general inspection photo.
+  const [photos, setPhotos] = useState<{ file: File; url: string; label: string }[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -70,11 +110,13 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
     });
   }
 
-  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  function addFiles(label: string, files: File[]) {
     if (files.length) {
-      setPhotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
+      setPhotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f), label }))]);
     }
+  }
+  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    addFiles("", Array.from(e.target.files ?? []));
     if (photoInputRef.current) photoInputRef.current.value = "";
   }
   function removePhoto(i: number) {
@@ -97,7 +139,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
 
     // Only persist items the inspector actually filled in; the rest render
     // blank from the template on the detail page.
-    const checklist = MOVE_IN_TEMPLATE.flatMap((section) =>
+    const checklist = sections.flatMap((section) =>
       section.items
         .map((item) => ({ item, ans: answers[item.key] }))
         .filter(({ ans }) => ans && (ans.status || ans.note.trim()))
@@ -117,6 +159,8 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
       tenantSigDate: tenantSigDate || undefined,
       pmSigName: pmSigName.trim() || undefined,
       pmSigDate: pmSigDate || undefined,
+      bathrooms: bathrooms.map((r) => ({ id: r.id, label: r.label.trim() || r.id })),
+      bedrooms: bedrooms.map((r) => ({ id: r.id, label: r.label.trim() || r.id })),
     };
 
     const payload = {
@@ -150,6 +194,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
         try {
           const fd = new FormData();
           fd.append("photo", photos[i].file);
+          if (photos[i].label) fd.append("label", photos[i].label);
           const r = await fetch(`/api/inspections/${id}/photos`, { method: "POST", body: fd });
           if (!r.ok) failed++;
         } catch {
@@ -233,27 +278,81 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
             />
           </Labeled>
+          <Labeled label="Bedrooms">
+            <select
+              value={bedrooms.length}
+              onChange={(e) => setRoomCount("bed", Number(e.target.value))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+            >
+              {Array.from({ length: MAX_ROOMS }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </Labeled>
+          <Labeled label="Bathrooms">
+            <select
+              value={bathrooms.length}
+              onChange={(e) => setRoomCount("bath", Number(e.target.value))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+            >
+              {Array.from({ length: MAX_ROOMS }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </Labeled>
         </div>
+        <p className="mt-2 text-xs text-slate-400">
+          Rename any bedroom or bathroom below (e.g. “Bedroom 2 — upstairs left”).
+        </p>
       </Section>
 
-      {MOVE_IN_TEMPLATE.map((section) => (
-        <Section
-          key={section.id}
-          title={section.title}
-          hint={section.optional ? "If applicable" : undefined}
-        >
-          <div className="space-y-3">
-            {section.items.map((item) => (
-              <ItemRow
-                key={item.key}
-                item={item}
-                answer={answers[item.key] ?? { status: "", note: "" }}
-                onChange={(patch) => setAnswer(item.key, patch)}
-              />
-            ))}
-          </div>
-        </Section>
-      ))}
+      {sections.map((section) => {
+        const isRoom = roomLabelById.has(section.id);
+        return (
+          <Section
+            key={section.id}
+            title={
+              isRoom ? (
+                <input
+                  value={roomLabelById.get(section.id) ?? ""}
+                  onChange={(e) => setRoomLabel(section.id, e.target.value)}
+                  placeholder="Room label"
+                  className="w-full max-w-xs rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-ink outline-none focus:border-brand-500"
+                />
+              ) : (
+                section.title
+              )
+            }
+            hint={section.optional ? "If applicable" : undefined}
+          >
+            <div className="space-y-3">
+              {section.items.map((item) => {
+                const label = `${section.title} — ${item.label}`;
+                const itemPhotos = item.photo
+                  ? photos
+                      .map((p, idx) => ({ ...p, idx }))
+                      .filter((p) => p.label === label)
+                  : [];
+                return (
+                  <ItemRow
+                    key={item.key}
+                    item={item}
+                    answer={answers[item.key] ?? { status: "", note: "" }}
+                    onChange={(patch) => setAnswer(item.key, patch)}
+                    photos={itemPhotos}
+                    onAddPhotos={(files) => addFiles(label, files)}
+                    onRemovePhoto={removePhoto}
+                  />
+                );
+              })}
+            </div>
+          </Section>
+        );
+      })}
 
       <Section title="Additional notes / comments">
         <textarea
@@ -371,10 +470,16 @@ function ItemRow({
   item,
   answer,
   onChange,
+  photos = [],
+  onAddPhotos,
+  onRemovePhoto,
 }: {
   item: MoveInItem;
   answer: Answer;
   onChange: (patch: Partial<Answer>) => void;
+  photos?: { url: string; idx: number }[];
+  onAddPhotos?: (files: File[]) => void;
+  onRemovePhoto?: (idx: number) => void;
 }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
@@ -419,6 +524,47 @@ function ItemRow({
         }
         className="mt-1.5 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
       />
+      {item.photo && (
+        <div className="mt-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              📷 Add photo
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  onAddPhotos?.(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span className="text-[11px] text-slate-400">Serial / model plate or label</span>
+          </div>
+          {photos.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {photos.map((p) => (
+                <div
+                  key={p.idx}
+                  className="relative h-16 w-16 overflow-hidden rounded border border-slate-200 bg-slate-100"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => onRemovePhoto?.(p.idx)}
+                    className="absolute right-0.5 top-0.5 rounded bg-black/50 px-1 text-[10px] leading-4 text-white hover:bg-black/70"
+                    aria-label="Remove photo"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -437,14 +583,14 @@ function Section({
   hint,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-2">
-        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        <div className="text-sm font-semibold text-ink">{title}</div>
         {hint && <p className="text-xs text-slate-400">{hint}</p>}
       </div>
       {children}

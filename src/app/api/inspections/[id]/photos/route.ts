@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getInspectionsDb, INSPECTION_PHOTOS_BUCKET } from "@/lib/inspections/supabase";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
+import { setPhotoLabel } from "@/lib/inspections/db";
 
 // Upload a photo to the inspection-photos bucket (Supabase Storage) and record
 // it in the single DB (Prisma), or delete one. The row lives in Postgres; the
@@ -31,6 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
+  const labelRaw = form?.get("label");
+  const label = typeof labelRaw === "string" && labelRaw.trim() ? labelRaw.trim() : null;
 
   const dot = file.name.lastIndexOf(".");
   let ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : ".jpg";
@@ -56,6 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         url: pub.publicUrl,
       },
     });
+    if (label) await setPhotoLabel(row.id, label);
     return NextResponse.json(
       {
         id: row.id,
@@ -63,6 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         filename: row.filename,
         original_name: row.original_name,
         url: row.url,
+        label,
       },
       { status: 201 }
     );

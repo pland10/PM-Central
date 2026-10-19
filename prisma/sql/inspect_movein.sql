@@ -10,6 +10,10 @@
 ALTER TABLE pmi_inspect_inspections ADD COLUMN IF NOT EXISTS inspection_type TEXT;
 
 -- Move-in header + typed signatures (tenant names, move-in date, signature
--- name/date for tenant and PM). The room-by-room answers live in the existing
--- checklist table.
+-- name/date for tenant and PM) plus chosen bedrooms/bathrooms and their labels.
+-- The room-by-room answers live in the existing checklist table.
 ALTER TABLE pmi_inspect_inspections ADD COLUMN IF NOT EXISTS meta JSONB;
+
+-- Optional per-photo label, tying a photo to a specific move-in item (e.g. an
+-- appliance's serial/model plate or a utility label/location).
+ALTER TABLE pmi_inspect_photos ADD COLUMN IF NOT EXISTS label TEXT;

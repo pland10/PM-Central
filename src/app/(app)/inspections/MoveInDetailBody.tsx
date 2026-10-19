@@ -1,6 +1,6 @@
-import type { ChecklistItem, InspectionRow, MoveInMeta } from "@/lib/inspections/types";
+import type { ChecklistItem, InspectionPhoto, InspectionRow, MoveInMeta } from "@/lib/inspections/types";
 import { formatInspectionDate } from "@/lib/inspections/types";
-import { MOVE_IN_TEMPLATE } from "@/lib/inspections/move-in-template";
+import { buildMoveInSections } from "@/lib/inspections/move-in-template";
 
 // Read-only render of a move-in inspection: header details, the room-by-room
 // survey grouped by the template's sections (so order/labels/kinds come from the
@@ -8,12 +8,23 @@ import { MOVE_IN_TEMPLATE } from "@/lib/inspections/move-in-template";
 export function MoveInDetailBody({
   inspection,
   checklist,
+  photos = [],
 }: {
   inspection: InspectionRow;
   checklist: ChecklistItem[];
+  photos?: InspectionPhoto[];
 }) {
   const m: MoveInMeta = inspection.meta ?? {};
+  const sections = buildMoveInSections(m);
   const byKey = new Map(checklist.map((c) => [c.item_key ?? "", c]));
+  // Per-item photos grouped by their label ("<section> — <item>").
+  const photosByLabel = new Map<string, InspectionPhoto[]>();
+  for (const p of photos) {
+    if (!p.label) continue;
+    const arr = photosByLabel.get(p.label) ?? [];
+    arr.push(p);
+    photosByLabel.set(p.label, arr);
+  }
 
   return (
     <>
@@ -26,35 +37,58 @@ export function MoveInDetailBody({
         </div>
       </Card>
 
-      {MOVE_IN_TEMPLATE.map((section) => (
+      {sections.map((section) => (
         <Card key={section.id} title={section.title}>
           <ul className="divide-y divide-slate-100">
             {section.items.map((item) => {
               const saved = byKey.get(item.key);
               const note = saved?.issue_notes || "";
               const working = item.kind === "working" ? saved?.status || "" : "";
-              const answered = Boolean(working || note);
+              const itemPhotos = item.photo
+                ? photosByLabel.get(`${section.title} — ${item.label}`) ?? []
+                : [];
+              const answered = Boolean(working || note || itemPhotos.length);
               return (
-                <li key={item.key} className="flex items-start justify-between gap-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <div className="text-slate-800">{item.label}</div>
-                    {note && (
-                      <div className="text-xs text-slate-500">
-                        {item.kind === "value" ? note : <>Condition: {note}</>}
-                      </div>
+                <li key={item.key} className="py-2 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-slate-800">{item.label}</div>
+                      {note && (
+                        <div className="text-xs text-slate-500">
+                          {item.kind === "value" ? note : <>Condition: {note}</>}
+                        </div>
+                      )}
+                      {!answered && <div className="text-xs text-slate-300">Not recorded</div>}
+                    </div>
+                    {item.kind === "working" && working && (
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          working === "Yes"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {working}
+                      </span>
                     )}
-                    {!answered && <div className="text-xs text-slate-300">Not recorded</div>}
                   </div>
-                  {item.kind === "working" && working && (
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                        working === "Yes"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {working}
-                    </span>
+                  {itemPhotos.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      {itemPhotos.map((p) =>
+                        p.url ? (
+                          <a
+                            key={p.id}
+                            href={p.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block h-16 w-16 overflow-hidden rounded border border-slate-200 bg-slate-100"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={p.url} alt={item.label} className="h-full w-full object-cover" />
+                          </a>
+                        ) : null
+                      )}
+                    </div>
                   )}
                 </li>
               );
