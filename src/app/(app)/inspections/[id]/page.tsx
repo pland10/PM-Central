@@ -11,9 +11,11 @@ import {
   formatInspectionDate,
   parseSpecialInstructions,
 } from "@/lib/inspections/types";
+import { isMoveInType } from "@/lib/inspections/move-in-template";
 import { InspectionActions } from "../InspectionActions";
 import { CompleteAndSend } from "../CompleteAndSend";
 import { ResolveActions } from "../ResolveActions";
+import { MoveInDetailBody } from "../MoveInDetailBody";
 import { PhotoGallery } from "../PhotoGallery";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 
@@ -47,6 +49,7 @@ export default async function InspectionDetailPage({
 
   // "Needs attention" follow-up: whether it can become a Rentvine work order
   // (property must be linked) and the prefilled work-order description.
+  const moveIn = isMoveInType(insp.inspection_type);
   const flagged = needsAttention(insp.overall_status);
   const rvProp =
     flagged && insp.property_id != null
@@ -64,9 +67,16 @@ export default async function InspectionDetailPage({
 
       <div className="mt-2 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-ink">
-            {property?.name || "Inspection"}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-ink">
+              {property?.name || "Inspection"}
+            </h1>
+            {moveIn && (
+              <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                Move-in
+              </span>
+            )}
+          </div>
           {property?.address && <p className="text-sm text-slate-500">{property.address}</p>}
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -104,14 +114,18 @@ export default async function InspectionDetailPage({
         />
       )}
 
+      {moveIn && <MoveInDetailBody inspection={insp} checklist={checklist} />}
+
+      {!moveIn && (
       <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-4">
         <Field label="Date" value={formatInspectionDate(insp.inspection_date)} />
         <Field label="Time" value={insp.inspection_time || "—"} />
         <Field label="Inspector" value={insp.inspector_name || "—"} />
         <Field label="Reason" value={insp.inspection_reason || "—"} />
       </div>
+      )}
 
-      {(() => {
+      {!moveIn && (() => {
         const si = parseSpecialInstructions(insp.special_instructions);
         if (si.states.length) {
           return (
@@ -145,7 +159,7 @@ export default async function InspectionDetailPage({
         </Section>
       )}
 
-      {checklist.length > 0 && (
+      {!moveIn && checklist.length > 0 && (
         <Section title="Checklist">
           <ul className="divide-y divide-slate-100">
             {checklist.map((c) => {
@@ -175,7 +189,7 @@ export default async function InspectionDetailPage({
         </Section>
       )}
 
-      {workItems.length > 0 && (
+      {!moveIn && workItems.length > 0 && (
         <Section title="Work items">
           <table className="w-full text-sm">
             <thead>

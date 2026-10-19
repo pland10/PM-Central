@@ -8,6 +8,7 @@ import type {
   InspectionProperty,
   NamedOption,
   SpecialInstruction,
+  MoveInMeta,
 } from "./types";
 
 // Inspection data access over PM-Central's single database (Prisma/Postgres).
@@ -36,6 +37,8 @@ function ensureInspectionExtraColumns(): Promise<void> {
         ["resolved_by_user_id", "TEXT"],
         ["work_order_ref", "TEXT"],
         ["work_order_created_at", "TIMESTAMPTZ"],
+        ["inspection_type", "TEXT"],
+        ["meta", "JSONB"],
       ];
       for (const [name, type] of cols) {
         await prisma.$executeRawUnsafe(
@@ -61,6 +64,8 @@ type ExtraRow = {
   resolved_by_user_id: string | null;
   work_order_ref: string | null;
   work_order_created_at: Date | null;
+  inspection_type: string | null;
+  meta: unknown;
 };
 
 function photoIds(v: unknown): number[] | null {
@@ -81,7 +86,22 @@ function applyExtras(row: InspectionRow, e: ExtraRow | undefined): InspectionRow
     resolved_by_user_id: e.resolved_by_user_id ?? null,
     work_order_ref: e.work_order_ref ?? null,
     work_order_created_at: iso(e.work_order_created_at),
+    inspection_type: e.inspection_type ?? null,
+    meta: parseMeta(e.meta),
   };
+}
+
+function parseMeta(v: unknown): MoveInMeta | null {
+  if (!v) return null;
+  if (typeof v === "object") return v as MoveInMeta;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as MoveInMeta;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 async function fetchExtras(ids: number[]): Promise<Map<number, ExtraRow>> {
@@ -89,7 +109,8 @@ async function fetchExtras(ids: number[]): Promise<Map<number, ExtraRow>> {
   await ensureInspectionExtraColumns();
   const rows = await prisma.$queryRaw<ExtraRow[]>(Prisma.sql`
     SELECT id, owner_message, summary_photo_ids, resolution_status, resolution_note,
-           resolved_at, resolved_by_user_id, work_order_ref, work_order_created_at
+           resolved_at, resolved_by_user_id, work_order_ref, work_order_created_at,
+           inspection_type, meta
     FROM pmi_inspect_inspections
     WHERE id IN (${Prisma.join(ids)})
   `);
@@ -248,6 +269,23 @@ export async function setResolution(
         resolved_by_user_id = ${opts.userId ?? null},
         work_order_ref = ${woRef},
         work_order_created_at = ${kind === "work_order" ? new Date() : null}
+    WHERE id = ${id}
+  `);
+}
+
+// Store a move-in inspection's type + header/signature meta (JSON). Called by
+// the create/update API after the base row is written. A null type clears it
+// back to a routine inspection.
+export async function setInspectionTypeMeta(
+  id: number,
+  inspectionType: string | null,
+  meta: MoveInMeta | null
+): Promise<void> {
+  await ensureInspectionExtraColumns();
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE pmi_inspect_inspections
+    SET inspection_type = ${inspectionType},
+        meta = ${meta ? JSON.stringify(meta) : null}::jsonb
     WHERE id = ${id}
   `);
 }
