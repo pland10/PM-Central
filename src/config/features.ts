@@ -15,7 +15,8 @@ export type FeatureKey =
   | "search"
   | "teamComms"
   | "inspections"
-  | "invoicing";
+  | "invoicing"
+  | "securityDeposits";
 
 function flag(envName: string, defaultOn = true): boolean {
   const v = process.env[`FEATURE_${envName}`];
@@ -36,6 +37,7 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   teamComms: flag("TEAM_COMMS"),
   inspections: flag("INSPECTIONS"),
   invoicing: flag("INVOICING"),
+  securityDeposits: flag("SECURITY_DEPOSITS"),
 };
 
 export function isFeatureEnabled(key: FeatureKey): boolean {
