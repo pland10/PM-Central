@@ -180,10 +180,9 @@ const navLayout: NavEntry[] = [
   { item: "invoicing" },
   { item: "inspections" },
   { item: "showings" },
-  { item: "securityDeposits" },
   {
     heading: "Property Data",
-    items: ["properties", "portfolios", "leases", "tenants", "workOrders"],
+    items: ["properties", "portfolios", "leases", "tenants", "workOrders", "securityDeposits"],
   },
 ];
 

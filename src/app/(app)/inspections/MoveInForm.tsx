@@ -79,6 +79,20 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
     [...bathrooms, ...bedrooms].map((r) => [r.id, r.label] as const)
   );
 
+  const allSectionIds = ["details", ...sections.map((s) => s.id), "notes", "photos", "signatures"];
+  const setAllSections = (v: boolean) =>
+    setOpenSections(Object.fromEntries(allSectionIds.map((id) => [id, v])));
+
+  // How many items in a section have an answer (for the collapsed header count).
+  function filledCount(items: { key: string }[]): number {
+    let n = 0;
+    for (const it of items) {
+      const a = answers[it.key];
+      if (a && (a.status || a.note.trim())) n++;
+    }
+    return n;
+  }
+
   // Typed signatures (name + date) for tenant and PM.
   const [tenantSigName, setTenantSigName] = useState(m.tenantSigName ?? "");
   const [tenantSigDate, setTenantSigDate] = useState(m.tenantSigDate ?? "");
@@ -90,6 +104,13 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
   // general inspection photo.
   const [photos, setPhotos] = useState<{ file: File; url: string; label: string }[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Collapsible sections. "details" starts open; everything else collapsed so
+  // the long survey isn't one giant run-on.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const isOpen = (id: string) => openSections[id] ?? id === "details";
+  const toggleSection = (id: string) =>
+    setOpenSections((o) => ({ ...o, [id]: !(o[id] ?? id === "details") }));
 
   useEffect(() => {
     fetch("/api/inspections/meta", { cache: "no-store" })
@@ -220,8 +241,22 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      <Section title="Move-in details">
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="flex justify-end gap-3 text-xs font-medium text-brand-600">
+        <button type="button" onClick={() => setAllSections(true)}>
+          Expand all
+        </button>
+        <span className="text-slate-300">·</span>
+        <button type="button" onClick={() => setAllSections(false)}>
+          Collapse all
+        </button>
+      </div>
+
+      <Collapsible
+        title="Move-in details"
+        open={isOpen("details")}
+        onToggle={() => toggleSection("details")}
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Labeled label="Property *">
             <select
@@ -308,18 +343,33 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
         <p className="mt-2 text-xs text-slate-400">
           Rename any bedroom or bathroom below (e.g. “Bedroom 2 — upstairs left”).
         </p>
-      </Section>
+      </Collapsible>
 
       {sections.map((section) => {
         const isRoom = roomLabelById.has(section.id);
+        const total = section.items.length;
+        const done = filledCount(section.items);
         return (
-          <Section
+          <Collapsible
             key={section.id}
+            open={isOpen(section.id)}
+            onToggle={() => toggleSection(section.id)}
+            hint={section.optional ? "If applicable" : undefined}
+            summary={
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  done ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {done}/{total}
+              </span>
+            }
             title={
               isRoom ? (
                 <input
                   value={roomLabelById.get(section.id) ?? ""}
                   onChange={(e) => setRoomLabel(section.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
                   placeholder="Room label"
                   className="w-full max-w-xs rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-ink outline-none focus:border-brand-500"
                 />
@@ -327,7 +377,6 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
                 section.title
               )
             }
-            hint={section.optional ? "If applicable" : undefined}
           >
             <div className="space-y-3">
               {section.items.map((item) => {
@@ -350,20 +399,29 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
                 );
               })}
             </div>
-          </Section>
+          </Collapsible>
         );
       })}
 
-      <Section title="Additional notes / comments">
+      <Collapsible
+        title="Additional notes / comments"
+        open={isOpen("notes")}
+        onToggle={() => toggleSection("notes")}
+      >
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
-      </Section>
+      </Collapsible>
 
-      <Section title="Photos" hint="Attach photos of the unit's condition (optional).">
+      <Collapsible
+        title="Photos"
+        hint="General photos (optional)"
+        open={isOpen("photos")}
+        onToggle={() => toggleSection("photos")}
+      >
         <input
           ref={photoInputRef}
           type="file"
@@ -379,9 +437,9 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
         >
           + Add photos
         </button>
-        {photos.length > 0 && (
+        {photos.some((p) => !p.label) && (
           <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {photos.map((p, i) => (
+            {photos.map((p, i) => (!p.label ? (
               <div
                 key={i}
                 className="relative h-20 w-full overflow-hidden rounded border border-slate-200 bg-slate-100"
@@ -397,7 +455,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
                   ✕
                 </button>
               </div>
-            ))}
+            ) : null))}
           </div>
         )}
         {isEdit && (
@@ -405,9 +463,14 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
             Add or remove photos on the inspection page after saving.
           </p>
         )}
-      </Section>
+      </Collapsible>
 
-      <Section title="Signatures" hint="Typed name + date acknowledgment.">
+      <Collapsible
+        title="Signatures"
+        hint="Typed name + date"
+        open={isOpen("signatures")}
+        onToggle={() => toggleSection("signatures")}
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Tenant</div>
@@ -442,7 +505,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
             />
           </div>
         </div>
-      </Section>
+      </Collapsible>
 
       {error && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
@@ -578,22 +641,45 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function Section({
+function Collapsible({
   title,
   hint,
+  summary,
+  open,
+  onToggle,
   children,
 }: {
   title: React.ReactNode;
   hint?: string;
+  summary?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-2">
-        <div className="text-sm font-semibold text-ink">{title}</div>
-        {hint && <p className="text-xs text-slate-400">{hint}</p>}
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <div
+        onClick={onToggle}
+        className="flex cursor-pointer items-center gap-2 p-3"
+      >
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M7 5l6 5-6 5V5z" />
+        </svg>
+        <div className="min-w-0 flex-1">
+          {typeof title === "string" ? (
+            <span className="text-sm font-semibold text-ink">{title}</span>
+          ) : (
+            title
+          )}
+        </div>
+        {hint && <span className="shrink-0 text-xs text-slate-400">{hint}</span>}
+        {summary}
       </div>
-      {children}
+      {open && <div className="border-t border-slate-100 p-4 pt-3">{children}</div>}
     </div>
   );
 }
