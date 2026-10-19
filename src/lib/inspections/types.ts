@@ -37,6 +37,11 @@ export type InspectionRow = {
   photo_count?: number;
 };
 
+// A configurable room on a move-in inspection. `id` is the stable key prefix
+// for its checklist items (e.g. "bed3" -> "bed3.closets"); `label` is the
+// free-text display name ("Bedroom 2 — upstairs left").
+export type MoveInRoom = { id: string; label: string };
+
 // Move-in header fields + typed (name + date) signatures, stored on the
 // inspection's meta JSON. The room-by-room answers live in the checklist.
 export type MoveInMeta = {
@@ -46,6 +51,10 @@ export type MoveInMeta = {
   tenantSigDate?: string; // YYYY-MM-DD
   pmSigName?: string;
   pmSigDate?: string; // YYYY-MM-DD
+  // Chosen bedrooms/bathrooms + their labels. Absent on inspections created
+  // before this was configurable — callers fall back to the default layout.
+  bedrooms?: MoveInRoom[];
+  bathrooms?: MoveInRoom[];
 };
 
 // Whether an inspection's overall status flags it for follow-up (the badge the

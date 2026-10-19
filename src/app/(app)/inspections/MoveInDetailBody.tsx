@@ -1,6 +1,6 @@
 import type { ChecklistItem, InspectionRow, MoveInMeta } from "@/lib/inspections/types";
 import { formatInspectionDate } from "@/lib/inspections/types";
-import { MOVE_IN_TEMPLATE } from "@/lib/inspections/move-in-template";
+import { buildMoveInSections } from "@/lib/inspections/move-in-template";
 
 // Read-only render of a move-in inspection: header details, the room-by-room
 // survey grouped by the template's sections (so order/labels/kinds come from the
@@ -13,6 +13,7 @@ export function MoveInDetailBody({
   checklist: ChecklistItem[];
 }) {
   const m: MoveInMeta = inspection.meta ?? {};
+  const sections = buildMoveInSections(m);
   const byKey = new Map(checklist.map((c) => [c.item_key ?? "", c]));
 
   return (
@@ -26,7 +27,7 @@ export function MoveInDetailBody({
         </div>
       </Card>
 
-      {MOVE_IN_TEMPLATE.map((section) => (
+      {sections.map((section) => (
         <Card key={section.id} title={section.title}>
           <ul className="divide-y divide-slate-100">
             {section.items.map((item) => {
