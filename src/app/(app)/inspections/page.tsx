@@ -26,6 +26,12 @@ export default async function InspectionsPage() {
             Settings
           </Link>
           <Link
+            href="/inspections/new?type=move_in"
+            className="rounded-md border border-brand-300 px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            + Move-in
+          </Link>
+          <Link
             href="/inspections/new"
             className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >

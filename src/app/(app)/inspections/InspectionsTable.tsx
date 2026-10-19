@@ -51,7 +51,14 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       filter: { type: "text", value: (r) => `${r.property_name ?? ""} ${r.property_address ?? ""}` },
       render: (r) => (
         <div>
-          <div className="text-slate-800">{r.property_name || "—"}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-800">{r.property_name || "—"}</span>
+            {r.inspection_type === "move_in" && (
+              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                Move-in
+              </span>
+            )}
+          </div>
           {r.property_address && (
             <div className="text-xs text-slate-400">{r.property_address}</div>
           )}

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
+import { setInspectionTypeMeta } from "@/lib/inspections/db";
+import type { MoveInMeta } from "@/lib/inspections/types";
 
 // Create an inspection (+ its checklist and work items) in PM-Central's single
 // database (Prisma/Postgres). Records the creator.
@@ -77,6 +79,17 @@ export async function POST(req: NextRequest) {
           notes: s(w.notes),
         })),
       });
+    }
+
+    // Move-in inspections carry a type + header/signature meta (stored outside
+    // the Prisma model). Only write when this is a non-routine inspection.
+    const inspectionType = s(body.inspection_type);
+    if (inspectionType && inspectionType !== "routine") {
+      await setInspectionTypeMeta(
+        created.id,
+        inspectionType,
+        (body.meta ?? null) as MoveInMeta | null
+      );
     }
 
     return NextResponse.json({ id: created.id }, { status: 201 });

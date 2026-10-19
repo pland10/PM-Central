@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
+import { setInspectionTypeMeta } from "@/lib/inspections/db";
+import type { MoveInMeta } from "@/lib/inspections/types";
 
 // Update or soft-delete an inspection. Update: owner or can_edit_all. Delete:
 // owner or can_delete (soft delete via deleted_at). Writes to the single DB.
@@ -99,6 +101,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     await prisma.$transaction(ops);
+    // Move-in header/signature meta (stored outside the Prisma model). Only
+    // touch it when the client sent move-in fields, so routine edits are
+    // unaffected.
+    const inspectionType = s(body.inspection_type);
+    if (inspectionType === "move_in" || body.meta) {
+      await setInspectionTypeMeta(
+        inspectionId,
+        inspectionType || "move_in",
+        (body.meta ?? null) as MoveInMeta | null
+      );
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Update failed";
     return NextResponse.json({ error: message }, { status: 502 });

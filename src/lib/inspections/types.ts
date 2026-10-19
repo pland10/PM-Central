@@ -27,10 +27,25 @@ export type InspectionRow = {
   resolved_by_user_id?: string | null;
   work_order_ref?: string | null;
   work_order_created_at?: string | null;
+  // Inspection type ('routine' default / null, or 'move_in') and move-in header
+  // + typed signatures (JSON). Read via raw SQL, not in the Prisma model.
+  inspection_type?: string | null;
+  meta?: MoveInMeta | null;
   // joined / derived for the list view
   property_name?: string;
   property_address?: string;
   photo_count?: number;
+};
+
+// Move-in header fields + typed (name + date) signatures, stored on the
+// inspection's meta JSON. The room-by-room answers live in the checklist.
+export type MoveInMeta = {
+  tenantNames?: string;
+  moveInDate?: string; // YYYY-MM-DD
+  tenantSigName?: string;
+  tenantSigDate?: string; // YYYY-MM-DD
+  pmSigName?: string;
+  pmSigDate?: string; // YYYY-MM-DD
 };
 
 // Whether an inspection's overall status flags it for follow-up (the badge the
