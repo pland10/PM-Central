@@ -18,16 +18,29 @@ export function CompleteAndSend({
   id,
   photos,
   sentAt: initialSentAt,
+  ownerMessage: initialMessage,
+  savedPhotoIds,
 }: {
   id: number;
   photos: Photo[];
   sentAt: string | null;
+  ownerMessage?: string | null;
+  savedPhotoIds?: number[] | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<number>>(() => new Set(photos.map((p) => p.id)));
-  const [busy, setBusy] = useState(false);
+  // Prefill the photo selection from a saved draft, else select everything.
+  const [selected, setSelected] = useState<Set<number>>(() => {
+    const valid = new Set(photos.map((p) => p.id));
+    if (savedPhotoIds && savedPhotoIds.length) {
+      return new Set(savedPhotoIds.filter((pid) => valid.has(pid)));
+    }
+    return valid;
+  });
+  const [message, setMessage] = useState(initialMessage ?? "");
+  const [busy, setBusy] = useState<"" | "save" | "send">("");
   const [error, setError] = useState<string | null>(null);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<string | null>(initialSentAt);
 
   function toggle(pid: number) {
@@ -39,14 +52,37 @@ export function CompleteAndSend({
     });
   }
 
-  async function send() {
-    setBusy(true);
+  async function save() {
+    setBusy("save");
     setError(null);
+    setSavedNote(null);
+    try {
+      const res = await fetch(`/api/inspections/${id}/summary-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerMessage: message, photoIds: [...selected] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Couldn't save the draft.");
+        return;
+      }
+      setSavedNote("Saved.");
+      router.refresh();
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function send() {
+    setBusy("send");
+    setError(null);
+    setSavedNote(null);
     try {
       const res = await fetch(`/api/inspections/${id}/send-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoIds: [...selected] }),
+        body: JSON.stringify({ photoIds: [...selected], ownerMessage: message }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -57,9 +93,11 @@ export function CompleteAndSend({
       setOpen(false);
       router.refresh();
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
+
+  const busyAny = busy !== "";
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -73,12 +111,23 @@ export function CompleteAndSend({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
             <h2 className="text-base font-semibold text-slate-800">Send inspection summary</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Emails a summary (details, checklist, work items) to the inspections inbox. Choose
-              which photos to attach.
+              Emails a summary (details, checklist, work items) to the inspections inbox. Add a
+              message to the owner and choose which photos to attach. You can save without sending.
             </p>
+
+            <label className="mt-4 block">
+              <span className="text-xs font-medium text-slate-500">Message to owner</span>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                placeholder="Add a note for the owner (optional)…"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+              />
+            </label>
 
             {photos.length === 0 ? (
               <p className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
@@ -88,7 +137,7 @@ export function CompleteAndSend({
               <>
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
-                    {selected.size} of {photos.length} selected
+                    {selected.size} of {photos.length} photos selected
                   </span>
                   <div className="flex gap-3 text-xs font-medium text-brand-600">
                     <button onClick={() => setSelected(new Set(photos.map((p) => p.id)))}>All</button>
@@ -127,21 +176,35 @@ export function CompleteAndSend({
             )}
 
             {error && <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+            {savedNote && (
+              <div className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                {savedNote}
+              </div>
+            )}
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setOpen(false)}
-                disabled={busy}
+                disabled={busyAny}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                Cancel
+                Close
+              </button>
+              <button
+                onClick={save}
+                disabled={busyAny}
+                className="rounded-md border border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+              >
+                {busy === "save" ? "Saving…" : "Save"}
               </button>
               <button
                 onClick={send}
-                disabled={busy}
+                disabled={busyAny}
                 className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
               >
-                {busy ? "Sending…" : `Send${selected.size ? ` (${selected.size} photo${selected.size === 1 ? "" : "s"})` : ""}`}
+                {busy === "send"
+                  ? "Sending…"
+                  : `Send${selected.size ? ` (${selected.size} photo${selected.size === 1 ? "" : "s"})` : ""}`}
               </button>
             </div>
           </div>
