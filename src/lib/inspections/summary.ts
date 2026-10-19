@@ -1,6 +1,6 @@
 import type { InspectionRow, InspectionProperty, ChecklistItem, WorkItem, MoveInMeta } from "./types";
 import { formatInspectionDate, parseSpecialInstructions, isNotApplicable } from "./types";
-import { MOVE_IN_TEMPLATE, isMoveInType } from "./move-in-template";
+import { buildMoveInSections, isMoveInType } from "./move-in-template";
 
 // Builds the inspection summary email (subject + HTML) from an inspection's
 // data. Pure/presentational — the send route (api/inspections/[id]/send-summary)
@@ -146,7 +146,7 @@ function buildMoveInSummary(
   const section = (title: string, body: string) =>
     `<h3 style="margin:18px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#64748b">${esc(title)}</h3>${body}`;
 
-  const sectionsHtml = MOVE_IN_TEMPLATE.map((sec) => {
+  const sectionsHtml = buildMoveInSections(m).map((sec) => {
     const rows = sec.items
       .map((item) => {
         const saved = byKey.get(item.key);
