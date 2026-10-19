@@ -150,6 +150,17 @@ const nav: { href: string; label: string; feature: FeatureKey; icon: React.React
       </>
     ),
   },
+  {
+    href: "/security-deposits",
+    label: "Security Deposits",
+    feature: "securityDeposits",
+    icon: (
+      <>
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M2 11h20M7 15h4" />
+      </>
+    ),
+  },
 ];
 
 // Sidebar layout: a sequence of standalone items and labeled groups. Items are
@@ -169,6 +180,7 @@ const navLayout: NavEntry[] = [
   { item: "invoicing" },
   { item: "inspections" },
   { item: "showings" },
+  { item: "securityDeposits" },
   {
     heading: "Property Data",
     items: ["properties", "portfolios", "leases", "tenants", "workOrders"],
