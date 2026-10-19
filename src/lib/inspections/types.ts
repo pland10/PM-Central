@@ -76,6 +76,9 @@ export type InspectionPhoto = {
   filename: string | null;
   original_name: string | null;
   url: string | null;
+  // Optional tag tying a photo to a specific move-in item (e.g. an appliance
+  // serial/model plate or a utility label). Read via raw SQL, not in the model.
+  label?: string | null;
 };
 
 export type ChecklistItem = {

@@ -23,6 +23,9 @@ export type MoveInItem = {
   label: string;
   hint: string;
   kind: MoveInItemKind;
+  // When true, the form offers a photo capture on this item (e.g. an
+  // appliance's serial/model plate, or a utility label/location).
+  photo?: boolean;
 };
 
 export type MoveInSection = {
@@ -36,14 +39,14 @@ export const MAX_ROOMS = 6;
 export const DEFAULT_BEDROOMS = 4;
 export const DEFAULT_BATHROOMS = 2;
 
-function cond(key: string, label: string, hint: string): MoveInItem {
-  return { key, label, hint, kind: "condition" };
+function cond(key: string, label: string, hint: string, photo = false): MoveInItem {
+  return { key, label, hint, kind: "condition", photo };
 }
-function work(key: string, label: string, hint: string): MoveInItem {
-  return { key, label, hint, kind: "working" };
+function work(key: string, label: string, hint: string, photo = false): MoveInItem {
+  return { key, label, hint, kind: "working", photo };
 }
-function val(key: string, label: string, hint: string): MoveInItem {
-  return { key, label, hint, kind: "value" };
+function val(key: string, label: string, hint: string, photo = false): MoveInItem {
+  return { key, label, hint, kind: "value", photo };
 }
 
 // Per-room item sets, keyed by the room's id prefix.
@@ -73,18 +76,12 @@ const GENERAL: MoveInSection = {
   id: "general",
   title: "General Conditions",
   items: [
-    cond("general.walls", "Walls", "Holes, scratches, or peeling paint."),
-    cond("general.floors", "Floors", "Stains, scratches, or damage."),
-    cond("general.ceiling", "Ceiling", "Leaks, stains, cracks, or damage."),
-    cond("general.windows", "Windows", "Open, close, and lock; cracks or damaged seals."),
-    cond("general.doors", "Doors", "Function, hinges, locks, and damage."),
     val("general.cooling", "Cooling type", "What is the cooling type?"),
     val("general.heating", "Heating type", "What is the heating type?"),
     val("general.filter_size", "Filter size", "What is the filter size?"),
-    val("general.breaker_box", "Breaker box location", "Where is the breaker box?"),
-    val("general.water_shutoff", "Main water shut-off", "Where is the main water shut-off valve?"),
+    val("general.breaker_box", "Breaker box location", "Where is the breaker box? Add a photo.", true),
+    val("general.water_shutoff", "Main water shut-off", "Where is the valve? Add a photo.", true),
     val("general.gas_shutoff", "Gas shut-off", "Where is the gas shut-off valve?"),
-    val("general.gfi", "GFI plug location(s)", "Where are the GFI plugs?"),
   ],
 };
 
@@ -93,12 +90,12 @@ const KITCHEN: MoveInSection = {
   title: "Kitchen",
   items: [
     work("kitchen.sink", "Sink", "Leaks, water pressure, and drainage."),
-    work("kitchen.dishwasher", "Dishwasher", "Functionality, cleanliness, and leaks."),
-    work("kitchen.oven_stove", "Oven / Stove", "Burners and oven function; cleanliness."),
-    work("kitchen.refrigerator", "Refrigerator", "Cooling, door seals, and cleanliness."),
+    work("kitchen.dishwasher", "Dishwasher", "Function; add a photo of the serial/model plate.", true),
+    work("kitchen.oven_stove", "Oven / Stove", "Function; add a photo of the serial/model plate.", true),
+    work("kitchen.refrigerator", "Refrigerator", "Function; add a photo of the serial/model plate.", true),
     cond("kitchen.cabinets", "Cabinets / Drawers", "Handles, cleanliness, and damage."),
     cond("kitchen.countertops", "Countertops", "Cracks, burns, or damage."),
-    work("kitchen.microwave", "Microwave (if applicable)", "Cleanliness and functionality."),
+    work("kitchen.microwave", "Microwave (if applicable)", "Function; add a photo of the serial/model plate.", true),
   ],
 };
 
@@ -107,7 +104,7 @@ const LIVING: MoveInSection = {
   title: "Living Room",
   items: [
     cond("living.lighting", "Lighting fixtures", "All fixtures functional and undamaged."),
-    cond("living.hvac", "Heating / Air conditioning", "Units operate properly."),
+    cond("living.hvac", "Heating / Air conditioning", "Units operate; add a photo of the HVAC label.", true),
     cond("living.ceiling_fan", "Ceiling fan (if applicable)", "Operation, noise; remote batteries."),
     cond("living.walls", "Walls", "Holes, scuffs, or marks."),
     cond("living.floors", "Floors", "Scratches, stains, or carpet damage."),
@@ -119,8 +116,8 @@ const LAUNDRY: MoveInSection = {
   title: "Laundry Room",
   optional: true,
   items: [
-    work("laundry.washer", "Washer", "Functionality, water flow, and leaks."),
-    work("laundry.dryer", "Dryer", "Functionality and proper venting."),
+    work("laundry.washer", "Washer", "Function; add a photo of the serial/model plate.", true),
+    work("laundry.dryer", "Dryer", "Function; add a photo of the serial/model plate.", true),
     cond("laundry.cabinets", "Cabinets / Shelves", "Damage or cleanliness."),
     cond("laundry.flooring", "Flooring", "Water damage or stains."),
   ],
@@ -131,10 +128,44 @@ const EXTERIOR: MoveInSection = {
   title: "Exterior",
   optional: true,
   items: [
-    cond("exterior.yard", "Yard / Garden", "Landscaping and any damage."),
-    cond("exterior.gates_fence", "Gates / Fence", "Damage or functionality issues."),
     cond("exterior.lighting", "Lighting", "Exterior lights functional."),
     cond("exterior.mailbox", "Mailbox", "Secure and undamaged."),
+  ],
+};
+
+const FRONT_YARD: MoveInSection = {
+  id: "frontyard",
+  title: "Front Yard",
+  optional: true,
+  items: [
+    cond("frontyard.landscaping", "Landscaping / Lawn", "Condition of lawn and plantings."),
+    cond("frontyard.walkway", "Walkway / Driveway", "Cracks, damage, trip hazards."),
+    cond("frontyard.lighting", "Lighting", "Exterior front lights functional."),
+    cond("frontyard.entry", "Front door / Entry", "Door, lock, and entry condition."),
+  ],
+};
+
+const BACK_YARD: MoveInSection = {
+  id: "backyard",
+  title: "Back Yard",
+  optional: true,
+  items: [
+    cond("backyard.landscaping", "Landscaping / Lawn", "Condition of lawn and plantings."),
+    cond("backyard.fence", "Fence / Gates", "Damage or functionality issues."),
+    cond("backyard.patio", "Patio / Deck", "Condition and damage."),
+    cond("backyard.lighting", "Lighting", "Exterior rear lights functional."),
+  ],
+};
+
+const GARAGE: MoveInSection = {
+  id: "garage",
+  title: "Garage",
+  optional: true,
+  items: [
+    cond("garage.door", "Garage door / Opener", "Door operates; opener and remotes."),
+    cond("garage.walls_floor", "Walls / Floor", "Cracks, stains, or damage."),
+    cond("garage.lighting", "Lighting / Outlets", "Lights and outlets functional."),
+    cond("garage.windows_doors", "Windows / Doors", "Function, locks, and damage."),
   ],
 };
 
@@ -171,6 +202,9 @@ export function buildMoveInSections(meta?: MoveInMeta | null): MoveInSection[] {
     ...beds.map((r) => ({ id: r.id, title: r.label, items: bedroomItems(r.id) })),
     LAUNDRY,
     EXTERIOR,
+    FRONT_YARD,
+    BACK_YARD,
+    GARAGE,
   ];
 }
 
