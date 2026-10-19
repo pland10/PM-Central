@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
   InspectionRow,
@@ -17,6 +18,82 @@ import type {
 
 function iso(d: Date | null | undefined): string | null {
   return d ? d.toISOString() : null;
+}
+
+// The owner-message / draft / resolution columns live outside the Prisma model
+// (see prisma/sql/inspect_resolution.sql) so a not-yet-migrated database keeps
+// working. Add them on first use; idempotent and cached for the process.
+let extraColumnsReady: Promise<void> | null = null;
+function ensureInspectionExtraColumns(): Promise<void> {
+  if (!extraColumnsReady) {
+    extraColumnsReady = (async () => {
+      const cols: [string, string][] = [
+        ["owner_message", "TEXT"],
+        ["summary_photo_ids", "JSONB"],
+        ["resolution_status", "TEXT"],
+        ["resolution_note", "TEXT"],
+        ["resolved_at", "TIMESTAMPTZ"],
+        ["resolved_by_user_id", "TEXT"],
+        ["work_order_ref", "TEXT"],
+        ["work_order_created_at", "TIMESTAMPTZ"],
+      ];
+      for (const [name, type] of cols) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE pmi_inspect_inspections ADD COLUMN IF NOT EXISTS ${name} ${type}`
+        );
+      }
+    })().catch((e) => {
+      // Let a later call retry rather than caching a failure forever.
+      extraColumnsReady = null;
+      throw e;
+    });
+  }
+  return extraColumnsReady;
+}
+
+type ExtraRow = {
+  id: number;
+  owner_message: string | null;
+  summary_photo_ids: unknown;
+  resolution_status: string | null;
+  resolution_note: string | null;
+  resolved_at: Date | null;
+  resolved_by_user_id: string | null;
+  work_order_ref: string | null;
+  work_order_created_at: Date | null;
+};
+
+function photoIds(v: unknown): number[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.map((n) => Number(n)).filter(Number.isFinite);
+  return out.length ? out : [];
+}
+
+function applyExtras(row: InspectionRow, e: ExtraRow | undefined): InspectionRow {
+  if (!e) return row;
+  return {
+    ...row,
+    owner_message: e.owner_message ?? null,
+    summary_photo_ids: photoIds(e.summary_photo_ids),
+    resolution_status: e.resolution_status ?? null,
+    resolution_note: e.resolution_note ?? null,
+    resolved_at: iso(e.resolved_at),
+    resolved_by_user_id: e.resolved_by_user_id ?? null,
+    work_order_ref: e.work_order_ref ?? null,
+    work_order_created_at: iso(e.work_order_created_at),
+  };
+}
+
+async function fetchExtras(ids: number[]): Promise<Map<number, ExtraRow>> {
+  if (!ids.length) return new Map();
+  await ensureInspectionExtraColumns();
+  const rows = await prisma.$queryRaw<ExtraRow[]>(Prisma.sql`
+    SELECT id, owner_message, summary_photo_ids, resolution_status, resolution_note,
+           resolved_at, resolved_by_user_id, work_order_ref, work_order_created_at
+    FROM pmi_inspect_inspections
+    WHERE id IN (${Prisma.join(ids)})
+  `);
+  return new Map(rows.map((r) => [r.id, r]));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,10 +170,11 @@ export async function listInspectionRows(): Promise<InspectionRow[]> {
   const propMap = new Map(props.map((p) => [p.id, p]));
   const counts = new Map<number, number>();
   for (const ph of photos) counts.set(ph.inspection_id, (counts.get(ph.inspection_id) ?? 0) + 1);
+  const extras = await fetchExtras(ins.map((r) => r.id));
   return ins.map((r) => {
     const p = r.property_id != null ? propMap.get(r.property_id) : undefined;
     return {
-      ...toRow(r),
+      ...applyExtras(toRow(r), extras.get(r.id)),
       property_name: p?.name ?? "",
       property_address: p?.address ?? "",
       photo_count: counts.get(r.id) ?? 0,
@@ -126,13 +204,63 @@ export async function getInspectionDetail(id: number): Promise<InspectionDetailD
     prisma.inspectPhoto.findMany({ where: { inspection_id: id }, orderBy: { id: "asc" } }),
     prisma.inspectWorkItem.findMany({ where: { inspection_id: id }, orderBy: { id: "asc" } }),
   ]);
+  const extras = await fetchExtras([id]);
   return {
-    inspection: toRow(insp),
+    inspection: applyExtras(toRow(insp), extras.get(id)),
     property: property ? toProperty(property) : null,
     checklist: checklist.map(toChecklist),
     photos: photos.map(toPhoto),
     workItems: workItems.map(toWork),
   };
+}
+
+// --- Writes (owner message / draft / resolution) ---------------------------
+
+// Save the owner message + selected photos without sending (a draft).
+export async function saveSummaryDraft(
+  id: number,
+  ownerMessage: string,
+  photoIds: number[]
+): Promise<void> {
+  await ensureInspectionExtraColumns();
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE pmi_inspect_inspections
+    SET owner_message = ${ownerMessage || null},
+        summary_photo_ids = ${JSON.stringify(photoIds)}::jsonb
+    WHERE id = ${id}
+  `);
+}
+
+// Mark a "needs attention" inspection handled. kind is 'resolved' or
+// 'work_order'; workOrderRef is set when a Rentvine work order was created.
+export async function setResolution(
+  id: number,
+  kind: "resolved" | "work_order",
+  opts: { note?: string; userId?: string | null; workOrderRef?: string | null }
+): Promise<void> {
+  await ensureInspectionExtraColumns();
+  const woRef = kind === "work_order" ? opts.workOrderRef ?? null : null;
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE pmi_inspect_inspections
+    SET resolution_status = ${kind},
+        resolution_note = ${opts.note || null},
+        resolved_at = now(),
+        resolved_by_user_id = ${opts.userId ?? null},
+        work_order_ref = ${woRef},
+        work_order_created_at = ${kind === "work_order" ? new Date() : null}
+    WHERE id = ${id}
+  `);
+}
+
+// Undo a resolution (reopen), clearing the resolution fields.
+export async function clearResolution(id: number): Promise<void> {
+  await ensureInspectionExtraColumns();
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE pmi_inspect_inspections
+    SET resolution_status = NULL, resolution_note = NULL, resolved_at = NULL,
+        resolved_by_user_id = NULL, work_order_ref = NULL, work_order_created_at = NULL
+    WHERE id = ${id}
+  `);
 }
 
 // Most recent inspections for a PM-Central property, matched by its Rentvine id

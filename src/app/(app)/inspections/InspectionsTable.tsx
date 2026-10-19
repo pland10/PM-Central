@@ -5,6 +5,7 @@ import { DataTable, type Column } from "@/components/DataTable";
 import {
   type InspectionRow,
   statusTone,
+  needsAttention,
   formatInspectionDate,
 } from "@/lib/inspections/types";
 
@@ -79,7 +80,23 @@ export function InspectionsTable({ rows }: { rows: InspectionRow[] }) {
       sortable: true,
       sortValue: (r) => r.overall_status ?? "",
       filter: { type: "select", value: (r) => r.overall_status ?? "" },
-      render: (r) => <StatusBadge status={r.overall_status} />,
+      render: (r) => {
+        const handled =
+          needsAttention(r.overall_status) &&
+          (r.resolution_status === "resolved" || r.resolution_status === "work_order");
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <StatusBadge status={r.overall_status} />
+            {handled && (
+              <span className="text-[11px] font-medium text-emerald-600">
+                {r.resolution_status === "work_order"
+                  ? `✓ WO${r.work_order_ref ? ` #${r.work_order_ref}` : ""}`
+                  : "✓ Resolved"}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "photos",

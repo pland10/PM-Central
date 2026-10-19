@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
-import { getInspectionDetail } from "@/lib/inspections/db";
+import { getInspectionDetail, saveSummaryDraft } from "@/lib/inspections/db";
 import { buildInspectionSummary } from "@/lib/inspections/summary";
 import { sendEmail, isEmailConfigured, type EmailAttachment } from "@/lib/email";
 
@@ -33,10 +33,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Bad id" }, { status: 400 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { photoIds?: unknown };
-  const photoIds = new Set(
-    Array.isArray(body.photoIds) ? body.photoIds.map((n) => Number(n)).filter(Number.isFinite) : []
-  );
+  const body = (await req.json().catch(() => ({}))) as {
+    photoIds?: unknown;
+    ownerMessage?: unknown;
+  };
+  const selectedIds = Array.isArray(body.photoIds)
+    ? body.photoIds.map((n) => Number(n)).filter(Number.isFinite)
+    : [];
+  const photoIds = new Set(selectedIds);
+  const ownerMessage = typeof body.ownerMessage === "string" ? body.ownerMessage : "";
 
   const detail = await getInspectionDetail(inspectionId);
   if (!detail) return NextResponse.json({ error: "Inspection not found." }, { status: 404 });
@@ -69,6 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     checklist: detail.checklist,
     workItems: detail.workItems,
     attachedPhotoCount: attachments.length,
+    ownerMessage,
   });
 
   const to = process.env.INSPECTION_SUMMARY_TO || DEFAULT_TO;
@@ -83,8 +89,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id: inspectionId },
       data: { summary_sent_at: sentAt },
     });
+    // Remember what was sent (message + photo selection) so the dialog reopens
+    // with the same draft next time.
+    await saveSummaryDraft(inspectionId, ownerMessage, selectedIds);
   } catch {
-    // email already went out; don't fail the request over the timestamp
+    // email already went out; don't fail the request over the timestamp/draft
   }
 
   return NextResponse.json({

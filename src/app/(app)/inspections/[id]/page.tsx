@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { requireFeature } from "@/config/features";
 import { getInspectionDetail } from "@/lib/inspections/db";
+import { buildWorkOrderDescription } from "@/lib/inspections/work-order-text";
 import {
   statusTone,
+  needsAttention,
+  isNotApplicable,
   formatInspectionDate,
   parseSpecialInstructions,
 } from "@/lib/inspections/types";
 import { InspectionActions } from "../InspectionActions";
 import { CompleteAndSend } from "../CompleteAndSend";
+import { ResolveActions } from "../ResolveActions";
 import { PhotoGallery } from "../PhotoGallery";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 
@@ -40,6 +45,17 @@ export default async function InspectionDetailPage({
   const canDeletePhotos =
     me?.role === "admin" || (!!me?.id && me.id === insp.created_by_user_id);
 
+  // "Needs attention" follow-up: whether it can become a Rentvine work order
+  // (property must be linked) and the prefilled work-order description.
+  const flagged = needsAttention(insp.overall_status);
+  const rvProp =
+    flagged && insp.property_id != null
+      ? await prisma.inspectProperty.findUnique({
+          where: { id: insp.property_id },
+          select: { rv_id: true },
+        })
+      : null;
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/inspections" className="text-sm text-slate-500 hover:text-brand-600">
@@ -68,9 +84,25 @@ export default async function InspectionDetailPage({
             id={insp.id}
             photos={photos.map((p) => ({ id: p.id, url: p.url, original_name: p.original_name }))}
             sentAt={insp.summary_sent_at}
+            ownerMessage={insp.owner_message}
+            savedPhotoIds={insp.summary_photo_ids}
           />
         </div>
       </div>
+
+      {flagged && (
+        <ResolveActions
+          id={insp.id}
+          resolution={{
+            status: insp.resolution_status ?? null,
+            note: insp.resolution_note ?? null,
+            resolvedAt: insp.resolved_at ?? null,
+            workOrderRef: insp.work_order_ref ?? null,
+          }}
+          defaultDescription={buildWorkOrderDescription(detail)}
+          hasRentvineProperty={Boolean(rvProp?.rv_id)}
+        />
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-4">
         <Field label="Date" value={formatInspectionDate(insp.inspection_date)} />
@@ -116,10 +148,12 @@ export default async function InspectionDetailPage({
       {checklist.length > 0 && (
         <Section title="Checklist">
           <ul className="divide-y divide-slate-100">
-            {checklist.map((c) => (
+            {checklist.map((c) => {
+              const na = isNotApplicable(c.status);
+              return (
               <li key={c.id} className="flex items-start gap-3 py-2 text-sm">
-                <span className={c.checked ? "text-emerald-600" : "text-slate-300"}>
-                  {c.checked ? "✓" : "○"}
+                <span className={na ? "text-slate-400" : c.checked ? "text-emerald-600" : "text-slate-300"}>
+                  {na ? "–" : c.checked ? "✓" : "○"}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-slate-800">{c.item_label || c.item_key}</div>
@@ -128,14 +162,15 @@ export default async function InspectionDetailPage({
                 {c.status && (
                   <span
                     className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${
-                      TONE_STYLES[statusTone(c.status)]
+                      na ? "bg-slate-100 text-slate-500" : TONE_STYLES[statusTone(c.status)]
                     }`}
                   >
                     {c.status}
                   </span>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Section>
       )}
