@@ -54,6 +54,30 @@ function ensureInspectionExtraColumns(): Promise<void> {
   return extraColumnsReady;
 }
 
+// Photo labels tie a photo to a move-in item; the column lives outside the
+// Prisma model (same reasoning as the inspection extras).
+let photoColumnReady: Promise<void> | null = null;
+export function ensurePhotoLabelColumn(): Promise<void> {
+  if (!photoColumnReady) {
+    photoColumnReady = prisma
+      .$executeRawUnsafe(`ALTER TABLE pmi_inspect_photos ADD COLUMN IF NOT EXISTS label TEXT`)
+      .then(() => undefined)
+      .catch((e) => {
+        photoColumnReady = null;
+        throw e;
+      });
+  }
+  return photoColumnReady;
+}
+
+// Tag a photo with the item it documents (move-in per-item photos).
+export async function setPhotoLabel(photoId: number, label: string | null): Promise<void> {
+  await ensurePhotoLabelColumn();
+  await prisma.$executeRaw(
+    Prisma.sql`UPDATE pmi_inspect_photos SET label = ${label || null} WHERE id = ${photoId}`
+  );
+}
+
 type ExtraRow = {
   id: number;
   owner_message: string | null;
@@ -226,13 +250,23 @@ export async function getInspectionDetail(id: number): Promise<InspectionDetailD
     prisma.inspectWorkItem.findMany({ where: { inspection_id: id }, orderBy: { id: "asc" } }),
   ]);
   const extras = await fetchExtras([id]);
+  const photoLabels = await fetchPhotoLabels(photos.map((p) => p.id));
   return {
     inspection: applyExtras(toRow(insp), extras.get(id)),
     property: property ? toProperty(property) : null,
     checklist: checklist.map(toChecklist),
-    photos: photos.map(toPhoto),
+    photos: photos.map((p) => ({ ...toPhoto(p), label: photoLabels.get(p.id) ?? null })),
     workItems: workItems.map(toWork),
   };
+}
+
+async function fetchPhotoLabels(ids: number[]): Promise<Map<number, string | null>> {
+  if (!ids.length) return new Map();
+  await ensurePhotoLabelColumn();
+  const rows = await prisma.$queryRaw<{ id: number; label: string | null }[]>(
+    Prisma.sql`SELECT id, label FROM pmi_inspect_photos WHERE id IN (${Prisma.join(ids)})`
+  );
+  return new Map(rows.map((r) => [r.id, r.label]));
 }
 
 // --- Writes (owner message / draft / resolution) ---------------------------

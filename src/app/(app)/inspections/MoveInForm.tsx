@@ -85,8 +85,10 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
   const [pmSigName, setPmSigName] = useState(m.pmSigName ?? "");
   const [pmSigDate, setPmSigDate] = useState(m.pmSigDate ?? "");
 
-  // Photos staged on a NEW inspection (uploaded after it has an id).
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  // Photos staged on a NEW inspection (uploaded after it has an id). `label`
+  // ties a photo to a specific item (appliance plate / utility label); "" is a
+  // general inspection photo.
+  const [photos, setPhotos] = useState<{ file: File; url: string; label: string }[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -108,11 +110,13 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
     });
   }
 
-  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  function addFiles(label: string, files: File[]) {
     if (files.length) {
-      setPhotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
+      setPhotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f), label }))]);
     }
+  }
+  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    addFiles("", Array.from(e.target.files ?? []));
     if (photoInputRef.current) photoInputRef.current.value = "";
   }
   function removePhoto(i: number) {
@@ -190,6 +194,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
         try {
           const fd = new FormData();
           fd.append("photo", photos[i].file);
+          if (photos[i].label) fd.append("label", photos[i].label);
           const r = await fetch(`/api/inspections/${id}/photos`, { method: "POST", body: fd });
           if (!r.ok) failed++;
         } catch {
@@ -325,14 +330,25 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
             hint={section.optional ? "If applicable" : undefined}
           >
             <div className="space-y-3">
-              {section.items.map((item) => (
-                <ItemRow
-                  key={item.key}
-                  item={item}
-                  answer={answers[item.key] ?? { status: "", note: "" }}
-                  onChange={(patch) => setAnswer(item.key, patch)}
-                />
-              ))}
+              {section.items.map((item) => {
+                const label = `${section.title} — ${item.label}`;
+                const itemPhotos = item.photo
+                  ? photos
+                      .map((p, idx) => ({ ...p, idx }))
+                      .filter((p) => p.label === label)
+                  : [];
+                return (
+                  <ItemRow
+                    key={item.key}
+                    item={item}
+                    answer={answers[item.key] ?? { status: "", note: "" }}
+                    onChange={(patch) => setAnswer(item.key, patch)}
+                    photos={itemPhotos}
+                    onAddPhotos={(files) => addFiles(label, files)}
+                    onRemovePhoto={removePhoto}
+                  />
+                );
+              })}
             </div>
           </Section>
         );
@@ -454,10 +470,16 @@ function ItemRow({
   item,
   answer,
   onChange,
+  photos = [],
+  onAddPhotos,
+  onRemovePhoto,
 }: {
   item: MoveInItem;
   answer: Answer;
   onChange: (patch: Partial<Answer>) => void;
+  photos?: { url: string; idx: number }[];
+  onAddPhotos?: (files: File[]) => void;
+  onRemovePhoto?: (idx: number) => void;
 }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
@@ -502,6 +524,47 @@ function ItemRow({
         }
         className="mt-1.5 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
       />
+      {item.photo && (
+        <div className="mt-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              📷 Add photo
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  onAddPhotos?.(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span className="text-[11px] text-slate-400">Serial / model plate or label</span>
+          </div>
+          {photos.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {photos.map((p) => (
+                <div
+                  key={p.idx}
+                  className="relative h-16 w-16 overflow-hidden rounded border border-slate-200 bg-slate-100"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => onRemovePhoto?.(p.idx)}
+                    className="absolute right-0.5 top-0.5 rounded bg-black/50 px-1 text-[10px] leading-4 text-white hover:bg-black/70"
+                    aria-label="Remove photo"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
