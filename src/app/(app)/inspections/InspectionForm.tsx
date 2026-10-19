@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   type InspectionDetail,
@@ -81,6 +81,12 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
     return map;
   }, [initial]);
   const [checkedInstr, setCheckedInstr] = useState<Record<number, boolean>>({});
+
+  // Photos staged on a NEW inspection. They can't upload until the inspection
+  // has an id, so we hold the files and push them up right after it's created.
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [photoMsg, setPhotoMsg] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [checklist, setChecklist] = useState<ChecklistDraft[]>(() => buildChecklist(initial));
   const [work, setWork] = useState<WorkDraft[]>(
@@ -171,6 +177,31 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
       return;
     }
     const id = isEdit ? initial!.id : data.id;
+
+    // Upload any staged photos now that the inspection exists. A failure here
+    // doesn't lose the inspection — we still go to its page, where the gallery
+    // shows exactly what landed.
+    if (!isEdit && photos.length) {
+      let failed = 0;
+      for (let i = 0; i < photos.length; i++) {
+        setPhotoMsg(`Uploading photo ${i + 1} of ${photos.length}…`);
+        try {
+          const fd = new FormData();
+          fd.append("photo", photos[i].file);
+          const r = await fetch(`/api/inspections/${id}/photos`, { method: "POST", body: fd });
+          if (!r.ok) failed++;
+        } catch {
+          failed++;
+        }
+      }
+      if (failed) {
+        // Land on the inspection anyway; note what didn't make it.
+        router.push(`/inspections/${id}?photoFailed=${failed}`);
+        router.refresh();
+        return;
+      }
+    }
+
     router.push(`/inspections/${id}`);
     router.refresh();
   }
@@ -391,6 +422,50 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
         </div>
       </Section>
 
+      {!isEdit && (
+        <Section title="Photos" hint="Attach photos now — they upload when you create the inspection.">
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={addPhotos}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            + Add photos
+          </button>
+          {photos.length > 0 && (
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {photos.map((p, i) => (
+                <div
+                  key={i}
+                  className="relative h-20 w-full overflow-hidden rounded border border-slate-200 bg-slate-100"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(i)}
+                    className="absolute right-0.5 top-0.5 rounded bg-black/50 px-1 text-xs leading-5 text-white hover:bg-black/70"
+                    aria-label="Remove photo"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-slate-400">
+            You can add, download, or delete photos on the inspection page after it&apos;s created.
+          </p>
+        </Section>
+      )}
+
       <Labeled label="Notes">
         <textarea
           value={notes}
@@ -408,7 +483,7 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
           disabled={saving}
           className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
         >
-          {saving ? "Saving…" : isEdit ? "Save changes" : "Create inspection"}
+          {saving ? photoMsg || "Saving…" : isEdit ? "Save changes" : "Create inspection"}
         </button>
         <button
           type="button"
@@ -432,6 +507,21 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
   }
   function removeCheck(i: number) {
     setChecklist((c) => c.filter((_, idx) => idx !== i));
+  }
+  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) {
+      setPhotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
+    }
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+  function removePhoto(i: number) {
+    setPhotos((p) => {
+      const next = [...p];
+      const [rm] = next.splice(i, 1);
+      if (rm) URL.revokeObjectURL(rm.url);
+      return next;
+    });
   }
 }
 
