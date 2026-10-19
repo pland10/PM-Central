@@ -1,5 +1,5 @@
 import type { InspectionRow, InspectionProperty, ChecklistItem, WorkItem } from "./types";
-import { formatInspectionDate, parseSpecialInstructions } from "./types";
+import { formatInspectionDate, parseSpecialInstructions, isNotApplicable } from "./types";
 
 // Builds the inspection summary email (subject + HTML) from an inspection's
 // data. Pure/presentational — the send route (api/inspections/[id]/send-summary)
@@ -11,6 +11,7 @@ export type SummaryInput = {
   checklist: ChecklistItem[];
   workItems: WorkItem[];
   attachedPhotoCount: number;
+  ownerMessage?: string;
 };
 
 function esc(s: unknown): string {
@@ -22,11 +23,13 @@ function esc(s: unknown): string {
 }
 
 function isIssue(c: ChecklistItem): boolean {
+  if (isNotApplicable(c.status)) return false;
   return /issue|fail|bad|poor/i.test(c.status ?? "") || Boolean(c.issue_notes);
 }
 
 export function buildInspectionSummary(input: SummaryInput): { subject: string; html: string } {
   const { inspection: i, property, checklist, workItems, attachedPhotoCount } = input;
+  const ownerMessage = (input.ownerMessage ?? "").trim();
 
   const propName = property?.name || property?.address || "Property";
   const dateStr = formatInspectionDate(i.inspection_date) || i.inspection_date || "";
@@ -52,9 +55,10 @@ export function buildInspectionSummary(input: SummaryInput): { subject: string; 
     ? checklist
         .map((c) => {
           const issue = isIssue(c);
-          const mark = c.checked ? "✓" : "○";
+          const na = isNotApplicable(c.status);
+          const mark = na ? "–" : c.checked ? "✓" : "○";
           const statusBadge = c.status
-            ? `<span style="font-size:12px;color:${issue ? "#b91c1c" : "#047857"}">${esc(c.status)}</span>`
+            ? `<span style="font-size:12px;color:${issue ? "#b91c1c" : na ? "#94a3b8" : "#047857"}">${esc(c.status)}</span>`
             : "";
           const notes = c.issue_notes
             ? `<div style="font-size:12px;color:#64748b">${esc(c.issue_notes)}</div>`
@@ -85,6 +89,15 @@ export function buildInspectionSummary(input: SummaryInput): { subject: string; 
       ${property?.address ? `<div style="color:#64748b;font-size:14px">${esc(property.address)}</div>` : ""}
       ${i.overall_status ? `<div style="margin-top:6px"><span style="display:inline-block;background:#f1f5f9;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600;text-transform:capitalize">${esc(i.overall_status)}</span></div>` : ""}
     </div>
+
+    ${
+      ownerMessage
+        ? `<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px">
+             <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-bottom:4px">Message</div>
+             <p style="margin:0;color:#0f172a;white-space:pre-line">${esc(ownerMessage)}</p>
+           </div>`
+        : ""
+    }
 
     <table style="margin-top:12px;font-size:14px;border-collapse:collapse">
       ${row("Date", dateStr)}

@@ -371,7 +371,7 @@ export function InspectionForm({ initial }: { initial?: InspectionDetail }) {
         </div>
       </Section>
 
-      <Section title="Inspection checklist" hint="Mark each item OK or Issue found; add a note on any issue.">
+      <Section title="Inspection checklist" hint="Mark each item OK, Issue found, or N/A; add a note on any issue.">
         <div className="space-y-2">
           {checklist.map((c, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2">

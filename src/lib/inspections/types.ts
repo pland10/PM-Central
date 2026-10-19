@@ -16,11 +16,29 @@ export type InspectionRow = {
   updated_at: string | null;
   deleted_at: string | null;
   summary_sent_at: string | null;
+  // Owner-directed message + saved photo selection (draft; see prisma/sql/
+  // inspect_resolution.sql). Read via raw SQL, not in the Prisma model.
+  owner_message?: string | null;
+  summary_photo_ids?: number[] | null;
+  // "Needs attention" resolution: '' | 'resolved' | 'work_order'.
+  resolution_status?: string | null;
+  resolution_note?: string | null;
+  resolved_at?: string | null;
+  resolved_by_user_id?: string | null;
+  work_order_ref?: string | null;
+  work_order_created_at?: string | null;
   // joined / derived for the list view
   property_name?: string;
   property_address?: string;
   photo_count?: number;
 };
+
+// Whether an inspection's overall status flags it for follow-up (the badge the
+// user wants to clear by resolving or creating a work order).
+export function needsAttention(status: string | null | undefined): boolean {
+  const tone = statusTone(status);
+  return tone === "warn" || tone === "bad";
+}
 
 export type InspectionProperty = {
   id: number;
@@ -70,7 +88,14 @@ export const DEFAULT_CHECKLIST: { key: string; label: string }[] = [
   { key: "hvac", label: "🌡️ HVAC / Utilities" },
 ];
 
-export const CHECKLIST_STATUSES = ["", "OK", "Issue found"] as const;
+export const CHECKLIST_STATUSES = ["", "OK", "Issue found", "N/A"] as const;
+
+// Whether a checklist status means "not applicable" (e.g. mail/security checks
+// only matter for squatter-watch houses). Rendered as a neutral mark, never a
+// green check, and never counted as an issue.
+export function isNotApplicable(status: string | null | undefined): boolean {
+  return (status || "").trim().toUpperCase() === "N/A";
+}
 
 // Reference data (small lookup lists) used by the create/edit form.
 export type NamedOption = { id: number; name: string; sort_order?: number };
