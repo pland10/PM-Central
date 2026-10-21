@@ -29,6 +29,7 @@ import { useDashboardEdit } from "./DashboardEdit";
 export type PanelItem = { id: string; node: ReactNode };
 
 const LS_KEY = "pmi.dashboardOrder";
+const LS_HIDDEN_KEY = "pmi.dashboardHidden";
 
 // Keep only ids that still exist, in saved order, then append any new panels.
 function reconcile(saved: string[], ids: string[]): string[] {
@@ -38,13 +39,21 @@ function reconcile(saved: string[], ids: string[]): string[] {
   return [...kept, ...missing];
 }
 
+// Hidden is just a filter over the live ids — drop any stale/unknown ids.
+function reconcileHidden(saved: string[], ids: string[]): string[] {
+  const known = new Set(ids);
+  return saved.filter((id) => known.has(id));
+}
+
 export function DraggablePanels({
   items,
   initialOrder,
+  initialHidden,
   canPersist,
 }: {
   items: PanelItem[];
   initialOrder: string[] | null;
+  initialHidden: string[] | null;
   canPersist: boolean;
 }) {
   const { editing } = useDashboardEdit();
@@ -56,12 +65,17 @@ export function DraggablePanels({
   const [order, setOrder] = useState<string[]>(() =>
     reconcile(initialOrder ?? [], ids)
   );
+  const [hidden, setHidden] = useState<string[]>(() =>
+    reconcileHidden(initialHidden ?? [], ids)
+  );
 
   useEffect(() => {
     if (initialOrder && initialOrder.length) return; // account order already applied
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) setOrder(reconcile(JSON.parse(raw) as string[], ids));
+      const rawHidden = localStorage.getItem(LS_HIDDEN_KEY);
+      if (rawHidden) setHidden(reconcileHidden(JSON.parse(rawHidden) as string[], ids));
     } catch {
       /* ignore */
     }
@@ -74,16 +88,17 @@ export function DraggablePanels({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  function save(next: string[]) {
+  function persist(nextOrder: string[], nextHidden: string[]) {
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
+      localStorage.setItem(LS_KEY, JSON.stringify(nextOrder));
+      localStorage.setItem(LS_HIDDEN_KEY, JSON.stringify(nextHidden));
     } catch {
       /* ignore */
     }
     if (!canPersist) return;
     try {
       createSupabaseBrowserClient()
-        .auth.updateUser({ data: { dashboard_order: next } })
+        .auth.updateUser({ data: { dashboard_order: nextOrder, dashboard_hidden: nextHidden } })
         .catch(() => {});
     } catch {
       /* ignore */
@@ -98,35 +113,56 @@ export function DraggablePanels({
       const to = prev.indexOf(String(over.id));
       if (from === -1 || to === -1) return prev;
       const next = arrayMove(prev, from, to);
-      save(next);
+      persist(next, hidden);
       return next;
     });
   }
 
-  const isCustom = order.join("|") !== ids.join("|");
+  // Hiding moves the panel to the end of the order (so it sits at the bottom)
+  // and flags it hidden; showing just clears the flag, leaving it at the bottom.
+  function hide(id: string) {
+    const nextOrder = [...order.filter((x) => x !== id), id];
+    const nextHidden = hidden.includes(id) ? hidden : [...hidden, id];
+    setOrder(nextOrder);
+    setHidden(nextHidden);
+    persist(nextOrder, nextHidden);
+  }
+  function show(id: string) {
+    const nextHidden = hidden.filter((x) => x !== id);
+    setHidden(nextHidden);
+    persist(order, nextHidden);
+  }
+
+  const isCustom = order.join("|") !== ids.join("|") || hidden.length > 0;
   function reset() {
     try {
       localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(LS_HIDDEN_KEY);
     } catch {
       /* ignore */
     }
     if (canPersist) {
       try {
         createSupabaseBrowserClient()
-          .auth.updateUser({ data: { dashboard_order: null } })
+          .auth.updateUser({ data: { dashboard_order: null, dashboard_hidden: null } })
           .catch(() => {});
       } catch {
         /* ignore */
       }
     }
     setOrder(ids);
+    setHidden([]);
   }
+
+  const hiddenSet = new Set(hidden);
+  const visibleOrder = order.filter((id) => !hiddenSet.has(id));
+  const hiddenOrder = order.filter((id) => hiddenSet.has(id));
 
   return (
     <div>
       {editing && (
         <div className="mb-3 flex items-center justify-between rounded-md border border-brand-500/30 bg-brand-50 px-3 py-2 text-sm text-brand-700">
-          <span>Drag any panel to reorder. Your layout saves automatically.</span>
+          <span>Drag to reorder · tap the eye to hide a panel. Saves automatically.</span>
           {isCustom && (
             <button onClick={reset} className="shrink-0 font-medium text-brand-600 hover:underline">
               Reset to default
@@ -135,20 +171,58 @@ export function DraggablePanels({
         </div>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={order} strategy={rectSortingStrategy}>
+        <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {order.map((id) => {
+            {visibleOrder.map((id) => {
               const node = byId.get(id);
-              return node ? <SortablePanel key={id} id={id} node={node} editing={editing} /> : null;
+              return node ? (
+                <SortablePanel key={id} id={id} node={node} editing={editing} onHide={() => hide(id)} />
+              ) : null;
             })}
           </div>
         </SortableContext>
       </DndContext>
+
+      {editing && hiddenOrder.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Hidden panels
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {hiddenOrder.map((id) => {
+              const node = byId.get(id);
+              return node ? (
+                <div key={id} className="relative rounded-lg ring-1 ring-slate-200">
+                  <div className="pointer-events-none select-none opacity-40 grayscale">{node}</div>
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/30">
+                    <button
+                      onClick={() => show(id)}
+                      className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow hover:bg-brand-700"
+                    >
+                      Show
+                    </button>
+                  </div>
+                </div>
+              ) : null;
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SortablePanel({ id, node, editing }: { id: string; node: ReactNode; editing: boolean }) {
+function SortablePanel({
+  id,
+  node,
+  editing,
+  onHide,
+}: {
+  id: string;
+  node: ReactNode;
+  editing: boolean;
+  onHide: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled: !editing,
@@ -191,6 +265,20 @@ function SortablePanel({ id, node, editing }: { id: string; node: ReactNode; edi
         </svg>
         Drag
       </div>
+      <button
+        type="button"
+        onClick={onHide}
+        onPointerDown={(e) => e.stopPropagation()}
+        aria-label="Hide panel"
+        title="Hide panel"
+        className="pointer-events-auto absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow ring-1 ring-slate-200 hover:bg-white hover:text-red-600"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.5 13.5 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61M1 1l22 22" />
+          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+        </svg>
+        Hide
+      </button>
       <div className="pointer-events-none select-none">{node}</div>
     </div>
   );

@@ -53,6 +53,84 @@ type RawRow = {
   link: string | null;
 };
 
+// A work order flagged for the dashboard's attention panel.
+export type WoAlert = {
+  number: string;
+  issue: string;
+  property: string;
+  stage: string;
+  priority: string; // Low | Medium | High | ""
+  propertyId: string | null;
+  link: string;
+  createdAt: string | null;
+};
+
+export type WorkOrderAlerts = {
+  recent: WoAlert[]; // open, created within the window (newest first)
+  high: WoAlert[]; // open, High priority (newest first)
+  windowHours: number;
+};
+
+// New + high-priority OPEN work orders, so a freshly-arrived or urgent WO can't
+// slip by unseen. "New" = created within windowHours (default 72h); priority
+// comes from the Rentvine enrichment. Null if the work_orders table isn't there.
+export async function workOrderAlerts(windowHours = 72): Promise<WorkOrderAlerts | null> {
+  try {
+    const [rows, rv] = await Promise.all([
+      prisma.$queryRaw<(RawRow & { created_at: Date | null })[]>(Prisma.sql`
+        SELECT source_id, wo_number, title, name, stage,
+               property_address, vendor_name, assignee_name, link, created_at
+        FROM work_orders`),
+      rentvineEnrichment(),
+    ]);
+
+    const cutoff = Date.now() - windowHours * 3_600_000;
+    type Computed = WoAlert & { terminal: boolean; createdMs: number };
+    const computed: Computed[] = rows.map((r) => {
+      const stage = r.stage ?? "—";
+      const number = r.wo_number ?? "—";
+      const enrich = rv.get(number);
+      const createdMs = r.created_at ? new Date(r.created_at).getTime() : 0;
+      return {
+        number,
+        issue: r.title || r.name || "Work order",
+        property: r.property_address ?? "—",
+        stage,
+        priority: enrich?.priority ?? "",
+        propertyId: enrich?.propertyId ?? null,
+        link: r.link ?? "",
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
+        terminal: isTerminal(stage),
+        createdMs,
+      };
+    });
+
+    const strip = (c: Computed): WoAlert => ({
+      number: c.number,
+      issue: c.issue,
+      property: c.property,
+      stage: c.stage,
+      priority: c.priority,
+      propertyId: c.propertyId,
+      link: c.link,
+      createdAt: c.createdAt,
+    });
+    const open = computed.filter((c) => !c.terminal);
+    const recent = open
+      .filter((c) => c.createdMs >= cutoff)
+      .sort((a, b) => b.createdMs - a.createdMs)
+      .map(strip);
+    const high = open
+      .filter((c) => /high/i.test(c.priority))
+      .sort((a, b) => b.createdMs - a.createdMs)
+      .map(strip);
+
+    return { recent, high, windowHours };
+  } catch {
+    return null;
+  }
+}
+
 // Rentvine enrichment keyed by work-order number: priority + a link to our
 // Property record. Best-effort — the rv_work_orders table may not exist yet
 // (before the first Rentvine WO sync), so this never fails the main listing.
