@@ -26,7 +26,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, payments, me, todayShow, depositsLive] = await Promise.all([
+  const [properties, woSummary, payments, me, todayShow, depositsLive, watchCount] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -46,6 +46,11 @@ export default async function DashboardPage() {
     // figure). Null if Rentvine isn't configured; falls back to the configured
     // per-lease deposits below if the report call fails.
     isRentvineConfigured() ? fetchSecurityDeposits() : Promise.resolve(null),
+    // Squatter Watch (home-watch) properties are excluded from the metrics
+    // above, but still counted so the Properties tile can show the full total.
+    prisma.property.count({
+      where: { status: "active", tags: { contains: SQUATTER_WATCH } },
+    }),
   ]);
 
   const now = Date.now();
@@ -99,6 +104,11 @@ export default async function DashboardPage() {
   const occupancy = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
   const activeLeases = expirations.length;
 
+  // Properties: `properties` already excludes Squatter Watch, so it's the
+  // rentals count; the full managed total adds the watch properties back.
+  const rentalCount = properties.length;
+  const totalProperties = rentalCount + watchCount;
+
   // "Deposits held" = what PMI actually holds in trust, from the live Rentvine
   // report (PMI-held on active + moved-out/pending leases; excludes owner-held).
   // Falls back to the configured per-lease deposits if the report is
@@ -126,7 +136,9 @@ export default async function DashboardPage() {
       name: "Summary",
       headers: ["Metric", "Value"],
       rows: [
-        ["Properties", properties.length],
+        ["Properties (total)", totalProperties],
+        ["— Rentals", rentalCount],
+        ["— Squatter Watch", watchCount],
         ["Units", totalUnits],
         ["Occupancy %", occupancy],
         ["Rent roll / mo", rentRoll],
@@ -217,7 +229,12 @@ export default async function DashboardPage() {
 
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat label="Properties" value={String(properties.length)} href="/properties" />
+        <Stat
+          label="Properties"
+          value={String(totalProperties)}
+          sub={watchCount > 0 ? `${rentalCount} rentals · ${watchCount} watch` : undefined}
+          href="/properties"
+        />
         <Stat label="Units" value={String(totalUnits)} href="/properties" />
         <Stat label="Occupancy" value={`${occupancy}%`} accent={occupancy < 90} />
         <Stat label="Rent roll / mo" value={formatCurrency(rentRoll)} href="/leases" />
@@ -388,11 +405,12 @@ export default async function DashboardPage() {
   );
 }
 
-function Stat({ label, value, href, accent }: { label: string; value: string; href?: string; accent?: boolean }) {
+function Stat({ label, value, href, accent, sub }: { label: string; value: string; href?: string; accent?: boolean; sub?: string }) {
   const body = (
     <div className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300">
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tracking-tight ${accent ? "text-brand-600" : ""}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-slate-400">{sub}</div>}
     </div>
   );
   return href ? <Link href={href}>{body}</Link> : body;
