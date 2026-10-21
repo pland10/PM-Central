@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { SQUATTER_WATCH } from "@/lib/programs";
 import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
-import { workOrderStageSummary } from "@/lib/work-orders-dashboard";
+import { workOrderStageSummary, workOrderAlerts, type WoAlert } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 import { DashboardExport } from "./DashboardExport";
@@ -26,7 +26,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, payments, me, todayShow, depositsLive, watchCount] = await Promise.all([
+  const [properties, woSummary, woAlerts, payments, me, todayShow, depositsLive, watchCount] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -39,6 +39,7 @@ export default async function DashboardPage() {
       },
     }),
     workOrderStageSummary(), // null until the work_orders table exists / sync runs
+    workOrderAlerts(72), // new (72h) + high-priority open work orders
     paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
     getCurrentUser(), // for the saved dashboard panel order (null in Basic Auth)
     todaysShowings(), // today's Tenant Turner showings; null until the table exists
@@ -117,6 +118,28 @@ export default async function DashboardPage() {
     depositsLive && depositsLive.ok
       ? depositsLive.summary.pmiHeldActive + depositsLive.summary.pmiHeldMovedOut
       : totalDeposits;
+
+  // Work orders needing attention: new in the last 72h and/or High priority,
+  // merged (a WO can be both) with High first, then newest.
+  const woAttention: (WoAlert & { isNew: boolean; isHigh: boolean })[] = (() => {
+    if (!woAlerts) return [];
+    const map = new Map<string, WoAlert & { isNew: boolean; isHigh: boolean }>();
+    for (const w of woAlerts.recent) {
+      map.set(w.number, { ...w, isNew: true, isHigh: /high/i.test(w.priority) });
+    }
+    for (const w of woAlerts.high) {
+      const ex = map.get(w.number);
+      if (ex) ex.isHigh = true;
+      else map.set(w.number, { ...w, isNew: false, isHigh: true });
+    }
+    return [...map.values()].sort(
+      (a, b) =>
+        Number(b.isHigh) - Number(a.isHigh) ||
+        new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+    );
+  })();
+  const newWoCount = woAlerts?.recent.length ?? 0;
+  const highWoCount = woAlerts?.high.length ?? 0;
   // Only leases expiring within ~120 days, plus any already past — the near-term
   // renewals to act on, not every dated lease.
   const EXPIRY_HORIZON_MS = 120 * 86_400_000;
@@ -242,6 +265,8 @@ export default async function DashboardPage() {
         <Stat label="Deposits held" value={formatCurrency(depositsHeld)} href="/security-deposits" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
         <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/work-orders" accent={(woSummary?.openTotal ?? 0) > 0} />
+        <Stat label="New WOs · 72h" value={String(newWoCount)} href="/work-orders" accent={newWoCount > 0} />
+        <Stat label="High priority WOs" value={String(highWoCount)} href="/work-orders" accent={highWoCount > 0} />
         {todayShow && (
           <Stat label="Showings today" value={String(todayShow.count)} href="/showings" accent={todayShow.count > 0} />
         )}
@@ -255,6 +280,7 @@ export default async function DashboardPage() {
 
       <DraggablePanels
         initialOrder={me?.dashboardOrder ?? null}
+        initialHidden={me?.dashboardHidden ?? null}
         canPersist={!!me}
         items={[
           ...(payments ? [{ id: "payments", node: <PaymentsPane initial={payments} /> }] : []),
@@ -364,20 +390,40 @@ export default async function DashboardPage() {
           ) },
 
           { id: "workorders", node: (
-        <Panel title="Work orders by stage" href="/work-orders" linkLabel="All work orders" badge={woSummary?.openTotal ?? 0}>
-          {!woSummary || woSummary.stages.length === 0 ? (
-            <Empty>No work orders yet.</Empty>
+        <Panel title="Work orders to review" href="/work-orders" linkLabel="All work orders" badge={woAttention.length}>
+          {woAttention.length === 0 ? (
+            <Empty>No new (72h) or high-priority work orders.</Empty>
           ) : (
-            woSummary.stages.map((s) => (
-              <Link
-                key={s.stage}
-                href={`/work-orders?stage=${encodeURIComponent(s.stage)}`}
-                className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0 hover:text-brand-600"
-              >
-                <span className="min-w-0 truncate text-slate-800">{s.stage}</span>
-                <span className="shrink-0 font-medium text-slate-700">{s.count}</span>
-              </Link>
-            ))
+            <ExpandableRows initial={6}>
+              {woAttention.map((w) => (
+                <Row
+                  key={w.number}
+                  href={w.link || (w.propertyId ? `/properties/${w.propertyId}` : "/work-orders")}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-slate-800">{w.property}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      #{w.number} · {w.issue}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    <div className="flex gap-1">
+                      {w.isHigh && (
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                          High
+                        </span>
+                      )}
+                      {w.isNew && (
+                        <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+                          New
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400">{ago(w.createdAt)}</div>
+                  </div>
+                </Row>
+              ))}
+            </ExpandableRows>
           )}
         </Panel>
           ) },
@@ -455,6 +501,16 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 // Showing start time in the business's timezone (Eastern), e.g. "1:30 PM".
+function ago(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return "just now";
+  const h = Math.floor(ms / 3_600_000);
+  if (h < 1) return "just now";
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 function nyTime(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
