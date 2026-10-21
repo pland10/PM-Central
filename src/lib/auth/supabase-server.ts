@@ -39,6 +39,8 @@ export type AppUser = {
   // user writes this to their own account from the dashboard, so it follows
   // them across devices.
   dashboardOrder: string[] | null;
+  // Panel ids the user has hidden (user_metadata.dashboard_hidden), or null.
+  dashboardHidden: string[] | null;
 };
 
 // Resolve the current user (or null) plus a simple role. Role comes from the
@@ -85,6 +87,10 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   const dashboardOrder = Array.isArray(rawOrder)
     ? rawOrder.filter((x): x is string => typeof x === "string")
     : null;
+  const rawHidden = meta.dashboard_hidden;
+  const dashboardHidden = Array.isArray(rawHidden)
+    ? rawHidden.filter((x): x is string => typeof x === "string")
+    : null;
 
   return {
     id: user.id,
@@ -94,5 +100,6 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     canDelete,
     canEditAll,
     dashboardOrder,
+    dashboardHidden,
   };
 }
