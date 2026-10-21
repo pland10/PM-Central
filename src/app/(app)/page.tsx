@@ -11,6 +11,7 @@ import { DraggablePanels } from "./DraggablePanels";
 import { DashboardEditProvider, RearrangeButton } from "./DashboardEdit";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { todaysShowings } from "@/lib/showings";
+import { fetchSecurityDeposits, isRentvineConfigured } from "@/lib/security-deposits";
 import type { ExportSheet } from "@/lib/export-excel";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, payments, me, todayShow] = await Promise.all([
+  const [properties, woSummary, payments, me, todayShow, depositsLive] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -41,6 +42,10 @@ export default async function DashboardPage() {
     paymentSummaryAsOf(), // today; null until the payments table exists / sync runs
     getCurrentUser(), // for the saved dashboard panel order (null in Basic Auth)
     todaysShowings(), // today's Tenant Turner showings; null until the table exists
+    // Live security-deposit totals from Rentvine (the accurate held-in-trust
+    // figure). Null if Rentvine isn't configured; falls back to the configured
+    // per-lease deposits below if the report call fails.
+    isRentvineConfigured() ? fetchSecurityDeposits() : Promise.resolve(null),
   ]);
 
   const now = Date.now();
@@ -93,6 +98,15 @@ export default async function DashboardPage() {
 
   const occupancy = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
   const activeLeases = expirations.length;
+
+  // "Deposits held" = what PMI actually holds in trust, from the live Rentvine
+  // report (PMI-held on active + moved-out/pending leases; excludes owner-held).
+  // Falls back to the configured per-lease deposits if the report is
+  // unavailable so the tile is never blank.
+  const depositsHeld =
+    depositsLive && depositsLive.ok
+      ? depositsLive.summary.pmiHeldActive + depositsLive.summary.pmiHeldMovedOut
+      : totalDeposits;
   // Only leases expiring within ~120 days, plus any already past — the near-term
   // renewals to act on, not every dated lease.
   const EXPIRY_HORIZON_MS = 120 * 86_400_000;
@@ -117,7 +131,7 @@ export default async function DashboardPage() {
         ["Occupancy %", occupancy],
         ["Rent roll / mo", rentRoll],
         ["Outstanding", totalBalanceDue],
-        ["Deposits held", totalDeposits],
+        ["Deposits held", depositsHeld],
         ["Active leases", activeLeases],
         ["Open work orders", woSummary?.openTotal ?? 0],
         ["Delinquent leases", delinquentCount],
@@ -208,7 +222,7 @@ export default async function DashboardPage() {
         <Stat label="Occupancy" value={`${occupancy}%`} accent={occupancy < 90} />
         <Stat label="Rent roll / mo" value={formatCurrency(rentRoll)} href="/leases" />
         <Stat label="Outstanding" value={formatCurrency(totalBalanceDue)} href="/leases" accent={totalBalanceDue > 0} />
-        <Stat label="Deposits held" value={formatCurrency(totalDeposits)} href="/leases" />
+        <Stat label="Deposits held" value={formatCurrency(depositsHeld)} href="/security-deposits" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
         <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/work-orders" accent={(woSummary?.openTotal ?? 0) > 0} />
         {todayShow && (
