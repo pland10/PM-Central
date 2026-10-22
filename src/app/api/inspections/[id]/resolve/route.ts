@@ -11,6 +11,8 @@ import { buildWorkOrderDescription } from "@/lib/inspections/work-order-text";
 //   work_order — create a real Rentvine work order on the property, store its #
 //   reopen     — undo a prior resolution
 export const dynamic = "force-dynamic";
+// Creates a Rentvine work order over the REST API — headroom on serverless.
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isFeatureEnabled("inspections")) {
