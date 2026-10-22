@@ -241,6 +241,28 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
         } catch {
           // keep the name from the lease row
         }
+
+        // Rentvine sometimes leaves the lease's own endDate at the PRIOR term's
+        // end after a renewal (an intermittent data-entry slip — the end can
+        // even predate the new start). The authoritative current-term end lives
+        // on the renewal record, so adopt the latest renewal end when it's
+        // later than the lease's own. Best-effort; a failure keeps lease.end.
+        for (const path of [
+          `/leases/${lease.leaseId}/lease-renewals`,
+          `/leases/${lease.leaseId}/renewals`,
+        ]) {
+          try {
+            const { json } = await rvGet(path);
+            const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+            for (const r of rows) {
+              const end = toStr(unwrap(r, "leaseRenewal").endDate);
+              if (end && (!lease.end || end > lease.end)) lease.end = end;
+            }
+            break; // this path spelling worked (even if empty) — stop probing
+          } catch {
+            // wrong spelling / no renewals endpoint — try the next, else skip
+          }
+        }
       }
 
       // Work orders + property-group tags are synced separately (they need their
