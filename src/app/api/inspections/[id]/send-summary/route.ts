@@ -10,6 +10,8 @@ import { sendEmail, isEmailConfigured, type EmailAttachment } from "@/lib/email"
 // attached) to the inspections inbox, then stamp summary_sent_at. Needs
 // RESEND_API_KEY; recipient is INSPECTION_SUMMARY_TO (default info@pmilighthouse.com).
 export const dynamic = "force-dynamic";
+// Downloads selected photos + sends via Resend — headroom on serverless.
+export const maxDuration = 60;
 
 const DEFAULT_TO = "info@pmilighthouse.com";
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024; // keep the whole email well under Resend's cap
