@@ -7,6 +7,8 @@ import { SecurityDepositsTable } from "./SecurityDepositsTable";
 // liability: PMI-held on active leases, PMI-held pending refund (moved out),
 // and owner-held (excluded), rather than the report's combined headline total.
 export const dynamic = "force-dynamic";
+// Live Rentvine report fetch — headroom for serverless (Vercel); no-op on Railway.
+export const maxDuration = 60;
 
 export default async function SecurityDepositsPage() {
   requireFeature("securityDeposits");

@@ -15,6 +15,9 @@ import { fetchSecurityDeposits, isRentvineConfigured } from "@/lib/security-depo
 import type { ExportSheet } from "@/lib/export-excel";
 
 export const dynamic = "force-dynamic";
+// The dashboard makes a live Rentvine report call (deposits); give it headroom
+// on serverless hosts (Vercel). Ignored on a long-running server (Railway).
+export const maxDuration = 60;
 
 function contactName(c: {
   firstName: string | null;
