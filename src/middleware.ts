@@ -92,6 +92,10 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   // has no Supabase/Basic session.
   if (req.nextUrl.pathname.startsWith("/api/webhooks/")) return NextResponse.next();
 
+  // Public health probe (no secrets) — reachable by uptime monitors and for
+  // verifying a deploy without logging in.
+  if (req.nextUrl.pathname === "/api/health") return NextResponse.next();
+
   const mode = (process.env.AUTH_MODE || "basic").toLowerCase();
   if (mode === "supabase") return supabaseGate(req);
   return basicGate(req);
