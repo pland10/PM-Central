@@ -54,6 +54,32 @@ function toStr(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
+// Field spellings that have carried the new-term end date on a Rentvine lease
+// renewal record. We read whichever is present (the exact shape isn't
+// documented for this account), normalizing datetimes to a plain YYYY-MM-DD.
+const RENEWAL_END_FIELDS = ["endDate", "dateEnd", "newEndDate", "leaseEndDate", "endOn", "toDate"];
+
+function toDateStr(v: unknown): string {
+  const s = toStr(v).trim();
+  // "2027-03-31", "2027-03-31T00:00:00", "2027-03-31 00:00:00" -> "2027-03-31".
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
+}
+
+// A renewals response might be a bare array, an object wrapping the array
+// (e.g. { leaseRenewals: [...] }), or a single renewal object. Normalize to
+// an array of row records so the caller can treat every shape the same way.
+function renewalRows(json: unknown): Record<string, unknown>[] {
+  if (Array.isArray(json)) return json as Record<string, unknown>[];
+  if (json && typeof json === "object") {
+    const obj = json as Record<string, unknown>;
+    for (const v of Object.values(obj)) {
+      if (Array.isArray(v)) return v as Record<string, unknown>[];
+    }
+    return [obj];
+  }
+  return [];
+}
+
 // Low-level Rentvine Manager REST helpers (auth + pagination + row unwrap),
 // shared by the core extractor and the work-order fetcher.
 function rvHttp(config: RentvineAccountConfig) {
@@ -161,6 +187,46 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
     return PROPERTY_TYPE_NAMES;
   }
 
+  // Latest renewal end date for a lease, "" if none found. The renewals slug
+  // isn't documented for this account, so probe a few spellings and use the
+  // first that returns usable rows. When `verbose`, log each attempt and the
+  // first 200's raw body so a sync run reveals the correct endpoint + field
+  // names (we turn this on only for leases whose end looks stale).
+  async function latestRenewalEnd(leaseId: number, verbose: boolean): Promise<string> {
+    const paths = [
+      `/leases/${leaseId}/renewals`,
+      `/leases/${leaseId}/lease-renewals`,
+      `/leases/${leaseId}/leaseRenewals`,
+      `/lease-renewals?leaseID=${leaseId}`,
+      `/leaseRenewals?leaseID=${leaseId}`,
+    ];
+    let best = "";
+    for (const path of paths) {
+      let json: unknown;
+      try {
+        ({ json } = await rvGet(path));
+      } catch (e) {
+        if (verbose) console.log(`[renewal] ${path} -> ${(e as Error).message}`);
+        continue; // non-200 (likely wrong spelling) — try the next
+      }
+      const rows = renewalRows(json);
+      if (verbose) {
+        console.log(
+          `[renewal] ${path} -> 200, ${rows.length} row(s); body=${JSON.stringify(json).slice(0, 800)}`
+        );
+      }
+      for (const row of rows) {
+        const rec = unwrap(row, "leaseRenewal");
+        for (const f of RENEWAL_END_FIELDS) {
+          const v = toDateStr(rec[f]);
+          if (v && v > best) best = v;
+        }
+      }
+      if (best) return best; // this spelling returned a usable end — done
+    }
+    return best;
+  }
+
   return {
     async extract(): Promise<RentvineExport> {
       if (!config.apiKey || !config.apiSecret) {
@@ -244,24 +310,22 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
 
         // Rentvine sometimes leaves the lease's own endDate at the PRIOR term's
         // end after a renewal (an intermittent data-entry slip — the end can
-        // even predate the new start). The authoritative current-term end lives
-        // on the renewal record, so adopt the latest renewal end when it's
-        // later than the lease's own. Best-effort; a failure keeps lease.end.
-        for (const path of [
-          `/leases/${lease.leaseId}/lease-renewals`,
-          `/leases/${lease.leaseId}/renewals`,
-        ]) {
-          try {
-            const { json } = await rvGet(path);
-            const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
-            for (const r of rows) {
-              const end = toStr(unwrap(r, "leaseRenewal").endDate);
-              if (end && (!lease.end || end > lease.end)) lease.end = end;
-            }
-            break; // this path spelling worked (even if empty) — stop probing
-          } catch {
-            // wrong spelling / no renewals endpoint — try the next, else skip
+        // even predate the new start, as on lease 27). The authoritative
+        // current-term end lives on the renewal record, so adopt the latest
+        // renewal end when it's later than the lease's own. We log the lookup
+        // for leases whose end looks stale (end <= start) so the sync logs
+        // reveal the right renewals endpoint for this account.
+        const stale = Boolean(lease.start && lease.end && lease.end <= lease.start);
+        try {
+          const latest = await latestRenewalEnd(lease.leaseId, stale);
+          if (latest && (!lease.end || latest > lease.end)) {
+            if (stale) console.log(`[renewal] lease ${lease.leaseId}: end ${lease.end} -> ${latest}`);
+            lease.end = latest;
+          } else if (stale) {
+            console.log(`[renewal] lease ${lease.leaseId}: no later renewal end found; end stays ${lease.end}`);
           }
+        } catch {
+          // best-effort — a failure keeps the lease's own end
         }
       }
 
