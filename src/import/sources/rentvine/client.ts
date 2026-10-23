@@ -54,6 +54,12 @@ function toStr(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
+function toDateStr(v: unknown): string {
+  const s = toStr(v).trim();
+  // "2027-03-31", "2027-03-31T00:00:00", "2027-03-31 00:00:00" -> "2027-03-31".
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
+}
+
 // Low-level Rentvine Manager REST helpers (auth + pagination + row unwrap),
 // shared by the core extractor and the work-order fetcher.
 function rvHttp(config: RentvineAccountConfig) {
@@ -161,6 +167,32 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
     return PROPERTY_TYPE_NAMES;
   }
 
+  // Latest renewal end date per lease ID, for correcting leases whose own
+  // endDate is stale after a renewal (see the call site). Rentvine's
+  // /leases/{id}/renewals endpoint ignores the {id} and returns the whole
+  // renewals collection — each row { renewal: { leaseID, endDate, ... } } — so
+  // we fetch it once (via any real lease id) and index the max end per lease.
+  // Best-effort: if the endpoint is unavailable the map is empty and every
+  // lease keeps its own end.
+  async function renewalEndsByLease(sampleLeaseId: number): Promise<Map<number, string>> {
+    const out = new Map<number, string>();
+    let rows: Record<string, unknown>[];
+    try {
+      rows = await rvGetAll(`/leases/${sampleLeaseId}/renewals`);
+    } catch {
+      return out;
+    }
+    for (const row of rows) {
+      const r = unwrap(row, "renewal");
+      const leaseId = toNum(r.leaseID);
+      const end = toDateStr(r.endDate);
+      if (leaseId == null || !end) continue;
+      const prev = out.get(leaseId);
+      if (!prev || end > prev) out.set(leaseId, end);
+    }
+    return out;
+  }
+
   return {
     async extract(): Promise<RentvineExport> {
       if (!config.apiKey || !config.apiSecret) {
@@ -242,25 +274,23 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
           // keep the name from the lease row
         }
 
-        // Rentvine sometimes leaves the lease's own endDate at the PRIOR term's
-        // end after a renewal (an intermittent data-entry slip — the end can
-        // even predate the new start). The authoritative current-term end lives
-        // on the renewal record, so adopt the latest renewal end when it's
-        // later than the lease's own. Best-effort; a failure keeps lease.end.
-        for (const path of [
-          `/leases/${lease.leaseId}/lease-renewals`,
-          `/leases/${lease.leaseId}/renewals`,
-        ]) {
-          try {
-            const { json } = await rvGet(path);
-            const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
-            for (const r of rows) {
-              const end = toStr(unwrap(r, "leaseRenewal").endDate);
-              if (end && (!lease.end || end > lease.end)) lease.end = end;
-            }
-            break; // this path spelling worked (even if empty) — stop probing
-          } catch {
-            // wrong spelling / no renewals endpoint — try the next, else skip
+      }
+
+      // Correct stale lease ends from renewals. Rentvine sometimes leaves a
+      // lease's own endDate at the PRIOR term's end after a renewal (an
+      // intermittent data-entry slip — the end can even predate the new start,
+      // as on lease 27 / Pamela Roberts). The authoritative current-term end
+      // lives on the renewal record, so adopt the latest renewal end whenever
+      // it's later than the lease's own. One collection fetch covers them all.
+      const sampleLeaseId = activeLeases.find((l) => l.leaseId != null)?.leaseId;
+      if (sampleLeaseId != null) {
+        const renewalEnds = await renewalEndsByLease(sampleLeaseId);
+        for (const lease of activeLeases) {
+          if (lease.leaseId == null) continue;
+          const latest = renewalEnds.get(lease.leaseId);
+          if (latest && (!lease.end || latest > lease.end)) {
+            console.log(`[renewal] lease ${lease.leaseId}: end ${lease.end || "(none)"} -> ${latest}`);
+            lease.end = latest;
           }
         }
       }
