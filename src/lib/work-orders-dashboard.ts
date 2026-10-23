@@ -18,27 +18,44 @@ export type WorkOrderSummary = {
 
 export async function workOrderStageSummary(): Promise<WorkOrderSummary | null> {
   try {
-    const rows = await prisma.$queryRaw<{ stage: string | null; count: number }[]>(Prisma.sql`
-      SELECT stage, count(*)::int AS count
+    // Count open rows per stage by LeadSimple's own close signal (closed_at),
+    // not the stage name alone: a WO LeadSimple has closed that ended in a
+    // stage whose name doesn't match the terminal regex (e.g. "Invoice
+    // Received") would otherwise inflate the open count vs. Rentvine.
+    const rows = await prisma.$queryRaw<{ stage: string | null; open_count: number; total_count: number }[]>(Prisma.sql`
+      SELECT stage,
+             count(*) FILTER (WHERE closed_at IS NULL)::int AS open_count,
+             count(*)::int AS total_count
       FROM work_orders
       GROUP BY stage
       ORDER BY count(*) DESC`);
 
     const all = rows
       .filter((r) => r.stage)
-      .map((r) => ({ stage: r.stage as string, count: Number(r.count) }));
-    const total = all.reduce((s, r) => s + r.count, 0);
-    // Open/active stages only, ordered by pipeline sequence descending
-    // (latest stage first).
+      .map((r) => ({ stage: r.stage as string, open: Number(r.open_count), total: Number(r.total_count) }));
+    const total = all.reduce((s, r) => s + r.total, 0);
+    // Open/active stages only (not closed in LeadSimple, not a terminal-named
+    // stage), ordered by pipeline sequence descending (latest stage first).
     const stages = all
-      .filter((r) => !isTerminal(r.stage))
+      .filter((r) => !isTerminal(r.stage) && r.open > 0)
+      .map((r) => ({ stage: r.stage, count: r.open }))
       .sort((a, b) => pipelineRank(b.stage) - pipelineRank(a.stage));
-    const openTotal = stages.reduce((s, r) => s + r.count, 0);
+    const openTotal = all
+      .filter((r) => !isTerminal(r.stage))
+      .reduce((s, r) => s + r.open, 0);
 
     return { stages, total, openTotal };
   } catch {
     return null;
   }
+}
+
+// A work order is terminal (not counted as open) when LeadSimple has closed it
+// — closed_at set — OR its stage name matches the terminal regex. closed_at is
+// authoritative; the stage-name check is a fallback for rows closed in
+// LeadSimple without a closed_at timestamp.
+function woTerminal(stage: string, closedAt: Date | string | null): boolean {
+  return Boolean(closedAt) || isTerminal(stage);
 }
 
 type RawRow = {
@@ -51,6 +68,7 @@ type RawRow = {
   vendor_name: string | null;
   assignee_name: string | null;
   link: string | null;
+  closed_at: Date | string | null;
 };
 
 // A work order flagged for the dashboard's attention panel.
@@ -79,7 +97,7 @@ export async function workOrderAlerts(windowHours = 72): Promise<WorkOrderAlerts
     const [rows, rv] = await Promise.all([
       prisma.$queryRaw<(RawRow & { created_at: Date | null })[]>(Prisma.sql`
         SELECT source_id, wo_number, title, name, stage,
-               property_address, vendor_name, assignee_name, link, created_at
+               property_address, vendor_name, assignee_name, link, created_at, closed_at
         FROM work_orders`),
       rentvineEnrichment(),
     ]);
@@ -100,7 +118,7 @@ export async function workOrderAlerts(windowHours = 72): Promise<WorkOrderAlerts
         propertyId: enrich?.propertyId ?? null,
         link: r.link ?? "",
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
-        terminal: isTerminal(stage),
+        terminal: woTerminal(stage, r.closed_at),
         createdMs,
       };
     });
@@ -205,7 +223,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
     const [rows, rv, updates] = await Promise.all([
       prisma.$queryRaw<RawRow[]>(Prisma.sql`
         SELECT source_id, wo_number, title, name, stage,
-               property_address, vendor_name, assignee_name, link
+               property_address, vendor_name, assignee_name, link, closed_at
         FROM work_orders`),
       rentvineEnrichment(),
       latestWoUpdates(),
@@ -221,7 +239,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         number,
         issue: r.title || r.name || "Work order",
         stage,
-        terminal: isTerminal(stage),
+        terminal: woTerminal(stage, r.closed_at),
         property: r.property_address ?? "—",
         vendor: r.vendor_name ?? "",
         assignee: r.assignee_name ?? "",
