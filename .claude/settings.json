@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-.}\"/.claude/hooks/session-start.sh",
+            "timeout": 300,
+            "statusMessage": "Installing dependencies"
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "ai-skills": {
+      "source": {
+        "source": "github",
+        "repo": "dlandman27/ai-skills"
+      },
+      "autoUpdate": false
+    }
+  },
+  "enabledPlugins": {
+    "ai-skills@ai-skills": true,
+    "skill-scout@ai-skills": false
+  }
+}
