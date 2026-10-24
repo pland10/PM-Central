@@ -89,6 +89,28 @@ export type WorkOrderAlerts = {
   windowHours: number;
 };
 
+export type AttentionItem = WoAlert & { isNew: boolean; isHigh: boolean };
+
+// The dashboard's "Work orders to review" list: new (in the window) and/or High
+// priority, merged — a WO can be both — with High first, then newest.
+export function attentionList(alerts: WorkOrderAlerts | null): AttentionItem[] {
+  if (!alerts) return [];
+  const byNumber = new Map<string, AttentionItem>();
+  for (const w of alerts.recent) {
+    byNumber.set(w.number, { ...w, isNew: true, isHigh: /high/i.test(w.priority) });
+  }
+  for (const w of alerts.high) {
+    const existing = byNumber.get(w.number);
+    if (existing) existing.isHigh = true;
+    else byNumber.set(w.number, { ...w, isNew: false, isHigh: true });
+  }
+  return [...byNumber.values()].sort(
+    (a, b) =>
+      Number(b.isHigh) - Number(a.isHigh) ||
+      new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+  );
+}
+
 // New + high-priority OPEN work orders, so a freshly-arrived or urgent WO can't
 // slip by unseen. "New" = created within windowHours (default 72h); priority
 // comes from the Rentvine enrichment. Null if the work_orders table isn't there.
