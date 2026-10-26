@@ -10,7 +10,7 @@
 -- Apply with:  psql "$DATABASE_URL" -f prisma/sql/payments.sql   (idempotent)
 
 CREATE TABLE IF NOT EXISTS payments (
-  source_id        TEXT PRIMARY KEY,         -- rvpay_<transactionID>
+  source_id        TEXT PRIMARY KEY,         -- rvpay_<id> tenant payment, rvown_<id> owner contribution
   transaction_id   TEXT,
   status           TEXT NOT NULL,            -- cleared, pending, returned, non_ach, voided
   amount           NUMERIC(14,2) NOT NULL DEFAULT 0,
