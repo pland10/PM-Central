@@ -57,9 +57,10 @@ function in `src/lib` test-first**, then call it from the page — see
 - Hit the real DB, Rentvine, Resend or GitHub from a test (CI has no secrets).
 - Assert on implementation details (call order of internals, CSS classes) when a
   user-visible outcome or return value says the same thing.
-- "Fix" a failing test to match surprising behavior without asking — a test
-  that records an open question says so in a comment (see the
-  "Work Completed - Awaiting Invoice" case in `tests/lib/work-orders.test.ts`).
+- "Fix" a failing test to match surprising behavior without asking. When the
+  right behavior is unclear, record the current behavior with a comment saying
+  it's an open question, ask, then flip the test first once the user decides
+  (that's how "Work Completed - Awaiting Invoice" became an open stage).
 
 ## Commands
 `npm test` · `npm run test:watch` · `npm run test:coverage` (HTML report in

@@ -37,7 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install          # runs postinstall -> prisma generate
+          cache: npm
+      - run: npm ci               # runs postinstall -> prisma generate
       - run: npm run sync:rentvine
       # Work orders sync separately into rv_work_orders (property + priority),
       # merged with LeadSimple stages on the Work Orders page.

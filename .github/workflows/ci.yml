@@ -30,10 +30,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      # package-lock.json is gitignored, so install the way Vercel and the sync
-      # workflows do (npm ci needs a committed lockfile). postinstall runs
-      # prisma generate.
-      - run: npm install --no-audit --no-fund
+          cache: npm
+      # Installs exactly what package-lock.json pins; fails if it's out of sync
+      # with package.json. postinstall runs prisma generate.
+      - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
