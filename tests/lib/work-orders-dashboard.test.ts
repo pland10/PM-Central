@@ -77,6 +77,28 @@ describe("workOrderStageSummary", () => {
     ]); // latest pipeline stage first; zero-open and terminal stages dropped
   });
 
+  it("counts 'Work Completed - Awaiting Invoice' as an open stage", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [
+          /FROM work_orders GROUP BY stage/,
+          [
+            { stage: "Work Completed - Awaiting Invoice", open_count: 4, total_count: 7 },
+            { stage: "Troubleshooting", open_count: 2, total_count: 2 },
+          ],
+        ],
+      ]) as never
+    );
+
+    const summary = await workOrderStageSummary();
+
+    expect(summary!.openTotal).toBe(6);
+    expect(summary!.stages).toEqual([
+      { stage: "Work Completed - Awaiting Invoice", count: 4 },
+      { stage: "Troubleshooting", count: 2 },
+    ]);
+  });
+
   it("returns null when the work_orders table is missing", async () => {
     queryRaw.mockRejectedValue(new Error('relation "work_orders" does not exist'));
     expect(await workOrderStageSummary()).toBeNull();
@@ -116,6 +138,14 @@ describe("workOrderAlerts", () => {
     const alerts = await workOrderAlerts();
 
     expect(alerts!.recent.map((a) => a.number)).toEqual(["3"]);
+  });
+
+  it("keeps an 'Awaiting Invoice' work order in the open alerts", async () => {
+    setup([woRow({ wo_number: "7", stage: "Work Completed - Awaiting Invoice" })]);
+
+    const alerts = await workOrderAlerts();
+
+    expect(alerts!.recent.map((a) => a.number)).toEqual(["7"]);
   });
 
   it("flags High priority from the Rentvine enrichment and links the property", async () => {
