@@ -25,19 +25,12 @@ describe("isTerminal", () => {
     (stage) => expect(isTerminal(stage)).toBe(true)
   );
 
-  it.each(["New WO", "Troubleshooting", "Assigning in Progress", "Scheduling in Progress"])(
-    "treats %s as open",
-    (stage) => expect(isTerminal(stage)).toBe(false)
+  // Every stage in the LeadSimple pipeline is open work, even when its name
+  // says "Complete" — "Work Completed - Awaiting Invoice" still needs the
+  // invoice chased. Only closed_at (or an off-pipeline stage) closes a WO.
+  it.each(STAGE_ORDER)("treats pipeline stage %s as open", (stage) =>
+    expect(isTerminal(stage)).toBe(false)
   );
-
-  // Current behavior, recorded on purpose: the stage-name regex matches
-  // "complete", so this mid-pipeline stage counts as closed while the LATER
-  // "Invoice Received" stage counts as open. Open question with the user —
-  // change this test first if the rule changes.
-  it("counts 'Work Completed - Awaiting Invoice' as terminal but 'Invoice Received' as open", () => {
-    expect(isTerminal("Work Completed - Awaiting Invoice")).toBe(true);
-    expect(isTerminal("Invoice Received")).toBe(false);
-  });
 });
 
 describe("priorityRank", () => {

@@ -33,7 +33,10 @@ export function pipelineRank(stage: string): number {
 
 // Stages that mean the work order is off the active board (completed / cancelled
 // / deferred, etc.) — hidden from the dashboard, toggleable on the full page.
+// Pipeline stages are always open, even "Work Completed - Awaiting Invoice";
+// the name regex only applies to stages outside the pipeline.
 export function isTerminal(stage: string): boolean {
+  if (STAGE_ORDER.includes(stage)) return false;
   return /complete|cancel|closed|lost|defer/i.test(stage);
 }
 

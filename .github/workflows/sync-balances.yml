@@ -36,5 +36,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install          # runs postinstall -> prisma generate
+          cache: npm
+      - run: npm ci               # runs postinstall -> prisma generate
       - run: npm run sync:balances
