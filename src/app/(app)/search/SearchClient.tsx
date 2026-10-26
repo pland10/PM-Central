@@ -139,9 +139,18 @@ function ScopeInput({
   );
 }
 
-export function SearchClient() {
+// `?types=payment` (or a comma list) preselects just those types, e.g. the
+// dashboard's "Search payments →" link. Unknown keys are ignored; none left
+// means every type.
+function parseTypes(raw: string | undefined): Set<string> {
+  const known = new Set(TYPES.map((t) => t.key));
+  const picked = (raw ?? "").split(",").map((s) => s.trim()).filter((k) => known.has(k));
+  return picked.length ? new Set(picked) : known;
+}
+
+export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
   const [q, setQ] = useState("");
-  const [types, setTypes] = useState<Set<string>>(new Set(TYPES.map((t) => t.key)));
+  const [types, setTypes] = useState<Set<string>>(() => parseTypes(initialTypes));
   const [dir, setDir] = useState("");
   const [pageSize, setPageSize] = useState(20);
   // Both task states active by default; when exactly one is active it filters.
@@ -303,6 +312,7 @@ export function SearchClient() {
             <button
               key={t.key}
               onClick={() => toggleType(t.key)}
+              aria-pressed={active}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 active ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-400"
               }`}

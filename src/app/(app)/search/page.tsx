@@ -3,7 +3,14 @@ import { SearchClient } from "./SearchClient";
 
 export const dynamic = "force-dynamic";
 
-export default function SearchPage() {
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ types?: string | string[] }>;
+}) {
   requireFeature("search");
-  return <SearchClient />;
+  const { types } = await searchParams;
+  const initialTypes = Array.isArray(types) ? types.join(",") : types;
+  // Keyed so following a different ?types= link while on /search resets the filter.
+  return <SearchClient key={initialTypes ?? ""} initialTypes={initialTypes} />;
 }
