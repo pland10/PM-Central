@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/format";
-import type { PaymentAsOf, PaymentLine } from "@/lib/payments-dashboard";
+import type { PaymentAsOf, PaymentLine, RangeDays } from "@/lib/payments-dashboard";
 
 const STALE_DAYS = 10;
 
@@ -40,23 +40,32 @@ function Stat({ label, total, count, tone }: { label: string; total: number; cou
 export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
   const [data, setData] = useState<PaymentAsOf>(initial);
   const [date, setDate] = useState(initial.asOf);
+  const [range, setRange] = useState<RangeDays>(initial.rangeDays ?? 1);
   const [loading, setLoading] = useState(false);
   const [showAllCleared, setShowAllCleared] = useState(false);
   const [showAllPending, setShowAllPending] = useState(false);
   const [showAllReturns, setShowAllReturns] = useState(false);
   const today = initial.asOf;
 
-  async function pick(d: string) {
-    setDate(d);
+  async function load(d: string, r: RangeDays) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/payments?asOf=${d}`, { cache: "no-store" });
+      const res = await fetch(`/api/payments?asOf=${d}&days=${r}`, { cache: "no-store" });
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
   }
+  function pick(d: string) {
+    setDate(d);
+    load(d, range);
+  }
+  function pickRange(r: RangeDays) {
+    setRange(r);
+    load(date, r);
+  }
+  const week = range === 7;
 
   const isToday = data.asOf === today;
   const whenLabel = isToday ? "today" : fmtDate(data.asOf);
@@ -78,6 +87,20 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
           )}
         </h2>
         <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs">
+            {([1, 7] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => pickRange(r)}
+                aria-pressed={range === r}
+                className={`px-2 py-1 font-medium ${
+                  range === r ? "bg-brand-50 text-brand-700" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {r === 1 ? "1 day" : "7 days"}
+              </button>
+            ))}
+          </div>
           <input
             type="date"
             value={date}
@@ -95,9 +118,9 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
       </div>
 
       <div className={`grid grid-cols-3 gap-2 text-center transition-opacity ${loading ? "opacity-50" : ""}`}>
-        <Stat label="Now payable" total={data.clearedTotal} count={data.clearedCount} tone="text-emerald-600" />
+        <Stat label={week ? "Cleared (7d)" : "Now payable"} total={data.clearedTotal} count={data.clearedCount} tone="text-emerald-600" />
         <Stat label="In flight" total={data.pendingTotal} count={data.pendingCount} tone="text-amber-600" />
-        <Stat label="Returns / NSF" total={data.returnedTotal} count={data.returnedCount} tone="text-red-600" />
+        <Stat label={week ? "Returns (7d)" : "Returns / NSF"} total={data.returnedTotal} count={data.returnedCount} tone="text-red-600" />
       </div>
 
       {data.pendingStale > 0 && (
@@ -109,14 +132,16 @@ export function PaymentsPane({ initial }: { initial: PaymentAsOf }) {
       {/* Cleared — funds now available, one row per payment */}
       <div className="mt-3">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-          Cleared — funds now available
+          {week ? `Cleared — last 7 days${isToday ? "" : ` to ${fmtShort(data.asOf)}`}` : "Cleared — funds now available"}
         </div>
         {clearedLines.length === 0 ? (
-          <div className="py-4 text-center text-sm text-slate-400">Nothing new cleared {isToday ? "today" : "then"}.</div>
+          <div className="py-4 text-center text-sm text-slate-400">
+            {week ? "Nothing cleared in those 7 days." : `Nothing new cleared ${isToday ? "today" : "then"}.`}
+          </div>
         ) : (
           <>
             {cleared.map((l) => (
-              <PaymentRow key={l.source_id} p={l} asOf={data.asOf} whenField="none" />
+              <PaymentRow key={l.source_id} p={l} asOf={data.asOf} whenField={week ? "cleared" : "none"} />
             ))}
             {clearedLines.length > 5 && (
               <button
@@ -190,7 +215,7 @@ function PaymentRow({
 }: {
   p: PaymentLine;
   asOf: string;
-  whenField: "age" | "posted" | "none";
+  whenField: "age" | "posted" | "cleared" | "none";
 }) {
   const days = ageDays(p.date_posted, asOf);
   const tone = days != null && days > STALE_DAYS ? "text-amber-600" : "text-slate-400";
@@ -211,6 +236,7 @@ function PaymentRow({
         <div className="font-medium text-slate-700">{formatCurrency(p.amount)}</div>
         {whenField === "age" && days != null && <div className={`text-xs ${tone}`}>{days}d in flight</div>}
         {whenField === "posted" && <div className="text-xs text-slate-400">paid {fmtShort(p.date_posted)}</div>}
+        {whenField === "cleared" && <div className="text-xs text-slate-400">cleared {fmtShort(p.clear_date)}</div>}
       </div>
     </div>
   );
