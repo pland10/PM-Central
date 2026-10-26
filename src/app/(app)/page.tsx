@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAddress, formatCurrency } from "@/lib/format";
 import { SQUATTER_WATCH } from "@/lib/programs";
 import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
-import { workOrderStageSummary, workOrderAlerts, type WoAlert } from "@/lib/work-orders-dashboard";
+import { workOrderStageSummary, workOrderAlerts, attentionList } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
 import { DashboardExport } from "./DashboardExport";
@@ -122,25 +122,8 @@ export default async function DashboardPage() {
       ? depositsLive.summary.pmiHeldActive + depositsLive.summary.pmiHeldMovedOut
       : totalDeposits;
 
-  // Work orders needing attention: new in the last 72h and/or High priority,
-  // merged (a WO can be both) with High first, then newest.
-  const woAttention: (WoAlert & { isNew: boolean; isHigh: boolean })[] = (() => {
-    if (!woAlerts) return [];
-    const map = new Map<string, WoAlert & { isNew: boolean; isHigh: boolean }>();
-    for (const w of woAlerts.recent) {
-      map.set(w.number, { ...w, isNew: true, isHigh: /high/i.test(w.priority) });
-    }
-    for (const w of woAlerts.high) {
-      const ex = map.get(w.number);
-      if (ex) ex.isHigh = true;
-      else map.set(w.number, { ...w, isNew: false, isHigh: true });
-    }
-    return [...map.values()].sort(
-      (a, b) =>
-        Number(b.isHigh) - Number(a.isHigh) ||
-        new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-    );
-  })();
+  // Work orders needing attention: new in the last 72h and/or High priority.
+  const woAttention = attentionList(woAlerts);
   const newWoCount = woAlerts?.recent.length ?? 0;
   const highWoCount = woAlerts?.high.length ?? 0;
   // Only leases expiring within ~120 days, plus any already past — the near-term

@@ -15,7 +15,7 @@ data from many sources and could be sold as a product.
   idempotent. `source = "manual"` for hand-entered records.
 - **Enums:** status/role fields are kept as `String` (not Prisma enums) for
   portability, with the allowed values documented in `schema.prisma` comments.
-- Server components query Prisma directly (see `src/app/properties/page.tsx`).
+- Server components query Prisma directly (see `src/app/(app)/properties/page.tsx`).
   Keep the Prisma client import via `@/lib/prisma`.
 - **Auth:** `src/middleware.ts` gates the whole app. `AUTH_MODE=supabase`
   (production) uses per-user Supabase login (`/login`, roles from app_metadata);
@@ -38,15 +38,24 @@ every merge, including the final `dev` → `main` to production. Never merge
 without asking first, never leave a promotion for the user to open manually,
 and never push straight to `dev` or `main`.
 
-**Railway auto-deploys code; env/settings changes need a manual redeploy.**
-Railway watches each service's branch (`main` → prod, `dev` → dev) and
-redeploys automatically on every push there, so **code merges deploy
-themselves** — no reminder needed. But changing a **variable or any service
-setting** in Railway pushes no code, so nothing triggers a deploy: a runtime
-env var like `RESEND_API_KEY` stays invisible to the app until that service
-redeploys or restarts. Whenever the user says they changed a Railway variable
-or setting, remind them to redeploy that service (and to set it on the right
-service — dev and prod are separate).
+**Hosting: production is on Vercel; dev is still on Railway** (until dev moves
+to Vercel Preview — see `DEPLOY-VERCEL.md`). Both auto-deploy their branch
+(`main` → Vercel prod, `dev` → Railway dev), so **code merges deploy
+themselves** — no reminder needed. But changing an **env var or setting**
+pushes no code, so nothing redeploys: the running app keeps the old value.
+Whenever the user changes a variable, remind them to redeploy that service
+(Vercel: Deployments → latest → ⋯ → Redeploy) and to set it in the right
+place — prod and dev are separate. Prod `DATABASE_URL` on Vercel must be Neon's
+**pooled** endpoint. This sandbox can't reach the live site; use the
+`smoke-test` and `verify-sync` skills to check a deploy.
+
+## Testing — TDD is the default
+Every behavior change (feature, bugfix, logic refactor) starts with a failing
+test, then the code — see the `tdd` skill for this repo's patterns. Tests live in
+`tests/` (Vitest + Testing Library), mock the DB and every external API, and need
+no secrets. CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests and a
+production build on every PR into `dev`/`main`; don't merge on red.
+`npm test` · `npm run test:watch` · `npm run typecheck` · `npm run lint`.
 
 ## Commands
 - `npm run db:push` **only against an empty/throwaway database.** The shared
@@ -60,6 +69,21 @@ service — dev and prod are separate).
 - `npm run db:seed` to reload sample data
 - `npm run dev` to run
 
-## Next up
-Rentvine import adapter → map Rentvine property/unit/lease/contact records onto
-these models and upsert. The Rentvine MCP connector is the data source.
+## Skills
+Project skills live in `.claude/skills/` — use them instead of re-deriving:
+`tdd` (test-first, this repo's test patterns), `ship` (PR + merge flow), `verify-sync` (prove a sync/secret via Actions logs),
+`rentvine-api` (endpoint shapes, quirks, probe-and-log), `db-change` (additive
+SQL, never `db push`), `reconcile-rentvine` (app vs. Rentvine discrepancies),
+`smoke-test` (post-deploy checks), `add-dashboard-panel`, `rentvine-report-page`.
+When you learn something new about Rentvine or a workflow, update the skill.
+
+The `ai-skills` plugin (marketplace `dlandman27/ai-skills`, reviewed before
+install, `autoUpdate` off — re-review before updating) adds general skills such
+as `test-driven-development`, `systematic-debugging` and
+`verification-before-completion`. This repo's rules win where they conflict
+(e.g. Claude *does* open PRs here). Also use the built-ins: `/code-review` on
+non-trivial diffs, `/security-review` on auth, middleware, webhook, cron or
+secret-handling changes.
+
+## Open work
+See `BACKLOG.md` and `TODO.md`.
