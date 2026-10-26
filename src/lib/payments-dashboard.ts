@@ -33,6 +33,7 @@ export type OwnerGroup = {
 
 export type PaymentAsOf = {
   asOf: string; // YYYY-MM-DD
+  rangeDays: RangeDays; // 1 = "now payable" view; 7 = look back a week
   clearedCount: number;
   clearedTotal: number;
   clearedByOwner: OwnerGroup[]; // cleared "now payable", grouped by owner
@@ -44,6 +45,14 @@ export type PaymentAsOf = {
   returnedTotal: number;
   returned: PaymentLine[]; // returned / NSF within 5 days, newest first
 };
+
+// Look-back for the cleared/returns lists: 1 = the default "now payable" view
+// (cleared today or yesterday, returns within 5 days); 7 = everything cleared
+// or returned in the 7 days ending on the view date.
+export type RangeDays = 1 | 7;
+export function normalizeRange(n: unknown): RangeDays {
+  return Number(n) === 7 ? 7 : 1;
+}
 
 const STALE_DAYS = 10;
 const CLEARED_WINDOW_DAYS = 1; // "now payable" = cleared today or yesterday
@@ -70,8 +79,12 @@ function withKind<T extends { source_id: string }>(row: T): T & { kind: PaymentL
   return { ...row, kind: row.source_id.startsWith("rvown_") ? "owner" : "rent" };
 }
 
-export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf | null> {
+export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): Promise<PaymentAsOf | null> {
   const asOf = normalizeDate(asOfRaw);
+  const rangeDays = normalizeRange(rangeRaw);
+  // Days before asOf (inclusive window): 7-day view = asOf-6 … asOf.
+  const clearedBack = rangeDays === 7 ? 6 : CLEARED_WINDOW_DAYS;
+  const returnsBack = rangeDays === 7 ? 6 : RETURNS_WINDOW_DAYS;
   try {
     // Cleared "now payable": cleared within the window ending on asOf.
     const clearedRows = (await prisma.$queryRaw<(Omit<PaymentLine, "kind"> & { owner: string | null })[]>(Prisma.sql`
@@ -79,7 +92,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf 
       FROM payments
       WHERE status = 'cleared'
         AND clear_date <= ${asOf}::date
-        AND clear_date >= ${asOf}::date - ${CLEARED_WINDOW_DAYS}::int
+        AND clear_date >= ${asOf}::date - ${clearedBack}::int
       ORDER BY owner ASC NULLS LAST, clear_date ASC, amount DESC`)).map(withKind);
 
     // Pending (in flight) as of asOf, oldest first.
@@ -95,7 +108,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf 
       FROM payments
       WHERE status = 'returned'
         AND date_posted <= ${asOf}::date
-        AND date_posted >= ${asOf}::date - ${RETURNS_WINDOW_DAYS}::int
+        AND date_posted >= ${asOf}::date - ${returnsBack}::int
       ORDER BY date_posted DESC NULLS LAST`)).map(withKind);
 
     // If every query is empty the table may simply be unpopulated — but it still
@@ -135,6 +148,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf 
 
     return {
       asOf,
+      rangeDays,
       clearedCount: clearedRows.length,
       clearedTotal,
       clearedByOwner: [...groups.values()],

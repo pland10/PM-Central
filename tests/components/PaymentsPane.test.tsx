@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { jsonResponse } from "../helpers/fetch";
 
 import { PaymentsPane } from "@/app/(app)/PaymentsPane";
 import type { PaymentAsOf, PaymentLine } from "@/lib/payments-dashboard";
@@ -23,6 +25,7 @@ function data(over: Partial<PaymentAsOf>): PaymentAsOf {
     clearedCount: 0,
     clearedTotal: 0,
     clearedByOwner: [],
+    rangeDays: 1,
     pendingCount: 0,
     pendingTotal: 0,
     pendingStale: 0,
@@ -50,5 +53,31 @@ describe("PaymentsPane", () => {
 
     const rentRow = screen.getByText("Bobbye Sanders").closest("div.flex") as HTMLElement;
     expect(within(rentRow).queryByText(/owner contribution/i)).toBeNull();
+  });
+  it("switches to a 7-day look-back and shows when each payment cleared", async () => {
+    const week = data({
+      rangeDays: 7,
+      clearedCount: 1,
+      clearedTotal: 2950,
+      clearedByOwner: [
+        {
+          owner: "Christian Chike",
+          total: 2950,
+          lines: [line({ source_id: "rvown_11347", kind: "owner", tenant: "Christian Chike", amount: 2950, clear_date: "2026-10-24" })],
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async (_url: string) => jsonResponse(week));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<PaymentsPane initial={data({})} />);
+
+    expect(screen.getByRole("button", { name: "1 day" }).getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "7 days" }));
+
+    expect(fetchMock.mock.calls[0][0]).toContain("days=7");
+    expect(await screen.findByText(/cleared — last 7 days/i)).toBeTruthy();
+    expect(screen.getByText(/cleared oct 24/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "7 days" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
