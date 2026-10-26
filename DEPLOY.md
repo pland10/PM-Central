@@ -102,18 +102,17 @@ backstop; runs are idempotent, so an occasional double-trigger is harmless.)
 - `?source=<id>` → one source (`properties`, `balances`, `communications`,
   `payments`, `emails`)
 
-**Setup:**
-1. Set `CRON_SECRET` (a long random string) and `GITHUB_DISPATCH_TOKEN` (a
-   fine-grained GitHub token with Actions: write on PM-Central +
-   leadsimple-search) in the app's environment.
-2. In a managed scheduler with retries + delivery logs — **Upstash QStash**
-   recommended (cron-job.org works too) — create two schedules:
-   - **Hourly** → `POST https://pmilighthouse.app/api/cron/sync?tier=hourly`
-   - **Daily** (early AM) → `POST https://pmilighthouse.app/api/cron/sync?tier=daily`
-
-   Both with header `Authorization: Bearer <CRON_SECRET>`. A managed scheduler
-   (vs. GitHub/host cron) gives guaranteed delivery, automatic retries, and a
-   log of every fire — none of which plain cron offers.
+**Scheduler: Vercel Cron** (`crons` in `vercel.json`, production deployments
+only). Vercel calls the endpoint with `Authorization: Bearer $CRON_SECRET`
+automatically when `CRON_SECRET` is set in the project:
+- hourly tier — every hour 11–23 UTC (~7am–7pm ET) and every 2h overnight;
+- daily tier — 10:20 UTC (~6:20am ET).
+The extra `slot=` param only makes the two hourly paths distinct; the route
+ignores it. Also needs `GITHUB_DISPATCH_TOKEN` (fine-grained, Actions: write on
+PM-Central + leadsimple-search). Sub-daily crons need Vercel **Pro** — on Hobby
+the deploy fails, so move to Upstash QStash / cron-job.org (same endpoint) if
+the plan ever drops. Check fires in Vercel → project → Settings → Cron Jobs
+(logs per run).
 
 ### Keeping balances fresh after an import
 
