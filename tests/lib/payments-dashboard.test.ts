@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { routeQueries } from "../helpers/sql";
+import { routeQueries, sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: vi.fn() } }));
 
@@ -128,5 +128,36 @@ describe("paymentSummaryAsOf", () => {
       ["rvpay_11337", "rent"],
       ["rvown_11400", "owner"],
     ]);
+  });
+  describe("look-back range", () => {
+    const valuesOf = (pattern: RegExp) => {
+      const call = queryRaw.mock.calls.find(([q]) => pattern.test(sqlOf(q)));
+      return (call![0] as unknown as { values: unknown[] }).values;
+    };
+
+    it("defaults to the 'today' view: cleared today or yesterday, returns within 5 days", async () => {
+      queryRaw.mockResolvedValue([] as never);
+
+      const s = await paymentSummaryAsOf("2026-10-24");
+
+      expect(s!.rangeDays).toBe(1);
+      expect(valuesOf(/status = 'cleared'/)).toEqual(["2026-10-24", "2026-10-24", 1]);
+      expect(valuesOf(/status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 5]);
+    });
+
+    it("with 7 days, covers the 7 days ending on the date for cleared and returns", async () => {
+      queryRaw.mockResolvedValue([] as never);
+
+      const s = await paymentSummaryAsOf("2026-10-24", 7);
+
+      expect(s!.rangeDays).toBe(7);
+      expect(valuesOf(/status = 'cleared'/)).toEqual(["2026-10-24", "2026-10-24", 6]); // Oct 18–24
+      expect(valuesOf(/status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 6]);
+    });
+
+    it("treats any other range as the default", async () => {
+      queryRaw.mockResolvedValue([] as never);
+      expect((await paymentSummaryAsOf("2026-10-24", 30))!.rangeDays).toBe(1);
+    });
   });
 });
