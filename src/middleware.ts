@@ -102,7 +102,10 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
 }
 
 // Gate everything except Next's static assets (so the gate doesn't re-fire for
-// every CSS/JS/image request).
+// every CSS/JS/image request) and the app icons + manifest, which browsers fetch
+// without a session (the login tab icon, "Install app").
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|logo.png).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico$|logo\\.png$|manifest\\.webmanifest$|icon-[\\w-]+\\.png$|apple-touch-icon\\.png$).*)",
+  ],
 };

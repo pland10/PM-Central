@@ -6,7 +6,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn(() => ({ auth: { getUser } })),
 }));
 
-import { middleware } from "@/middleware";
+import { config, middleware } from "@/middleware";
 
 const req = (path: string, headers: Record<string, string> = {}) =>
   new NextRequest(`https://pmilighthouse.app${path}`, { headers });
@@ -35,6 +35,18 @@ describe("middleware — routes that bypass the login gate", () => {
     const res = await middleware(req("/api/healthz"));
     expect(res.status).toBe(401);
   });
+
+  // The matcher decides which paths the gate runs on at all. Browsers fetch the
+  // app icons and manifest without a session (installing the app, the login
+  // page's tab icon), so those must be outside it — but pages must not be.
+  const gated = (path: string) => config.matcher.some((m) => new RegExp(`^${m}$`).test(path));
+
+  it.each(["/favicon.ico", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/apple-touch-icon.png", "/logo.png"])(
+    "serves %s without the login gate",
+    (path) => expect(gated(path)).toBe(false)
+  );
+
+  it.each(["/", "/search", "/api/payments", "/icons-admin"])("gates %s", (path) => expect(gated(path)).toBe(true));
 });
 
 describe("middleware — AUTH_MODE=basic", () => {

@@ -12,6 +12,14 @@ export const metadata: Metadata = {
   // default: pages without their own title. template: "%s · PMI Lighthouse - Dev".
   title: { default: BASE_TITLE, template: `%s · ${BASE_TITLE}` },
   description: `${BRAND.name} — ${BRAND.tagline}`,
+  // Tab icon + home-screen icon; the install icons live in app/manifest.ts.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 // Root layout: just the document shell + brand colors. The app chrome (sidebar,
