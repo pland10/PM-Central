@@ -1,0 +1,40 @@
+name: CI
+
+# Runs on every PR into dev/main and every push to them: typecheck, lint, the
+# test suite, and a production build. Needs no secrets — tests mock the DB and
+# every external API, and the build doesn't touch the database.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      # package-lock.json is gitignored, so install the way Vercel and the sync
+      # workflows do (npm ci needs a committed lockfile). postinstall runs
+      # prisma generate.
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
