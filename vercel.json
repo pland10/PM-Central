@@ -1,4 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "crons": [
+    { "path": "/api/cron/sync?tier=hourly&slot=day", "schedule": "5 11-23 * * *" },
+    { "path": "/api/cron/sync?tier=hourly&slot=night", "schedule": "5 1-9/2 * * *" },
+    { "path": "/api/cron/sync?tier=daily", "schedule": "20 10 * * *" }
+  ]
 }
