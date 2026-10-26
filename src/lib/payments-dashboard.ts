@@ -15,7 +15,8 @@ import { prisma } from "@/lib/prisma";
 // flight, so it's flagged.
 
 export type PaymentLine = {
-  source_id: string;
+  source_id: string; // rvpay_<id> tenant payment, rvown_<id> owner contribution
+  kind: "rent" | "owner";
   tenant: string | null;
   property_address: string | null;
   amount: number;
@@ -63,33 +64,39 @@ const LINE_COLS = Prisma.sql`
   to_char(clear_date, 'YYYY-MM-DD') AS clear_date,
   to_char(expected_clear, 'YYYY-MM-DD') AS expected_clear`;
 
+// settlement_sync.py writes owner receipts (Rentvine "Owner Receipt" — owner
+// contributions) as rvown_<id>; tenant payments are rvpay_<id>.
+function withKind<T extends { source_id: string }>(row: T): T & { kind: PaymentLine["kind"] } {
+  return { ...row, kind: row.source_id.startsWith("rvown_") ? "owner" : "rent" };
+}
+
 export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf | null> {
   const asOf = normalizeDate(asOfRaw);
   try {
     // Cleared "now payable": cleared within the window ending on asOf.
-    const clearedRows = await prisma.$queryRaw<(PaymentLine & { owner: string | null })[]>(Prisma.sql`
+    const clearedRows = (await prisma.$queryRaw<(Omit<PaymentLine, "kind"> & { owner: string | null })[]>(Prisma.sql`
       SELECT ${LINE_COLS}, owner
       FROM payments
       WHERE status = 'cleared'
         AND clear_date <= ${asOf}::date
         AND clear_date >= ${asOf}::date - ${CLEARED_WINDOW_DAYS}::int
-      ORDER BY owner ASC NULLS LAST, clear_date ASC, amount DESC`);
+      ORDER BY owner ASC NULLS LAST, clear_date ASC, amount DESC`)).map(withKind);
 
     // Pending (in flight) as of asOf, oldest first.
-    const pending = await prisma.$queryRaw<PaymentLine[]>(Prisma.sql`
+    const pending = (await prisma.$queryRaw<Omit<PaymentLine, "kind">[]>(Prisma.sql`
       SELECT ${LINE_COLS}
       FROM payments
       WHERE status = 'pending' AND date_posted <= ${asOf}::date
-      ORDER BY date_posted ASC NULLS LAST`);
+      ORDER BY date_posted ASC NULLS LAST`)).map(withKind);
 
     // Returns / NSF within the last RETURNS_WINDOW_DAYS, newest first.
-    const returned = await prisma.$queryRaw<PaymentLine[]>(Prisma.sql`
+    const returned = (await prisma.$queryRaw<Omit<PaymentLine, "kind">[]>(Prisma.sql`
       SELECT ${LINE_COLS}
       FROM payments
       WHERE status = 'returned'
         AND date_posted <= ${asOf}::date
         AND date_posted >= ${asOf}::date - ${RETURNS_WINDOW_DAYS}::int
-      ORDER BY date_posted DESC NULLS LAST`);
+      ORDER BY date_posted DESC NULLS LAST`)).map(withKind);
 
     // If every query is empty the table may simply be unpopulated — but it still
     // exists, so return zeros (the pane shows an empty state, not hidden).
@@ -116,6 +123,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string): Promise<PaymentAsOf 
       g.total += r.amount;
       g.lines.push({
         source_id: r.source_id,
+        kind: r.kind,
         tenant: r.tenant,
         property_address: r.property_address,
         amount: r.amount,

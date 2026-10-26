@@ -25,10 +25,17 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 | `/maintenance/work-orders` | wraps `workOrder`; `priorityID` 1/2/3 = Low/Medium/High |
 | `/reports/<route>?exportTypeID=1&json=<urlencoded {displayColumns, orderBys, filters}>` | `{ rows: [{rowTypeID, data}] }` — `3` = data row, `4` = totals |
 | `/reports/rent-roll?exportTypeID=1&…&reportID=<id>` | saved report (balances, default id 27) |
+| `/accounting/receipts` | **tenant receipts only**, oldest first. Rows `{ receipt, payment, charge }`; `payment` has `transactionID, achStatusID, settlementID, portfolioID, leaseID, contactID, amount, datePosted, isVoided, returnTransactionID`. Ignores `transactionTypeID`. Used by leadsimple-search `settlement_sync.py`. |
+| `/accounting/transactions?transactionTypeID=5` | **owner receipts** (owner contributions), newest first, rows wrap `transaction` (same fields as `payment` above; `leaseID`/`propertyID` null). The filter works here (`transactionTypeIDs=` is ignored). Type ids match the MCP's `list_transactions` list. |
+| `/accounting/transactions/{id}` | one transaction, wraps `transaction` |
+| `/accounting/settlements[/{id}]` | wraps `settlement` (`settlementDate`, `amount`, `expectedAmount`, `bankAccountGatewaySettlementID`) |
 
 **Known 404s** (don't retry): `/leases/{id}/lease-renewals`, `/leases/{id}/leaseRenewals`,
 `/lease-renewals?leaseID=`, `/workorders`, `/work-orders` (use `/maintenance/work-orders`),
-`/property-types`, `/propertyTypes`.
+`/property-types`, `/propertyTypes`, `/accounting/owner-receipts`,
+`/accounting/receipts/owner`, `/accounting/payments`, `/accounting/contributions`.
+`/accounting/receipts/{id}` → 400; `/accounting/owner-contributions`,
+`/portfolios/{id}/receipts` → 500.
 
 **Still unknown** (BACKLOG.md): property-type name list, property-group membership
 (Squatterwatch = group 4).
@@ -42,10 +49,14 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
   owner-held; the report total adds both and overstates PMI's trust liability.
 
 ## Keys
-Rentvine has **one API key per integration** (Settings → API Keys): the
-`PM-Central` key (app + PM-Central Actions) and a separate `Lead Simple` key
-(leadsimple-search). "New API Secret" regenerates the secret only; the key id
-stays. The Rentvine **MCP connector** uses separate auth — unaffected by either.
+Rentvine has **one API key per integration** (Settings → API Keys). The
+`PM-Central` key is used by the app (Vercel) and PM-Central Actions — and, until
+Oct 2026, leadsimple-search too: regenerating its secret on Oct 23 broke the
+leadsimple-search Rentvine steps (401) until that repo got its own key. The
+`Lead Simple` key is probably LeadSimple's own Rentvine integration — don't
+regenerate it. "New API Secret" regenerates the secret only; the key id stays.
+Before regenerating any secret, list every repo/env that holds it. The Rentvine
+**MCP connector** uses separate auth — unaffected by any of these.
 
 ## Discovering an unknown endpoint (probe-and-log)
 Guessing a path and silently falling back is how the renewal fix failed once.

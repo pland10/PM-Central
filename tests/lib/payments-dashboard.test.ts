@@ -109,4 +109,24 @@ describe("paymentSummaryAsOf", () => {
     queryRaw.mockRejectedValue(new Error('relation "payments" does not exist'));
     expect(await paymentSummaryAsOf()).toBeNull();
   });
+  it("marks owner contributions (rvown_ rows) so the pane can label them", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [
+          /status = 'cleared'/,
+          [{ ...line("rvown_11347", 2950, { clear_date: "2026-10-24", tenant: "Christian Chike" }), owner: "Christian Chike" }],
+        ],
+        [/status = 'pending'/, [line("rvpay_11337", 800), line("rvown_11400", 500)]],
+        [/status = 'returned'/, []],
+      ]) as never
+    );
+
+    const s = await paymentSummaryAsOf("2026-10-24");
+
+    expect(s!.clearedByOwner[0].lines[0]).toMatchObject({ source_id: "rvown_11347", kind: "owner" });
+    expect(s!.pending.map((p) => [p.source_id, p.kind])).toEqual([
+      ["rvpay_11337", "rent"],
+      ["rvown_11400", "owner"],
+    ]);
+  });
 });
