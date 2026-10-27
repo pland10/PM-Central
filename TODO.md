@@ -2,8 +2,8 @@
 
 ## Search — native (first pass done); follow-ups
 Search is now native in PM-Central: `/search` page + `/api/search` route querying
-the synced LeadSimple `activities` table in Supabase (keys server-side, behind
-PM-Central auth). Set `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
+the synced LeadSimple `activities` table on Neon (via `DATABASE_URL`, behind
+PM-Central auth).
 Ported: full-text search, all 6 types (email/text/call/note/chat/task), direction,
 task open/closed, "scope by" contact/property/pipeline with autocomplete, per-page,
 pagination, count, and the sync-freshness indicator.
