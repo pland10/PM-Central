@@ -58,6 +58,12 @@ export type WorkOrderRow = {
   // synced `activities` feed), or "" / null when the WO has no updates.
   lastUpdate: string;
   lastUpdateAt: string | null; // ISO
+  // LeadSimple process dates (ISO, or null). dueAt is only set once the sync
+  // captures due_at.
+  createdAt: string | null;
+  updatedAt: string | null;
+  closedAt: string | null;
+  dueAt: string | null;
 };
 
 // Sort rank for priority (High first); unknown/none sorts last.

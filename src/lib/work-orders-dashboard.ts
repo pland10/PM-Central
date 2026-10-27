@@ -71,6 +71,18 @@ type RawRow = {
   closed_at: Date | string | null;
 };
 
+type ListRow = RawRow & {
+  created_at: Date | string | null;
+  updated_at: Date | string | null;
+  due_at: string | null; // via to_jsonb, so text (or null when the column isn't there yet)
+};
+
+const iso = (v: Date | string | null | undefined): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
 // A work order flagged for the dashboard's attention panel.
 export type WoAlert = {
   number: string;
@@ -243,10 +255,13 @@ async function latestWoUpdates(): Promise<Map<string, { text: string; at: string
 export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
   try {
     const [rows, rv, updates] = await Promise.all([
-      prisma.$queryRaw<RawRow[]>(Prisma.sql`
+      // due_at is read through to_jsonb so this works before the sync adds the
+      // column (it's then just null) — no deploy-order dependency.
+      prisma.$queryRaw<ListRow[]>(Prisma.sql`
         SELECT source_id, wo_number, title, name, stage,
-               property_address, vendor_name, assignee_name, link, closed_at
-        FROM work_orders`),
+               property_address, vendor_name, assignee_name, link,
+               created_at, updated_at, closed_at, to_jsonb(w) ->> 'due_at' AS due_at
+        FROM work_orders w`),
       rentvineEnrichment(),
       latestWoUpdates(),
     ]);
@@ -270,6 +285,10 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         propertyId: enrich?.propertyId ?? null,
         lastUpdate: update?.text ?? "",
         lastUpdateAt: update?.at ?? null,
+        createdAt: iso(r.created_at),
+        updatedAt: iso(r.updated_at),
+        closedAt: iso(r.closed_at),
+        dueAt: iso(r.due_at),
       };
     });
   } catch {
