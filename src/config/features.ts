@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 
 // Feature flags — turn modules on/off per deployment so the product can be sold
-// in pieces. Every module defaults ON; disable one by setting its env var to
-// off/false/0/no, e.g. FEATURE_INVOICING=off. Read server-side.
+// in pieces. Shipped modules default ON; disable one by setting its env var to
+// off/false/0/no, e.g. FEATURE_INVOICING=off. Modules still being built default
+// OFF and are turned on with on/true/1/yes (e.g. FEATURE_MAINTENANCE=on).
+// Read server-side.
 export type FeatureKey =
   | "dashboard"
   | "properties"
@@ -11,6 +13,7 @@ export type FeatureKey =
   | "leases"
   | "tenants"
   | "workOrders"
+  | "maintenance"
   | "showings"
   | "search"
   | "teamComms"
@@ -32,6 +35,8 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   leases: flag("LEASES"),
   tenants: flag("TENANTS"),
   workOrders: flag("WORK_ORDERS"),
+  // New work-order screen (replacing Work Orders); side by side until it's done.
+  maintenance: flag("MAINTENANCE", false),
   showings: flag("SHOWINGS"),
   search: flag("SEARCH"),
   teamComms: flag("TEAM_COMMS"),

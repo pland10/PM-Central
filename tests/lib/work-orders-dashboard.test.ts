@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { routeQueries } from "../helpers/sql";
+import { routeQueries, sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRaw: vi.fn(), property: { findMany: vi.fn() } },
@@ -289,6 +289,48 @@ describe("listWorkOrders", () => {
     });
     expect(rows![1]).toMatchObject({ id: "b", terminal: true }); // closed in LeadSimple
     expect(rows![2]).toMatchObject({ id: "c", number: "—", stage: "—", lastUpdate: "", lastUpdateAt: null });
+  });
+
+  it("carries the created / updated / closed / due dates as ISO strings", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [/FROM rv_work_orders/, []],
+        [/FROM activities/, []],
+        [
+          /FROM work_orders/,
+          [
+            woRow({ created_at: hoursAgo(48), updated_at: hoursAgo(2), due_at: "2026-10-30T16:00:00Z" }),
+            woRow({ source_id: "x", created_at: null, updated_at: null, due_at: null }),
+          ],
+        ],
+      ]) as never
+    );
+
+    const rows = await listWorkOrders();
+
+    expect(rows![0]).toMatchObject({
+      createdAt: hoursAgo(48).toISOString(),
+      updatedAt: hoursAgo(2).toISOString(),
+      closedAt: null,
+      dueAt: "2026-10-30T16:00:00.000Z",
+    });
+    expect(rows![1]).toMatchObject({ createdAt: null, updatedAt: null, dueAt: null });
+  });
+
+  it("reads due_at without requiring the column, so it works before the sync adds it", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [/FROM rv_work_orders/, []],
+        [/FROM activities/, []],
+        [/FROM work_orders/, []],
+      ]) as never
+    );
+
+    await listWorkOrders();
+
+    const woSql = queryRaw.mock.calls.map(([q]) => sqlOf(q)).find((t) => /FROM work_orders/.test(t))!;
+    expect(woSql).toMatch(/to_jsonb\(w\) ->> 'due_at'/);
+    expect(woSql).not.toMatch(/[ ,]due_at,/);
   });
 
   it("returns null when the work_orders table is missing", async () => {
