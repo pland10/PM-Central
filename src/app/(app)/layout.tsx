@@ -375,7 +375,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           )}
         </header>
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        {/* Padding lives inside the scroller (not on it) so sticky table headers
+            pin flush to the top edge instead of 1.5rem below it. */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6">{children}</div>
+        </main>
       </div>
     </div>
   );
