@@ -39,15 +39,17 @@ locally.)
 |---|---|---|
 | `DATABASE_URL` | PM-Central's own Postgres | `postgresql://…` (Railway/Neon/Supabase) |
 | `AUTH_MODE` | `supabase` (per-user login) or `basic` | **prod: `supabase`** |
-| `NEXT_PUBLIC_SUPABASE_URL` | Identity + Search + Inspections project | `https://vpphjzvesgrihqavzyfu.supabase.co` (public) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser login key | the **publishable/anon** key (public) |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Search (`activities` table) | same project; anon key |
-| `SUPABASE_SERVICE_KEY` | Inspections data + listing users | same project's **secret** key (server-only) |
-| `INVOICING_SUPABASE_URL` | Invoicing project | `https://yzxmckltuhfmyzgoglrr.supabase.co` |
-| `INVOICING_SUPABASE_SERVICE_KEY` | Invoicing read/write | invoicing project's **secret** key (server-only) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Login + inspection photos project | `https://vpphjzvesgrihqavzyfu.supabase.co` (public) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser login key | the **publishable** key `sb_publishable_…` (public; set as a Config var in Vercel). Legacy JWT keys are disabled. |
+| `SUPABASE_SERVICE_KEY` | Inspection photos (Storage) + listing users | same project's **secret** key `sb_secret_…` (server-only) |
 | `RENTVINE_BASE_URL` | Balance sync | `https://pmilighthouse.rentvine.com/api/manager` |
 | `RENTVINE_API_KEY` / `RENTVINE_API_SECRET` | Balance sync (Basic auth) | server/CLI only |
 | `PMS_PROVIDER` | Balance-sync source | `rentvine` (default) |
+
+Search and Invoicing read Neon via Prisma (`DATABASE_URL`) — no Supabase vars.
+`INVOICING_SUPABASE_URL` / `INVOICING_SUPABASE_SERVICE_KEY` are only for the
+one-off `scripts/migrate-invoices-to-neon.ts`, run locally; don't set them in
+Vercel.
 | `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Only if `AUTH_MODE=basic` | not used in `supabase` mode |
 | `TENANT_TURNER_WEBHOOK_SECRET` | Gates the Tenant Turner showings webhook | long random string; set on **both** services. See "Tenant Turner showings" below |
 | `FEATURE_*` | Turn modules on/off | all on by default |
@@ -74,8 +76,7 @@ it checks out.**
    - `DATABASE_URL` → the Postgres connection string
    - `AUTH_MODE=supabase`
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`
-   - `INVOICING_SUPABASE_URL`, `INVOICING_SUPABASE_SERVICE_KEY`
+   - `SUPABASE_SERVICE_KEY`
    - `RENTVINE_BASE_URL`, `RENTVINE_API_KEY`, `RENTVINE_API_SECRET`
 4. **Seed the data once** — open the service's shell (or a one-off command):
    ```bash
