@@ -28,6 +28,7 @@ function wo(over: Partial<WorkOrderRow>): WorkOrderRow {
     updatedAt: daysAgo(1),
     closedAt: null,
     dueAt: null,
+    rvStatus: "",
     ...over,
   };
 }
@@ -85,6 +86,15 @@ describe("MaintenanceView", () => {
     await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "");
     await user.click(within(attention()).getByText("WO #"));
     expect(firstCells()).toEqual(["101", "102"]);
+  });
+
+  it("can filter the attention list to work orders already closed in Rentvine", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={[...rows, wo({ number: "105", issue: "Paint", rvStatus: "Completed" })]} now={NOW} />);
+
+    await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "rvClosed");
+    expect(firstCells()).toEqual(["105"]);
+    expect(within(within(attention()).getByRole("table")).getByText("Completed in Rentvine")).toBeTruthy();
   });
 
   it("defaults the full list to open work orders and can show completed ones", async () => {

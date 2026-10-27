@@ -299,8 +299,8 @@ describe("listWorkOrders", () => {
         [
           /FROM work_orders/,
           [
-            woRow({ created_at: hoursAgo(48), updated_at: hoursAgo(2), due_at: "2026-10-30T16:00:00Z" }),
-            woRow({ source_id: "x", created_at: null, updated_at: null, due_at: null }),
+            woRow({ created_at: hoursAgo(48), updated_at: hoursAgo(2), due_at: "2026-10-30T16:00:00Z", rv_status: "Completed" }),
+            woRow({ source_id: "x", created_at: null, updated_at: null, due_at: null, rv_status: null }),
           ],
         ],
       ]) as never
@@ -313,11 +313,12 @@ describe("listWorkOrders", () => {
       updatedAt: hoursAgo(2).toISOString(),
       closedAt: null,
       dueAt: "2026-10-30T16:00:00.000Z",
+      rvStatus: "Completed",
     });
-    expect(rows![1]).toMatchObject({ createdAt: null, updatedAt: null, dueAt: null });
+    expect(rows![1]).toMatchObject({ createdAt: null, updatedAt: null, dueAt: null, rvStatus: "" });
   });
 
-  it("reads due_at without requiring the column, so it works before the sync adds it", async () => {
+  it("reads due_at and rv_status without requiring the columns", async () => {
     queryRaw.mockImplementation(
       routeQueries([
         [/FROM rv_work_orders/, []],
@@ -330,7 +331,10 @@ describe("listWorkOrders", () => {
 
     const woSql = queryRaw.mock.calls.map(([q]) => sqlOf(q)).find((t) => /FROM work_orders/.test(t))!;
     expect(woSql).toMatch(/to_jsonb\(w\) ->> 'due_at'/);
-    expect(woSql).not.toMatch(/[ ,]due_at,/);
+    expect(woSql).toMatch(/to_jsonb\(w\) ->> 'rv_status'/);
+    // Neither is selected as a bare column (which would error when it's missing).
+    const bare = woSql.replace(/to_jsonb\(w\) ->> '\w+' AS \w+/g, "");
+    expect(bare).not.toMatch(/\b(due_at|rv_status)\b/);
   });
 
   it("returns null when the work_orders table is missing", async () => {
