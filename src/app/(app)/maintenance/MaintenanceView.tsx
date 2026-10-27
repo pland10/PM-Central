@@ -114,7 +114,9 @@ const DOT: Record<ActivityItem["event"], string> = {
 
 export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: number }) {
   const kpis = maintenanceKpis(rows, now);
-  const queue = attentionQueue(rows, now, 8);
+  // Every flagged work order (not just the top few), in urgency order; `order`
+  // keeps that order available as the default sort.
+  const queue = attentionQueue(rows, now, Infinity).map((q, order) => ({ ...q, order }));
   const recent = recentActivity(rows, 6);
 
   const columns: Column<WorkOrderRow>[] = [
@@ -202,6 +204,83 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
     },
   ];
 
+  type Flagged = (typeof queue)[number];
+  const attentionColumns: Column<Flagged>[] = [
+    {
+      key: "number",
+      header: "WO #",
+      sortable: true,
+      sortValue: (q) => Number(q.row.number) || 0,
+      filter: { type: "text", value: (q) => q.row.number },
+      render: (q) => <WoNumber r={q.row} />,
+    },
+    {
+      key: "issue",
+      header: "Work order",
+      sortable: true,
+      sortValue: (q) => q.row.issue.toLowerCase(),
+      filter: { type: "text", value: (q) => q.row.issue },
+      render: (q) => <span className="text-slate-800">{q.row.issue}</span>,
+    },
+    {
+      key: "action",
+      header: "Required action",
+      sortable: true,
+      sortValue: (q) => q.order,
+      exportValue: (q) => q.reason.label,
+      render: (q) => (
+        <Pill className={q.reason.kind === "overdue" || q.reason.kind === "high" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>
+          {q.reason.label}
+        </Pill>
+      ),
+    },
+    {
+      key: "property",
+      header: "Property",
+      sortable: true,
+      sortValue: (q) => q.row.property.toLowerCase(),
+      filter: { type: "text", value: (q) => q.row.property },
+      render: (q) => <Property r={q.row} />,
+    },
+    {
+      key: "vendor",
+      header: "Vendor",
+      sortable: true,
+      sortValue: (q) => q.row.vendor.toLowerCase(),
+      filter: { type: "select", value: (q) => q.row.vendor },
+      render: (q) => (q.row.vendor ? <span className="text-slate-600">{q.row.vendor}</span> : <span className="text-slate-300">—</span>),
+    },
+    {
+      key: "due",
+      header: "Due",
+      sortable: true,
+      sortValue: (q) => q.row.dueAt ?? "",
+      exportValue: (q) => day(q.row.dueAt),
+      render: (q) => <span className="whitespace-nowrap text-xs text-slate-600">{day(q.row.dueAt)}</span>,
+    },
+    {
+      key: "lastActivity",
+      header: "Last activity",
+      sortable: true,
+      sortValue: (q) => lastActivityAt(q.row) ?? "",
+      exportValue: (q) => when(lastActivityAt(q.row)),
+      render: (q) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(q.row))}</span>,
+    },
+  ];
+  const reasonFacet: Facet<Flagged>[] = [
+    {
+      key: "reason",
+      label: "Reason",
+      options: [
+        { value: "overdue", label: "Overdue" },
+        { value: "high", label: "High priority" },
+        { value: "new", label: "New WO waiting" },
+        { value: "stalled", label: "Stalled" },
+      ],
+      match: (q, v) => q.reason.kind === v,
+    },
+  ];
+
   const facets: Facet<WorkOrderRow>[] = [
     {
       key: "status",
@@ -240,52 +319,28 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
         <Kpi label="Completed this week" value={String(kpis.completedThisWeek)} sub="Closed in the last 7 days" icon="✓" tone="green" />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.65fr_1fr]">
-        <Section title="Work Orders Requiring Attention" meta={`${queue.length} shown`}>
+      <div className="mt-4 grid grid-cols-1 gap-4">
+        <Section title="Work Orders Requiring Attention" meta={`${queue.length} work order${queue.length === 1 ? "" : "s"}`}>
           {queue.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">No work orders currently require attention.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table aria-label="Work orders requiring attention" className="w-full text-xs">
-                <thead className="bg-slate-50 text-left text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">WO #</th>
-                    <th className="px-3 py-2 font-semibold">Work order</th>
-                    <th className="px-3 py-2 font-semibold">Property</th>
-                    <th className="px-3 py-2 font-semibold">Vendor</th>
-                    <th className="px-3 py-2 font-semibold">Due</th>
-                    <th className="px-3 py-2 font-semibold">Last activity</th>
-                    <th className="px-3 py-2 font-semibold">Required action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queue.map(({ row, reason }) => (
-                    <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                      <td className="px-3 py-2">
-                        <WoNumber r={row} />
-                      </td>
-                      <td className="px-3 py-2 text-slate-800">{row.issue}</td>
-                      <td className="px-3 py-2">
-                        <Property r={row} />
-                      </td>
-                      <td className="px-3 py-2 text-slate-600">{row.vendor || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{day(row.dueAt)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-500">{when(lastActivityAt(row))}</td>
-                      <td className="px-3 py-2">
-                        <Pill className={reason.kind === "overdue" || reason.kind === "high" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>
-                          {reason.label}
-                        </Pill>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="p-3">
+              <DataTable
+                rows={queue}
+                columns={attentionColumns}
+                rowKey={(q) => q.row.id}
+                search={(q) => `${q.row.number} ${q.row.issue} ${q.row.property} ${q.row.vendor} ${q.reason.label}`}
+                searchPlaceholder="Search attention list…"
+                exportName="Maintenance - Attention"
+                facets={reasonFacet}
+                initialSort={{ key: "action", dir: "asc" }}
+              />
             </div>
           )}
         </Section>
 
         <Section title="Recent Activity" meta={recent.length ? `${recent.length} latest` : "No activity"}>
-          <ul className="px-4 pb-2">
+          <ul className="grid grid-cols-1 gap-x-8 px-4 pb-2 xl:grid-cols-2">
             {recent.map((a) => (
               <li key={a.row.id} className="grid grid-cols-[10px_1fr_auto] items-center gap-2.5 border-b border-slate-100 py-2.5 text-xs last:border-0">
                 <span className={`h-2.5 w-2.5 rounded-full ${DOT[a.event]}`} aria-hidden="true" />

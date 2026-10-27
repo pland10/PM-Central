@@ -51,14 +51,40 @@ describe("MaintenanceView", () => {
     expect(within(tile(/completed this week/i)).getByText("1")).toBeTruthy();
   });
 
+  const attention = () => screen.getByRole("region", { name: /requiring attention/i });
+  const firstCells = () =>
+    within(within(attention()).getByRole("table"))
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+
   it("lists work orders requiring attention, most urgent first, with the reason", () => {
     render(<MaintenanceView rows={rows} now={NOW} />);
 
-    const table = screen.getByRole("table", { name: /requiring attention/i });
-    const bodyRows = within(table).getAllByRole("row").slice(1);
-    expect(bodyRows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["102", "101"]);
-    expect(within(bodyRows[0]).getByText("High priority")).toBeTruthy();
-    expect(within(bodyRows[1]).getByText("Stalled 6 days")).toBeTruthy();
+    expect(firstCells()).toEqual(["102", "101"]);
+    const table = within(attention()).getByRole("table");
+    expect(within(table).getByText("High priority")).toBeTruthy();
+    expect(within(table).getByText("Stalled 6 days")).toBeTruthy();
+  });
+
+  it("shows every flagged work order, not just the top few", () => {
+    const many = Array.from({ length: 12 }, (_, i) => wo({ number: String(200 + i), updatedAt: daysAgo(5 + i) }));
+    render(<MaintenanceView rows={many} now={NOW} />);
+
+    expect(firstCells()).toHaveLength(12);
+    expect(firstCells()[0]).toBe("211"); // quiet longest first
+  });
+
+  it("filters the attention list by reason and sorts by column", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={rows} now={NOW} />);
+
+    await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "stalled");
+    expect(firstCells()).toEqual(["101"]);
+
+    await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "");
+    await user.click(within(attention()).getByText("WO #"));
+    expect(firstCells()).toEqual(["101", "102"]);
   });
 
   it("defaults the full list to open work orders and can show completed ones", async () => {
