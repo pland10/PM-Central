@@ -305,6 +305,7 @@ export function DataTable<T>({
             key={f.key}
             value={facetValues[f.key] ?? ""}
             onChange={(e) => setFacetValues((v) => ({ ...v, [f.key]: e.target.value }))}
+            aria-label={f.label}
             className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-brand-500"
           >
             <option value="">{f.label}: All</option>
