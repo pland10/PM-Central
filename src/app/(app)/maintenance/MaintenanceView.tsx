@@ -96,7 +96,7 @@ function Kpi({ label, value, sub, icon, tone }: { label: string; value: string; 
 
 function Section({ title, meta, children, label }: { title: string; meta?: string; children: React.ReactNode; label?: string }) {
   return (
-    <section aria-label={label ?? title} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <section aria-label={label ?? title} className="overflow-clip rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
         {meta && <span className="text-[11px] text-slate-500">{meta}</span>}
