@@ -11,6 +11,7 @@ import {
   rowStatus,
   STALLED_DAYS,
   type ActivityItem,
+  type AttentionKind,
   type RowStatus,
 } from "@/lib/maintenance";
 import { pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
@@ -105,6 +106,14 @@ function Section({ title, meta, children, label }: { title: string; meta?: strin
   );
 }
 
+const REASON_PILL: Record<AttentionKind, string> = {
+  rvClosed: "bg-sky-100 text-sky-700",
+  overdue: "bg-red-100 text-red-700",
+  high: "bg-red-100 text-red-700",
+  new: "bg-amber-100 text-amber-700",
+  stalled: "bg-amber-100 text-amber-700",
+};
+
 const DOT: Record<ActivityItem["event"], string> = {
   completed: "bg-emerald-500",
   cancelled: "bg-slate-400",
@@ -151,6 +160,14 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       sortValue: (r) => pipelineRank(r.stage),
       filter: { type: "select", value: (r) => r.stage },
       render: (r) => <span className="text-slate-600">{r.stage}</span>,
+    },
+    {
+      key: "rvStatus",
+      header: "Rentvine",
+      sortable: true,
+      sortValue: (r) => r.rvStatus,
+      filter: { type: "select", value: (r) => r.rvStatus },
+      render: (r) => (r.rvStatus ? <span className="text-slate-600">{r.rvStatus}</span> : <span className="text-slate-300">—</span>),
     },
     {
       key: "priority",
@@ -228,11 +245,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       sortable: true,
       sortValue: (q) => q.order,
       exportValue: (q) => q.reason.label,
-      render: (q) => (
-        <Pill className={q.reason.kind === "overdue" || q.reason.kind === "high" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>
-          {q.reason.label}
-        </Pill>
-      ),
+      render: (q) => <Pill className={REASON_PILL[q.reason.kind]}>{q.reason.label}</Pill>,
     },
     {
       key: "property",
@@ -272,6 +285,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       key: "reason",
       label: "Reason",
       options: [
+        { value: "rvClosed", label: "Closed in Rentvine" },
         { value: "overdue", label: "Overdue" },
         { value: "high", label: "High priority" },
         { value: "new", label: "New WO waiting" },

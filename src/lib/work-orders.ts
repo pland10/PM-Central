@@ -64,6 +64,9 @@ export type WorkOrderRow = {
   updatedAt: string | null;
   closedAt: string | null;
   dueAt: string | null;
+  // Rentvine's own status for the WO (Open, Completed, Cancelled, Pending
+  // Closure, …), or "" when it isn't matched in Rentvine.
+  rvStatus: string;
 };
 
 // Sort rank for priority (High first); unknown/none sorts last.
