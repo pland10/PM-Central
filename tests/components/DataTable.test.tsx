@@ -139,4 +139,17 @@ describe("DataTable", () => {
     await user.type(screen.getByPlaceholderText("Search…"), "no such place");
     expect(screen.getByText("0 of 4")).toBeInTheDocument();
   });
+
+  // One scrollbar: the header stays pinned against the page's own scroll, not
+  // inside a height-capped box with a second scrollbar.
+  it("pins the header without a scroll box of its own", () => {
+    render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} />);
+
+    const table = screen.getByRole("table");
+    const box = table.parentElement!;
+    expect(box.className).not.toMatch(/max-h-/);
+    expect(box.className).not.toMatch(/(^|\s)overflow-auto(\s|$)/);
+    expect(box.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/); // would also trap the sticky header
+    for (const th of table.querySelectorAll("th")) expect(th.className).toMatch(/\bsticky\b/);
+  });
 });

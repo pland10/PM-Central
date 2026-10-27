@@ -31,6 +31,7 @@ function wo(over: Partial<WorkOrderRow> = {}): WorkOrderRow {
     updatedAt: daysAgo(1),
     closedAt: null,
     dueAt: null,
+    rvStatus: "",
     ...over,
   };
 }
@@ -64,6 +65,19 @@ describe("attentionReason", () => {
 
   it("does not call it stalled when Rentvine shows recent activity", () => {
     expect(attentionReason(wo({ updatedAt: daysAgo(8), lastUpdateAt: daysAgo(1) }), NOW)).toBeNull();
+  });
+
+  it("flags a work order Rentvine already completed or cancelled, ahead of everything else", () => {
+    expect(attentionReason(wo({ rvStatus: "Completed", dueAt: daysAgo(40) }), NOW)).toEqual({
+      kind: "rvClosed",
+      label: "Completed in Rentvine",
+    });
+    expect(attentionReason(wo({ rvStatus: "Cancelled" }), NOW)?.label).toBe("Cancelled in Rentvine");
+  });
+
+  it("does not treat Rentvine Open or Pending Closure as closed", () => {
+    expect(attentionReason(wo({ rvStatus: "Open" }), NOW)).toBeNull();
+    expect(attentionReason(wo({ rvStatus: "Pending Closure" }), NOW)).toBeNull();
   });
 
   it("never flags a closed work order", () => {
@@ -112,7 +126,7 @@ describe("maintenanceKpis", () => {
 });
 
 describe("attentionQueue", () => {
-  it("orders overdue, then High, then new, then stalled (longest stalled first), and caps the list", () => {
+  it("orders closed-in-Rentvine, overdue, then High, then new, then stalled (longest stalled first), and caps the list", () => {
     const rows = [
       wo({ id: "stalled4", updatedAt: daysAgo(4) }),
       wo({ id: "stalled9", updatedAt: daysAgo(9) }),
@@ -121,9 +135,10 @@ describe("attentionQueue", () => {
       wo({ id: "overdue", dueAt: daysAgo(1) }),
       wo({ id: "fine" }),
       wo({ id: "closed", terminal: true, stage: "Completed", dueAt: daysAgo(1) }),
+      wo({ id: "rvdone", rvStatus: "Completed" }),
     ];
 
-    expect(attentionQueue(rows, NOW).map((q) => q.row.id)).toEqual(["overdue", "high", "new", "stalled9", "stalled4"]);
+    expect(attentionQueue(rows, NOW).map((q) => q.row.id)).toEqual(["rvdone", "overdue", "high", "new", "stalled9", "stalled4"]);
     expect(attentionQueue(rows, NOW, 2)).toHaveLength(2);
   });
 });

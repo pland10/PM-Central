@@ -75,6 +75,7 @@ type ListRow = RawRow & {
   created_at: Date | string | null;
   updated_at: Date | string | null;
   due_at: string | null; // via to_jsonb, so text (or null when the column isn't there yet)
+  rv_status: string | null; // via to_jsonb too (written by the Rentvine status sync)
 };
 
 const iso = (v: Date | string | null | undefined): string | null => {
@@ -260,7 +261,8 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
       prisma.$queryRaw<ListRow[]>(Prisma.sql`
         SELECT source_id, wo_number, title, name, stage,
                property_address, vendor_name, assignee_name, link,
-               created_at, updated_at, closed_at, to_jsonb(w) ->> 'due_at' AS due_at
+               created_at, updated_at, closed_at, to_jsonb(w) ->> 'due_at' AS due_at,
+               to_jsonb(w) ->> 'rv_status' AS rv_status
         FROM work_orders w`),
       rentvineEnrichment(),
       latestWoUpdates(),
@@ -289,6 +291,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         updatedAt: iso(r.updated_at),
         closedAt: iso(r.closed_at),
         dueAt: iso(r.due_at),
+        rvStatus: r.rv_status ?? "",
       };
     });
   } catch {

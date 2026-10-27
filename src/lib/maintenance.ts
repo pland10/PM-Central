@@ -32,14 +32,19 @@ function isNewWaiting(r: WorkOrderRow, now: number): boolean {
   return !r.terminal && /^new wo$/i.test(r.stage.trim()) && created != null && created < now - NEW_WAITING_DAYS * DAY;
 }
 
-export type AttentionKind = "overdue" | "high" | "new" | "stalled";
+export type AttentionKind = "rvClosed" | "overdue" | "high" | "new" | "stalled";
 export type AttentionReason = { kind: AttentionKind; label: string };
-const KIND_RANK: Record<AttentionKind, number> = { overdue: 0, high: 1, new: 2, stalled: 3 };
+const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, overdue: 1, high: 2, new: 3, stalled: 4 };
 
 // Why an open work order needs someone, most urgent reason first; null if it
 // doesn't (or it's closed).
 export function attentionReason(r: WorkOrderRow, now: number): AttentionReason | null {
   if (r.terminal) return null;
+  // Done in Rentvine but still open in LeadSimple: a cleanup item — close it in
+  // LeadSimple rather than chase it, so it outranks Overdue/Stalled.
+  if (/^(completed|cancell?ed|canceled)$/i.test(r.rvStatus.trim())) {
+    return { kind: "rvClosed", label: `${r.rvStatus.trim()} in Rentvine` };
+  }
   const due = ms(r.dueAt);
   if (due != null && due < now) return { kind: "overdue", label: "Overdue" };
   if (r.priority === "High") return { kind: "high", label: "High priority" };

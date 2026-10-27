@@ -100,9 +100,8 @@ export function DataTable<T>({
   // When set, an Export button appears that downloads the current (filtered +
   // sorted) view as an .xlsx named after this. Omit to hide the button.
   exportName?: string;
-  // Lock the header row and scroll the rows underneath it (the table body
-  // scrolls inside a bounded box). On by default for all list tables; pass
-  // stickyHeader={false} to opt a table out.
+  // Keep the header row pinned while the page scrolls (wide screens). On by
+  // default for all list tables; pass stickyHeader={false} to opt out.
   stickyHeader?: boolean;
 }) {
   const [q, setQ] = useState("");
@@ -350,8 +349,12 @@ export function DataTable<T>({
       </div>
 
       <div
-        className={`rounded-lg border border-slate-200 bg-white ${
-          stickyHeader ? "max-h-[calc(100vh-14rem)] overflow-auto" : "overflow-hidden"
+        // No scroll box of its own: the header sticks against the page's scroll,
+        // so there's only ever one scrollbar. overflow-x-clip (unlike hidden/auto)
+        // doesn't create a scroll container, so `sticky` still works; below lg,
+        // wide tables scroll sideways instead (header just isn't pinned there).
+        className={`rounded-lg border border-slate-200 bg-white overflow-x-auto ${
+          stickyHeader ? "lg:overflow-x-clip" : ""
         }`}
       >
         <table className="w-full text-sm">
