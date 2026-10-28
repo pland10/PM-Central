@@ -109,6 +109,7 @@ function Section({ title, meta, children, label }: { title: string; meta?: strin
 
 const REASON_PILL: Record<AttentionKind, string> = {
   rvClosed: "bg-sky-100 text-sky-700",
+  estimates: "bg-violet-100 text-violet-700",
   overdue: "bg-red-100 text-red-700",
   high: "bg-red-100 text-red-700",
   new: "bg-amber-100 text-amber-700",
@@ -312,6 +313,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       label: "Reason",
       options: [
         { value: "rvClosed", label: "Closed in Rentvine" },
+        { value: "estimates", label: "Waiting on estimates" },
         { value: "overdue", label: "Overdue" },
         { value: "high", label: "High priority" },
         { value: "new", label: "New WO waiting" },

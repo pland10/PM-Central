@@ -80,6 +80,22 @@ describe("attentionReason", () => {
     expect(attentionReason(wo({ rvStatus: "Pending Closure" }), NOW)).toBeNull();
   });
 
+  it("flags a WO sitting in an estimate stage with no activity for over 3 days", () => {
+    expect(attentionReason(wo({ stage: "Estimate Requested", updatedAt: daysAgo(5) }), NOW)).toEqual({
+      kind: "estimates",
+      label: "Waiting on estimates 5 days",
+    });
+    expect(attentionReason(wo({ stage: "Multiple Estimates", updatedAt: daysAgo(4) }), NOW)?.kind).toBe("estimates");
+    // recent activity — not waiting yet
+    expect(attentionReason(wo({ stage: "Estimate Requested", updatedAt: daysAgo(2) }), NOW)).toBeNull();
+  });
+
+  it("ranks waiting-on-estimates above the automatic Overdue date", () => {
+    expect(attentionReason(wo({ stage: "Estimate Requested", updatedAt: daysAgo(6), dueAt: daysAgo(1) }), NOW)?.kind).toBe(
+      "estimates"
+    );
+  });
+
   it("never flags a closed work order", () => {
     expect(attentionReason(wo({ terminal: true, dueAt: daysAgo(3), priority: "High" }), NOW)).toBeNull();
   });
