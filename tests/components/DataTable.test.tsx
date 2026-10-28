@@ -151,5 +151,7 @@ describe("DataTable", () => {
     expect(box.className).not.toMatch(/(^|\s)overflow-auto(\s|$)/);
     expect(box.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/); // would also trap the sticky header
     for (const th of table.querySelectorAll("th")) expect(th.className).toMatch(/\bsticky\b/);
+    // Pins below any sticky page header above it (pages set --sticky-offset).
+    for (const th of table.querySelectorAll("th")) expect(th.style.top).toBe("var(--sticky-offset, 0px)");
   });
 });

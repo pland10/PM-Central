@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import {
   attentionQueue,
@@ -126,7 +127,32 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
   // Every flagged work order (not just the top few), in urgency order; `order`
   // keeps that order available as the default sort.
   const queue = attentionQueue(rows, now, Infinity).map((q, order) => ({ ...q, order }));
-  const recent = recentActivity(rows, 6);
+  // Recent activity: the latest 6, expandable to everything in the last week.
+  const RECENT_SHOWN = 6;
+  const allRecent = recentActivity(rows, Infinity);
+  const week = allRecent.filter((a) => Date.parse(a.at) >= now - 7 * 86_400_000);
+  const [showAllRecent, setShowAllRecent] = useState(false);
+  const recent = showAllRecent ? week : allRecent.slice(0, RECENT_SHOWN);
+
+  // The title + KPI tiles stay pinned on wide screens; tell the tables below
+  // how tall that is so their own sticky headers pin just under it.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const page = pageRef.current;
+    const summary = summaryRef.current;
+    if (!page || !summary || typeof ResizeObserver === "undefined") return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const update = () => page.style.setProperty("--sticky-offset", wide.matches ? `${summary.offsetHeight}px` : "0px");
+    const ro = new ResizeObserver(update);
+    ro.observe(summary);
+    wide.addEventListener("change", update);
+    update();
+    return () => {
+      ro.disconnect();
+      wide.removeEventListener("change", update);
+    };
+  }, []);
 
   const columns: Column<WorkOrderRow>[] = [
     {
@@ -310,28 +336,37 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Maintenance</h1>
-          <p className="mt-1 text-sm text-slate-500">Work orders, exceptions and follow-ups — live from LeadSimple and Rentvine.</p>
+    <div ref={pageRef} className="mx-auto max-w-7xl">
+      {/* Pinned on lg+ (title + KPIs); the negative margins let it cover the
+          page padding so rows don't show around it while scrolling. */}
+      <section
+        ref={summaryRef}
+        aria-label="Maintenance summary"
+        className="z-20 -mx-6 -mt-6 px-6 pb-4 pt-6 lg:sticky lg:top-0 lg:border-b lg:border-slate-200"
+        style={{ background: "var(--background)" }}
+      >
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Maintenance</h1>
+            <p className="mt-1 text-sm text-slate-500">Work orders, exceptions and follow-ups — live from LeadSimple and Rentvine.</p>
+          </div>
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Preview — replaces Work Orders when ready</span>
         </div>
-        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Preview — replaces Work Orders when ready</span>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        <Kpi label="Open" value={String(kpis.open)} sub="Not closed in LeadSimple" icon="▤" tone="red" />
-        <Kpi label="Stalled" value={String(kpis.stalled)} sub={`No activity > ${STALLED_DAYS} days`} icon="◷" tone="amber" />
-        <Kpi
-          label="Overdue"
-          value={kpis.hasDueDates ? String(kpis.overdue) : "—"}
-          sub={kpis.hasDueDates ? "Past due date" : "Due dates not synced yet"}
-          icon="!"
-          tone="blue"
-        />
-        <Kpi label="New WOs waiting" value={String(kpis.newWaiting)} sub="In New WO over a day" icon="✚" tone="purple" />
-        <Kpi label="Completed this week" value={String(kpis.completedThisWeek)} sub="Closed in the last 7 days" icon="✓" tone="green" />
-      </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          <Kpi label="Open" value={String(kpis.open)} sub="Not closed in LeadSimple" icon="▤" tone="red" />
+          <Kpi label="Stalled" value={String(kpis.stalled)} sub={`No activity > ${STALLED_DAYS} days`} icon="◷" tone="amber" />
+          <Kpi
+            label="Overdue"
+            value={kpis.hasDueDates ? String(kpis.overdue) : "—"}
+            sub={kpis.hasDueDates ? "Past due date" : "Due dates not synced yet"}
+            icon="!"
+            tone="blue"
+          />
+          <Kpi label="New WOs waiting" value={String(kpis.newWaiting)} sub="In New WO over a day" icon="✚" tone="purple" />
+          <Kpi label="Completed this week" value={String(kpis.completedThisWeek)} sub="Closed in the last 7 days" icon="✓" tone="green" />
+        </div>
+      </section>
 
       <div className="mt-4 grid grid-cols-1 gap-4">
         <Section title="Work Orders Requiring Attention" meta={`${queue.length} work order${queue.length === 1 ? "" : "s"}`}>
@@ -353,7 +388,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
           )}
         </Section>
 
-        <Section title="Recent Activity" meta={recent.length ? `${recent.length} latest` : "No activity"}>
+        <Section title="Recent Activity" meta={allRecent.length ? `${week.length} in the last 7 days` : "No activity"}>
           <ul className="grid grid-cols-1 gap-x-8 px-4 pb-2 xl:grid-cols-2">
             {recent.map((a) => (
               <li key={a.row.id} className="grid grid-cols-[10px_1fr_auto] items-center gap-2.5 border-b border-slate-100 py-2.5 text-xs last:border-0">
@@ -370,6 +405,14 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
               </li>
             ))}
           </ul>
+          {week.length > RECENT_SHOWN && (
+            <button
+              onClick={() => setShowAllRecent((v) => !v)}
+              className="mb-3 w-full text-center text-xs font-medium text-brand-600 hover:underline"
+            >
+              {showAllRecent ? "Show less" : `Show all ${week.length} from the last 7 days →`}
+            </button>
+          )}
         </Section>
       </div>
 
