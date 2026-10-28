@@ -109,4 +109,31 @@ describe("MaintenanceView", () => {
     expect(within(list).getByText("Roof leak")).toBeTruthy();
     expect(within(list).queryByText("Fridge noise")).toBeNull();
   });
+
+  it("pins the title and KPI tiles at the top on wide screens", () => {
+    render(<MaintenanceView rows={rows} now={NOW} />);
+
+    const summary = screen.getByRole("region", { name: /maintenance summary/i });
+    expect(summary.className).toMatch(/\blg:sticky\b/);
+    expect(within(summary).getByRole("heading", { name: "Maintenance" })).toBeTruthy();
+    expect(within(summary).getByRole("group", { name: /^open/i })).toBeTruthy();
+  });
+
+  it("shows the latest 6 activities and expands to everything from the last 7 days", async () => {
+    const user = userEvent.setup();
+    const recentRows = [
+      ...Array.from({ length: 9 }, (_, i) => wo({ number: String(300 + i), updatedAt: daysAgo(i * 0.5) })),
+      wo({ number: "399", updatedAt: daysAgo(20) }), // outside the 7-day window
+    ];
+    render(<MaintenanceView rows={recentRows} now={NOW} />);
+
+    const recent = screen.getByRole("region", { name: /recent activity/i });
+    expect(within(recent).getAllByRole("listitem")).toHaveLength(6);
+
+    await user.click(within(recent).getByRole("button", { name: /show all 9/i }));
+    expect(within(recent).getAllByRole("listitem")).toHaveLength(9);
+
+    await user.click(within(recent).getByRole("button", { name: /show less/i }));
+    expect(within(recent).getAllByRole("listitem")).toHaveLength(6);
+  });
 });

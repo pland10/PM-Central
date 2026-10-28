@@ -373,8 +373,11 @@ export function DataTable<T>({
                       // Keep the header visible while the rows scroll. The cell
                       // needs its own background + border since the <tr>'s don't
                       // paint over sticky scrolling content.
-                      stickyHeader ? "sticky top-0 z-10 bg-slate-50 border-b border-slate-200" : "",
+                      stickyHeader ? "sticky z-10 bg-slate-50 border-b border-slate-200" : "",
                     ].join(" ")}
+                    // Below any pinned page header (a page sets --sticky-offset
+                    // to its height); 0 otherwise.
+                    style={stickyHeader ? { top: "var(--sticky-offset, 0px)" } : undefined}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.align === "right" ? "flex-row-reverse" : ""}`}>
                       <span
