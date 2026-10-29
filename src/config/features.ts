@@ -45,7 +45,9 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   invoicing: flag("INVOICING"),
   securityDeposits: flag("SECURITY_DEPOSITS"),
   // Live accounting roll-up (cash on hand + reimbursables) from Rentvine.
-  accounting: flag("ACCOUNTING"),
+  // Defaults OFF — financial data stays dark until access is entitled properly;
+  // turn on per environment with FEATURE_ACCOUNTING=on.
+  accounting: flag("ACCOUNTING", false),
 };
 
 export function isFeatureEnabled(key: FeatureKey): boolean {

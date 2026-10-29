@@ -22,4 +22,11 @@ describe("feature flags", () => {
     vi.stubEnv("FEATURE_MAINTENANCE", "on");
     expect((await load()).isFeatureEnabled("maintenance")).toBe(true);
   });
+
+  it("keeps the Accounting screen off until FEATURE_ACCOUNTING is turned on (entitlement-gated)", async () => {
+    vi.stubEnv("FEATURE_ACCOUNTING", "");
+    expect((await load()).isFeatureEnabled("accounting")).toBe(false);
+    vi.stubEnv("FEATURE_ACCOUNTING", "on");
+    expect((await load()).isFeatureEnabled("accounting")).toBe(true);
+  });
 });
