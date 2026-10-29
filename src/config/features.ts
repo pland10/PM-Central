@@ -19,7 +19,8 @@ export type FeatureKey =
   | "teamComms"
   | "inspections"
   | "invoicing"
-  | "securityDeposits";
+  | "securityDeposits"
+  | "accounting";
 
 function flag(envName: string, defaultOn = true): boolean {
   const v = process.env[`FEATURE_${envName}`];
@@ -43,6 +44,8 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   inspections: flag("INSPECTIONS"),
   invoicing: flag("INVOICING"),
   securityDeposits: flag("SECURITY_DEPOSITS"),
+  // Live accounting roll-up (cash on hand + reimbursables) from Rentvine.
+  accounting: flag("ACCOUNTING"),
 };
 
 export function isFeatureEnabled(key: FeatureKey): boolean {
