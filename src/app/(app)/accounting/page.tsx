@@ -7,27 +7,34 @@ import {
   type CashOnHandResult,
   type ReimbursablesResult,
 } from "@/lib/accounting";
+import { AccountingTabs } from "./AccountingTabs";
 
-// Live accounting roll-up for PMI Lighthouse, read straight from Rentvine on
-// each load (no sync — always current). v1: cash on hand across the bank
-// accounts, and the reimbursables account's outstanding balance + activity.
+// Accounting → Overview tab: live cash on hand + reimbursables from Rentvine,
+// read on each load (no sync). The Transactions tab lives at
+// /accounting/transactions.
 export const dynamic = "force-dynamic";
 // Live Rentvine report fetches — headroom for serverless (Vercel); no-op on Railway.
 export const maxDuration = 60;
 
 export default async function AccountingPage() {
   requireFeature("accounting");
+  return (
+    <div className="mx-auto max-w-5xl">
+      <h1 className="text-lg font-semibold text-ink">Accounting</h1>
+      <AccountingTabs />
+      <Overview />
+    </div>
+  );
+}
 
+async function Overview() {
   if (!isRentvineConfigured()) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <h1 className="text-lg font-semibold text-ink">Accounting</h1>
-        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Rentvine isn&apos;t configured for this environment. Set <code>RENTVINE_API_KEY</code> and{" "}
-          <code>RENTVINE_API_SECRET</code> (and <code>RENTVINE_BASE_URL</code>) on the service to
-          load live accounting figures.
-        </p>
-      </div>
+      <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Rentvine isn&apos;t configured for this environment. Set <code>RENTVINE_API_KEY</code> and{" "}
+        <code>RENTVINE_API_SECRET</code> (and <code>RENTVINE_BASE_URL</code>) on the service to load
+        live accounting figures.
+      </p>
     );
   }
 
@@ -35,19 +42,18 @@ export default async function AccountingPage() {
   const asOf = (cash.ok && cash.asOf) || (reimb.ok && reimb.asOf) || "";
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-lg font-semibold text-ink">Accounting</h1>
+        <p className="text-sm text-slate-500">
+          Live from Rentvine — cash across the bank accounts, and what&apos;s outstanding on the
+          reimbursables account.
+        </p>
         {asOf && <span className="text-xs text-slate-400">As of {asOf}</span>}
       </div>
-      <p className="mt-1 text-sm text-slate-500">
-        Live from Rentvine — cash across the bank accounts, and what&apos;s outstanding on the
-        reimbursables account.
-      </p>
 
       <CashOnHand cash={cash} />
       <Reimbursables reimb={reimb} />
-    </div>
+    </>
   );
 }
 
