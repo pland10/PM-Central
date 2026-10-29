@@ -1,0 +1,52 @@
+name: Sync Plaid transactions
+
+# Pulls card/bank transactions (Amex, Home Depot, …) from Plaid into the
+# plaid_transactions table for the Accounting → Transactions tab. Runs daily and
+# on demand. Use the "test" mode (workflow_dispatch) to verify the Plaid
+# pipeline against the SANDBOX API without writing to the database.
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL       prod Neon connection string (the DB the site reads)
+#   PLAID_CLIENT_ID
+#   PLAID_SECRET
+#   PLAID_ENV          sandbox | production
+
+on:
+  schedule:
+    - cron: '35 10 * * *'   # ~6:35am ET daily (after the Rentvine sync at :20)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = headless sandbox check (writes nothing); sync = real daily sync'
+        required: false
+        type: choice
+        default: test
+        options: [test, sync]
+
+concurrency:
+  group: sync-plaid
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+      PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
+      PLAID_SECRET:    ${{ secrets.PLAID_SECRET }}
+      PLAID_ENV:       ${{ secrets.PLAID_ENV }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Run Plaid ${{ github.event_name == 'schedule' && 'sync' || inputs.mode }}
+        run: |
+          if [ "${{ github.event_name == 'schedule' && 'sync' || inputs.mode }}" = "sync" ]; then
+            npm run sync:plaid
+          else
+            npm run plaid:sandbox-test
+          fi
