@@ -18,6 +18,8 @@
     "sync:balances": "tsx scripts/sync-balances.ts",
     "sync:rentvine": "tsx scripts/sync-rentvine.ts",
     "sync:rentvine:wos": "tsx scripts/sync-rentvine-work-orders.ts",
+    "sync:plaid": "tsx scripts/sync-plaid.ts",
+    "plaid:sandbox-test": "tsx scripts/plaid-sandbox-test.ts",
     "migrate:invoices": "tsx scripts/migrate-invoices-to-neon.ts",
     "migrate:inspections": "tsx scripts/migrate-inspections-to-neon.ts",
     "db:studio": "prisma studio",
