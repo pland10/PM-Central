@@ -8,6 +8,11 @@ import type { WorkOrderRow } from "@/lib/work-orders";
 
 export const STALLED_DAYS = 3; // open with no activity for longer than this
 export const NEW_WAITING_DAYS = 1; // "New WO" stage for longer than this
+// In an estimate stage ("Estimate Requested", "Multiple Estimates") with no
+// activity for longer than this. Estimates are tracked by LeadSimple stage —
+// Rentvine holds almost none — and LeadSimple doesn't expose when a stage was
+// entered, so the last activity is the signal.
+export const ESTIMATE_WAIT_DAYS = 3;
 export const COMPLETED_WINDOW_DAYS = 7;
 const DAY = 86_400_000;
 
@@ -32,9 +37,11 @@ function isNewWaiting(r: WorkOrderRow, now: number): boolean {
   return !r.terminal && /^new wo$/i.test(r.stage.trim()) && created != null && created < now - NEW_WAITING_DAYS * DAY;
 }
 
-export type AttentionKind = "rvClosed" | "overdue" | "high" | "new" | "stalled";
+export type AttentionKind = "rvClosed" | "estimates" | "overdue" | "high" | "new" | "stalled";
 export type AttentionReason = { kind: AttentionKind; label: string };
-const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, overdue: 1, high: 2, new: 3, stalled: 4 };
+// "estimates" outranks "overdue": LeadSimple sets every due date to created +
+// 30 days, so Overdue is mostly age, while a stuck estimate is a specific ask.
+const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, estimates: 1, overdue: 2, high: 3, new: 4, stalled: 5 };
 
 // Why an open work order needs someone, most urgent reason first; null if it
 // doesn't (or it's closed).
@@ -45,11 +52,14 @@ export function attentionReason(r: WorkOrderRow, now: number): AttentionReason |
   if (/^(completed|cancell?ed|canceled)$/i.test(r.rvStatus.trim())) {
     return { kind: "rvClosed", label: `${r.rvStatus.trim()} in Rentvine` };
   }
+  const last = ms(lastActivityAt(r));
+  if (/estimate/i.test(r.stage) && last != null && last < now - ESTIMATE_WAIT_DAYS * DAY) {
+    return { kind: "estimates", label: `Waiting on estimates ${Math.floor((now - last) / DAY)} days` };
+  }
   const due = ms(r.dueAt);
   if (due != null && due < now) return { kind: "overdue", label: "Overdue" };
   if (r.priority === "High") return { kind: "high", label: "High priority" };
   if (isNewWaiting(r, now)) return { kind: "new", label: "New WO needs action" };
-  const last = ms(lastActivityAt(r));
   if (last != null && last < now - STALLED_DAYS * DAY) {
     return { kind: "stalled", label: `Stalled ${Math.floor((now - last) / DAY)} days` };
   }

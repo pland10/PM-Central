@@ -136,4 +136,13 @@ describe("MaintenanceView", () => {
     await user.click(within(recent).getByRole("button", { name: /show less/i }));
     expect(within(recent).getAllByRole("listitem")).toHaveLength(6);
   });
+
+  it("can filter the attention list to WOs waiting on estimates", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={[...rows, wo({ number: "106", issue: "Roof", stage: "Estimate Requested", updatedAt: daysAgo(5) })]} now={NOW} />);
+
+    await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "estimates");
+    expect(firstCells()).toEqual(["106"]);
+    expect(within(within(attention()).getByRole("table")).getByText("Waiting on estimates 5 days")).toBeTruthy();
+  });
 });

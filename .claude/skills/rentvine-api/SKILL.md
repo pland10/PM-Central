@@ -28,6 +28,8 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 | `/accounting/receipts` | **tenant receipts only**, oldest first. Rows `{ receipt, payment, charge }`; `payment` has `transactionID, achStatusID, settlementID, portfolioID, leaseID, contactID, amount, datePosted, isVoided, returnTransactionID`. Ignores `transactionTypeID`. Used by leadsimple-search `settlement_sync.py`. |
 | `/accounting/transactions?transactionTypeID=5` | **owner receipts** (owner contributions), newest first, rows wrap `transaction` (same fields as `payment` above; `leaseID`/`propertyID` null). The filter works here (`transactionTypeIDs=` is ignored). Type ids match the MCP's `list_transactions` list. |
 | `/accounting/transactions/{id}` | one transaction, wraps `transaction` |
+| `/maintenance/work-orders` (fields) | `workOrder` also carries `estimatedAmount`, `dateDue`, `dateClosed`, `scheduledStartDate`/`actualEndDate`; a `contact` (vendor) wrapper rides along. Oct 2026: 52 of 482 WOs had an estimatedAmount, only 1 open one. |
+| `/accounting/bills` | wraps `bill` (+ `contact`). Has `workOrderID` (325 of 2874 bills; 374 voided) but **no amount field** — the total is the sum of the bill's charges (MCP `get_bill` with `charges`). Per-WO billed cost needs a per-bill charges fetch. |
 | `/accounting/settlements[/{id}]` | wraps `settlement` (`settlementDate`, `amount`, `expectedAmount`, `bankAccountGatewaySettlementID`) |
 
 **Known 404s** (don't retry): `/leases/{id}/lease-renewals`, `/leases/{id}/leaseRenewals`,
@@ -36,6 +38,9 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 `/accounting/receipts/owner`, `/accounting/payments`, `/accounting/contributions`.
 `/accounting/receipts/{id}` → 400; `/accounting/owner-contributions`,
 `/portfolios/{id}/receipts` → 500.
+`/maintenance/work-order-estimates`, `/maintenance/estimates` → 404 (estimates are
+MCP-only so far; the account had just 11, so the team tracks estimates by
+LeadSimple stage — "Estimate Requested" / "Multiple Estimates" — instead).
 
 **Still unknown** (BACKLOG.md): property-type name list, property-group membership
 (Squatterwatch = group 4).
