@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isFeatureEnabled } from "@/config/features";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { canAccessAccounting } from "@/lib/accounting-access";
 import { isPlaidConfigured, plaidPost } from "@/lib/plaid";
 
 // Creates a Plaid Link token for the Connect flow on the Transactions tab. The
@@ -10,6 +12,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   if (!isFeatureEnabled("accounting")) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+  if (!canAccessAccounting(await getCurrentUser())) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
   if (!isPlaidConfigured()) {
