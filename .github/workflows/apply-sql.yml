@@ -1,0 +1,37 @@
+name: Apply SQL file
+
+# One-off helper to apply an idempotent, additive SQL file from prisma/sql to
+# the database (the DATABASE_URL secret — production Neon). Use it to pre-create
+# a feature's tables instead of running `prisma db execute` locally. SAFE ONLY
+# for additive/idempotent SQL (CREATE TABLE/INDEX IF NOT EXISTS, ADD COLUMN IF
+# NOT EXISTS) — never a file with DROP/TRUNCATE (the db-change skill explains
+# why: this DB holds tables the leadsimple-search sync owns).
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'SQL file under prisma/sql to apply (additive/idempotent only)'
+        required: true
+        type: string
+        default: prisma/sql/plaid.sql
+
+concurrency:
+  group: apply-sql
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Apply ${{ inputs.file }}
+        run: npx prisma db execute --file "${{ inputs.file }}" --schema prisma/schema.prisma
