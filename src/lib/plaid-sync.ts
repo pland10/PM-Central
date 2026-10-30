@@ -34,6 +34,7 @@ const ANNOTATION_DDL = [
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes TEXT`,
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_at TIMESTAMPTZ`,
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS property_external_id TEXT`, // → properties.externalId
 ];
 
 // Lazy ensure-guard (db-change skill, Pattern B): run the additive ALTERs once

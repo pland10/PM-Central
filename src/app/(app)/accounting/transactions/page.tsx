@@ -6,6 +6,7 @@ import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
 import { listHideRulesSafe } from "@/lib/transaction-filters-db";
 import { listCategoryNamesSafe } from "@/lib/transaction-categories-db";
+import { listPropertyOptions, type PropertyOption } from "@/lib/property-options";
 import { patternToLike } from "@/lib/transaction-filters";
 import { AccountingTabs } from "../AccountingTabs";
 import { ConnectButton } from "./ConnectButton";
@@ -25,9 +26,13 @@ export default async function TransactionsPage() {
   const configured = isPlaidConfigured();
   // Admin hide filters (Admin → Transaction filters), e.g. *CSG FORTE*.
   const hideLikes = configured ? (await listHideRulesSafe()).map((r) => patternToLike(r.pattern)) : [];
-  const [{ rows, accounts, linkedCount, capped, hiddenCount }, categories] = configured
-    ? await Promise.all([fetchPlaidTransactions(2000, hideLikes), listCategoryNamesSafe()])
-    : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, []];
+  const [{ rows, accounts, linkedCount, capped, hiddenCount }, categories, properties] = configured
+    ? await Promise.all([
+        fetchPlaidTransactions(2000, hideLikes),
+        listCategoryNamesSafe(),
+        listPropertyOptions().catch((): PropertyOption[] => []),
+      ])
+    : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, [], []];
 
   return (
     <div className="mx-auto max-w-screen-2xl">
@@ -68,6 +73,7 @@ export default async function TransactionsPage() {
             hiddenCount={hiddenCount}
             canManageFilters={user?.role === "admin"}
             categories={categories}
+            properties={properties}
           />
         </div>
       )}

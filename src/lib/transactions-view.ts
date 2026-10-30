@@ -14,10 +14,12 @@ export type TxnAnnotation = {
   recordedQuickbooks: boolean; // bookkeeper entered it in QuickBooks
   recordedRentvine: boolean; // recorded in Rentvine
   notes: string;
+  propertyId: string | null; // linked property (Property.externalId), null = none
 };
 
 const NOTES_MAX = 2000;
 const CATEGORY_MAX = 120;
+const PROPERTY_ID_MAX = 64;
 
 export type TxnSummaryRow = {
   amount: number; // positive = charge/spend, negative = credit (Plaid's sign)
@@ -90,6 +92,10 @@ export function sanitizeAnnotationPatch(body: unknown): AnnotationPatch {
   }
   if ("recordedQuickbooks" in b) out.recordedQuickbooks = Boolean(b.recordedQuickbooks);
   if ("recordedRentvine" in b) out.recordedRentvine = Boolean(b.recordedRentvine);
+  if ("propertyId" in b) {
+    const id = typeof b.propertyId === "string" ? b.propertyId.trim().slice(0, PROPERTY_ID_MAX) : "";
+    out.propertyId = id || null;
+  }
   if ("notes" in b) {
     out.notes = typeof b.notes === "string" ? b.notes.slice(0, NOTES_MAX) : "";
   }

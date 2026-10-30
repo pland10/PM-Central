@@ -63,4 +63,11 @@ describe("sanitizeAnnotationPatch", () => {
     expect(sanitizeAnnotationPatch("nope")).toEqual({});
     expect(sanitizeAnnotationPatch({})).toEqual({});
   });
+
+  it("takes a property id (trimmed), or null to clear it", () => {
+    expect(sanitizeAnnotationPatch({ propertyId: " 4521 " })).toEqual({ propertyId: "4521" });
+    expect(sanitizeAnnotationPatch({ propertyId: "" })).toEqual({ propertyId: null });
+    expect(sanitizeAnnotationPatch({ propertyId: null })).toEqual({ propertyId: null });
+    expect(sanitizeAnnotationPatch({ propertyId: 12 })).toEqual({ propertyId: null });
+  });
 });
