@@ -20,6 +20,8 @@ export type Column<T> = {
   key: string;
   header: string;
   align?: "left" | "right";
+  // Keep the header (and its sort arrow) on one line; the column widens to fit.
+  nowrap?: boolean;
   sortable?: boolean;
   sortValue?: (row: T) => string | number;
   render: (row: T) => ReactNode;
@@ -370,6 +372,7 @@ export function DataTable<T>({
                     className={[
                       "px-4 py-3 font-medium",
                       c.align === "right" ? "text-right" : "",
+                      c.nowrap ? "whitespace-nowrap" : "",
                       // Keep the header visible while the rows scroll. The cell
                       // needs its own background + border since the <tr>'s don't
                       // paint over sticky scrolling content.
