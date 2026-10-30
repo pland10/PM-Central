@@ -36,10 +36,12 @@ export async function PATCH(req: NextRequest) {
 
   try {
     await ensurePlaidAnnotationColumns(prisma);
+    // Skip pending transactions — they get a new id when they post, so an
+    // annotation would be orphaned (matches the single-row PATCH + the UI).
     const updated = await prisma.$executeRaw(Prisma.sql`
       UPDATE plaid_transactions
       SET reimbursable = ${reimbursable ?? null}, annotated_at = now(), annotated_by = ${user?.email ?? "operator"}
-      WHERE transaction_id = ANY(${ids})`);
+      WHERE transaction_id = ANY(${ids}) AND pending = false`);
     return NextResponse.json({ ok: true, updated });
   } catch (e) {
     console.error(`[plaid] bulk reimbursable save failed for ${ids.length} rows:`, e);

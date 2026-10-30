@@ -87,9 +87,18 @@ export async function PATCH(
 
   try {
     await ensurePlaidAnnotationColumns(prisma);
-    await prisma.$executeRaw(
-      Prisma.sql`UPDATE plaid_transactions SET ${Prisma.join(sets)} WHERE transaction_id = ${transactionId}`
+    // Only posted transactions are editable: a pending one gets a new id when it
+    // posts, so an annotation here would be orphaned. The UI disables the editors
+    // on pending rows; this is the authoritative backstop.
+    const updated = await prisma.$executeRaw(
+      Prisma.sql`UPDATE plaid_transactions SET ${Prisma.join(sets)} WHERE transaction_id = ${transactionId} AND pending = false`
     );
+    if (updated === 0) {
+      return NextResponse.json(
+        { error: "This transaction is still pending — you can edit it once it posts." },
+        { status: 409 }
+      );
+    }
   } catch (e) {
     // Don't leak DB/driver internals to the browser; log the detail server-side.
     console.error(`[plaid] annotation save failed for ${transactionId}:`, e);
