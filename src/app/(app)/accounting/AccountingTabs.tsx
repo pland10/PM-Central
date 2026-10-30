@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Tab bar shared by the Accounting pages: Overview (cash + reimbursables, from
-// Rentvine) and Bank Transactions (card/bank activity, from Plaid).
+// Tab bar shared by the Accounting pages: Rentvine Transactions (money-out
+// payments, from Rentvine) and Bank Transactions (card/bank activity, from Plaid).
 const TABS = [
-  { href: "/accounting", label: "Overview" },
+  { href: "/accounting", label: "Rentvine Transactions" },
   { href: "/accounting/transactions", label: "Bank Transactions" },
 ];
 
