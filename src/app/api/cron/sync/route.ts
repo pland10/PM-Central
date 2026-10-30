@@ -44,7 +44,9 @@ async function handle(req: NextRequest) {
     if (!s) return NextResponse.json({ error: `Unknown source "${sourceId}".` }, { status: 400 });
     targets = [s];
   } else if (tier === "hourly" || tier === "daily") {
-    targets = DATA_SOURCES.filter((s) => s.tier === tier);
+    // Skip self-scheduled sources (their own GitHub cron already runs them);
+    // they stay refreshable by explicit ?source=<id>.
+    targets = DATA_SOURCES.filter((s) => s.tier === tier && !s.selfScheduled);
   } else {
     return NextResponse.json(
       { error: "Specify ?source=<id> or ?tier=hourly|daily." },

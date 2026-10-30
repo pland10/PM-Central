@@ -51,6 +51,16 @@ describe("POST /api/admin/refresh", () => {
     );
   });
 
+  it("dispatches the Plaid sync in real-sync mode (not the no-op test default)", async () => {
+    const res = await refresh({ source: "bank_transactions" });
+
+    expect(res.status).toBe(200);
+    expect(String(github.mock.calls[0][0])).toBe(
+      "https://api.github.com/repos/pland10/PM-Central/actions/workflows/sync-plaid.yml/dispatches"
+    );
+    expect(JSON.parse(String(github.mock.calls[0][1].body))).toEqual({ ref: "main", inputs: { mode: "sync" } });
+  });
+
   it("passes a GitHub failure back as an error", async () => {
     github.mockResolvedValue(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
 

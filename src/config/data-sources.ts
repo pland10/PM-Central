@@ -11,11 +11,15 @@ export type DataSource = {
   tier: "hourly" | "daily"; // machine-readable schedule, for the external scheduler
   jobs: string[]; // sync_status.job names; freshness = the OLDEST of these
   comingSoon?: boolean; // listed for visibility, but no refresh workflow yet
+  // Has its own GitHub Actions cron, so the /api/cron/sync tier sweep skips it
+  // (avoids a double daily run). Still refreshable on demand by id.
+  selfScheduled?: boolean;
   dispatch: {
     owner: string;
     repo: string;
     workflow: string; // workflow file name
     ref: string; // branch the workflow runs from (default branch)
+    inputs?: Record<string, string>; // workflow_dispatch inputs, e.g. { mode: "sync" }
   };
 };
 
@@ -82,6 +86,18 @@ export const DATA_SOURCES: DataSource[] = [
     tier: "hourly",
     jobs: ["activity_refresh"],
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "backfill.yml", ref: "master" },
+  },
+  {
+    id: "bank_transactions",
+    label: "Bank transactions (Plaid)",
+    description: "Card & bank transactions (Amex, Home Depot, …) from Plaid — powers Accounting → Bank Transactions.",
+    cadence: "Daily",
+    tier: "daily",
+    jobs: ["plaid_transactions"],
+    selfScheduled: true, // sync-plaid.yml runs its own daily cron
+    // The workflow's manual default is the no-op "test" mode, so Refresh must
+    // ask for the real "sync".
+    dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-plaid.yml", ref: "main", inputs: { mode: "sync" } },
   },
 ];
 
