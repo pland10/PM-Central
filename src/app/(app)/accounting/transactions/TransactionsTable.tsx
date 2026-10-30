@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
@@ -19,10 +20,14 @@ export function TransactionsTable({
   initialRows,
   accounts,
   capped = false,
+  hiddenCount = 0,
+  canManageFilters = false,
 }: {
   initialRows: TxnRow[];
   accounts: string[];
   capped?: boolean;
+  hiddenCount?: number; // left out by Admin → Transaction filters
+  canManageFilters?: boolean; // admins get a link to the filters page
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
@@ -294,6 +299,20 @@ export function TransactionsTable({
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Showing the most recent {rows.length.toLocaleString()} transactions — the totals above
           cover only these rows, not the full history.
+        </p>
+      )}
+
+      {hiddenCount > 0 && (
+        <p className="mb-3 text-xs text-slate-500">
+          {hiddenCount.toLocaleString()} transaction{hiddenCount === 1 ? "" : "s"} hidden by filters
+          {canManageFilters && (
+            <>
+              {" · "}
+              <Link href="/admin/transaction-filters" className="font-medium text-brand-600 hover:underline">
+                Manage filters
+              </Link>
+            </>
+          )}
         </p>
       )}
 

@@ -27,3 +27,12 @@ describe("MobileNav", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 });
+
+describe("MobileNav admin links", () => {
+  it("links admins to Transaction filters", async () => {
+    const user = userEvent.setup();
+    render(<MobileNav sections={[]} isAdmin version="v1" />);
+    await user.click(screen.getByRole("button", { name: /open navigation/i }));
+    expect(screen.getByRole("link", { name: /transaction filters/i }).getAttribute("href")).toBe("/admin/transaction-filters");
+  });
+});

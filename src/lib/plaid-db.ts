@@ -33,6 +33,7 @@ export type TransactionsResult = {
   accounts: string[]; // distinct account names present, for a filter later
   linkedCount: number; // how many accounts are linked (plaid_items)
   capped: boolean; // true when more rows exist than were loaded (summary is partial)
+  hiddenCount: number; // left out by the admin hide filters
 };
 
 type RawTxn = {
@@ -61,7 +62,13 @@ function isoDate(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
 }
 
-export async function fetchPlaidTransactions(limit = 2000): Promise<TransactionsResult> {
+// Case-insensitive match on the description or merchant against any of the
+// hide patterns (SQL LIKE patterns from patternToLike).
+const matchesHidden = (likes: string[]) =>
+  Prisma.sql`(COALESCE(name, '') ILIKE ANY(${likes}) OR COALESCE(merchant_name, '') ILIKE ANY(${likes}))`;
+
+// `hideLikes`: SQL LIKE patterns (see patternToLike) for the admin hide filters.
+export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] = []): Promise<TransactionsResult> {
   try {
     // Make sure the annotation columns exist before selecting them (self-heals
     // on a DB where the additive SQL hasn't been applied yet).
@@ -70,6 +77,7 @@ export async function fetchPlaidTransactions(limit = 2000): Promise<Transactions
       SELECT transaction_id, posted_date, account_name, merchant_name, name, amount, category, pending,
              reimbursable, category_override, recorded_quickbooks, recorded_rentvine, notes
       FROM plaid_transactions
+      ${hideLikes.length ? Prisma.sql`WHERE NOT ${matchesHidden(hideLikes)}` : Prisma.empty}
       ORDER BY posted_date DESC NULLS LAST, synced_at DESC
       LIMIT ${limit}`);
 
@@ -81,6 +89,18 @@ export async function fetchPlaidTransactions(limit = 2000): Promise<Transactions
       linkedCount = c[0]?.n ?? 0;
     } catch {
       /* plaid_items not created yet */
+    }
+
+    let hiddenCount = 0;
+    if (hideLikes.length) {
+      try {
+        const h = await prisma.$queryRaw<{ n: number }[]>(
+          Prisma.sql`SELECT COUNT(*)::int AS n FROM plaid_transactions WHERE ${matchesHidden(hideLikes)}`
+        );
+        hiddenCount = h[0]?.n ?? 0;
+      } catch {
+        /* count is informational only */
+      }
     }
 
     const mapped: TxnRow[] = rows.map((r) => ({
@@ -102,9 +122,9 @@ export async function fetchPlaidTransactions(limit = 2000): Promise<Transactions
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();
     // At the cap there may be older rows we didn't load, so the summary totals
     // would be partial — let the page say so rather than present them as whole.
-    return { rows: mapped, accounts, linkedCount, capped: mapped.length >= limit };
+    return { rows: mapped, accounts, linkedCount, capped: mapped.length >= limit, hiddenCount };
   } catch {
     // Table not created yet (SQL not applied / first sync not run) — show empty.
-    return { rows: [], accounts: [], linkedCount: 0, capped: false };
+    return { rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 };
   }
 }
