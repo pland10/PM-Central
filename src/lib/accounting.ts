@@ -235,6 +235,7 @@ export async function fetchReimbursables(): Promise<ReimbursablesResult> {
 const MONEY_OUT_DAYS = 90; // default window ("last 90 days")
 
 export type MoneyOutRow = {
+  payoutId: string; // Rentvine payoutID (stable key for batching)
   date: string; // datePosted, ISO (YYYY-MM-DD)
   payee: string; // who was paid
   payeeType: string; // Owner | Vendor | Manager | …
@@ -290,6 +291,7 @@ export function mapMoneyOut(rows: ReportRow[]): { rows: MoneyOutRow[]; total: nu
     const amount = money(d.payoutAmount);
     total += amount;
     return {
+      payoutId: str(d.payoutID),
       date: str(d.datePosted),
       payee: str(d.contactName),
       payeeType: payeeTypeLabel(d.contactTypeID),
@@ -342,4 +344,28 @@ export async function fetchMoneyOut(): Promise<MoneyOutResult> {
   } catch (e) {
     return errorResult(e);
   }
+}
+
+// The management-company payees whose payments are trust → operating draws
+// (overridable via PMI_DRAW_PAYEES, comma-separated).
+export const PMI_DRAW_PAYEES: string[] = (
+  process.env.PMI_DRAW_PAYEES || "PMI Lighthouse,PMI Lighthouse Reimbursable"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+export function isDrawPayee(payee: string): boolean {
+  const p = payee.trim().toLowerCase();
+  return PMI_DRAW_PAYEES.some((n) => n.toLowerCase() === p);
+}
+
+// Money-out payments narrowed to the management-company draw payees — the
+// Rentvine Transactions tab's trust-draw list. Same Check Register source.
+export async function fetchManagementDraws(): Promise<MoneyOutResult> {
+  const out = await fetchMoneyOut();
+  if (!out.ok) return out;
+  const rows = out.rows.filter((r) => isDrawPayee(r.payee));
+  const total = Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+  return { ok: true, rows, total, count: rows.length, asOf: out.asOf };
 }
