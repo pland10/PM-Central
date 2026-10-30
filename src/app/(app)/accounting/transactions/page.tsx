@@ -5,6 +5,7 @@ import { canAccessAccounting } from "@/lib/accounting-access";
 import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
 import { listHideRulesSafe } from "@/lib/transaction-filters-db";
+import { listCategoryNamesSafe } from "@/lib/transaction-categories-db";
 import { patternToLike } from "@/lib/transaction-filters";
 import { AccountingTabs } from "../AccountingTabs";
 import { ConnectButton } from "./ConnectButton";
@@ -24,12 +25,12 @@ export default async function TransactionsPage() {
   const configured = isPlaidConfigured();
   // Admin hide filters (Admin → Transaction filters), e.g. *CSG FORTE*.
   const hideLikes = configured ? (await listHideRulesSafe()).map((r) => patternToLike(r.pattern)) : [];
-  const { rows, accounts, linkedCount, capped, hiddenCount } = configured
-    ? await fetchPlaidTransactions(2000, hideLikes)
-    : { rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 };
+  const [{ rows, accounts, linkedCount, capped, hiddenCount }, categories] = configured
+    ? await Promise.all([fetchPlaidTransactions(2000, hideLikes), listCategoryNamesSafe()])
+    : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, []];
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-screen-2xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
 
@@ -66,6 +67,7 @@ export default async function TransactionsPage() {
             capped={capped}
             hiddenCount={hiddenCount}
             canManageFilters={user?.role === "admin"}
+            categories={categories}
           />
         </div>
       )}

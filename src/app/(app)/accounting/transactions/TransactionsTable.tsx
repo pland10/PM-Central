@@ -5,7 +5,7 @@ import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
-import { summarizeTransactions, type AnnotationPatch } from "@/lib/transactions-view";
+import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
 // in a sortable/filterable DataTable with the hand-entered columns editable
@@ -22,15 +22,18 @@ export function TransactionsTable({
   capped = false,
   hiddenCount = 0,
   canManageFilters = false,
+  categories: initialCategories = [],
 }: {
   initialRows: TxnRow[];
   accounts: string[];
   capped?: boolean;
   hiddenCount?: number; // left out by Admin → Transaction filters
   canManageFilters?: boolean; // admins get a link to the filters page
+  categories?: string[]; // the shared category list (suggestions while typing)
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
+  const [categories, setCategories] = useState<string[]>(initialCategories);
 
   // Optimistically apply the edit, then persist. If the save fails, roll the
   // row back to what it was so the UI never diverges from the server.
@@ -49,13 +52,63 @@ export function TransactionsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "");
+      // The server may save a category under the list's spelling ("pay roll"
+      // → "Payroll"); show what was actually saved and add it to the list.
+      const saved = data?.patch?.categoryOverride;
+      if (typeof saved === "string") {
+        setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, categoryOverride: saved } : r)));
+        if (saved) setCategories((prev) => (prev.includes(saved) ? prev : [...prev, saved].sort((a, b) => a.localeCompare(b))));
+      }
       setError("");
-    } catch {
+    } catch (e) {
       if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
-      setError("A change couldn't be saved — reverted it. Please try again.");
+      const reason = e instanceof Error && e.message ? `${e.message} ` : "";
+      setError(`${reason}A change couldn't be saved — reverted it.`);
     }
   }, []);
+
+  // Multi-select for bulk "reimbursable" edits. `shown` tracks the rows the
+  // DataTable is currently displaying (after search/filters) for "select all".
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [shown, setShown] = useState<TxnRow[]>(initialRows);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  // Optimistic like `save`, but for every selected row in one request.
+  async function bulkSetReimbursable(value: Reimbursable) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const before = new Map(rows.filter((r) => selected.has(r.transactionId)).map((r) => [r.transactionId, r]));
+    setRows((prev) => prev.map((r) => (selected.has(r.transactionId) ? { ...r, reimbursable: value } : r)));
+    try {
+      const res = await fetch("/api/plaid/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, reimbursable: value }),
+      });
+      if (!res.ok) throw new Error();
+      setError("");
+      stopSelecting();
+    } catch {
+      setRows((prev) => prev.map((r) => before.get(r.transactionId) ?? r));
+      setError("The bulk change couldn't be saved — reverted it. Please try again.");
+    }
+  }
 
   const summary = useMemo(
     () =>
@@ -98,7 +151,9 @@ export function TransactionsTable({
         sortable: true,
         sortValue: (r) => r.merchantName.toLowerCase(),
         render: (r) => (
-          <span className="text-slate-800">
+          // Raw bank descriptions can be very long; wrap them in a narrow
+          // column instead of pushing the editable columns off screen.
+          <span className="block max-w-[16rem] break-words text-slate-800">
             {r.merchantName || "—"}
             {r.pending && <span className="ml-1 text-xs text-amber-600">(pending)</span>}
           </span>
@@ -125,12 +180,13 @@ export function TransactionsTable({
             key={`cat-${r.transactionId}-${r.categoryOverride}`}
             aria-label={`category-${r.transactionId}`}
             defaultValue={r.categoryOverride}
-            placeholder="—"
+            list={CATEGORY_LIST_ID}
+            placeholder="Search…"
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
             }}
-            className="w-28 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
           />
         ),
       },
@@ -236,6 +292,30 @@ export function TransactionsTable({
     [save, accounts]
   );
 
+  const shownColumns = useMemo<Column<TxnRow>[]>(
+    () =>
+      selecting
+        ? [
+            {
+              key: "select",
+              header: "",
+              exportable: false,
+              render: (r) => (
+                <input
+                  type="checkbox"
+                  aria-label={`select-${r.transactionId}`}
+                  checked={selected.has(r.transactionId)}
+                  onChange={() => toggleSelected(r.transactionId)}
+                  className="h-4 w-4 accent-brand-500"
+                />
+              ),
+            },
+            ...columns,
+          ]
+        : columns,
+    [selecting, selected, toggleSelected, columns]
+  );
+
   const facets = useMemo<Facet<TxnRow>[]>(
     () => [
       {
@@ -323,9 +403,58 @@ export function TransactionsTable({
         <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
       )}
 
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        {!selecting ? (
+          <button type="button" onClick={() => setSelecting(true)} className={BTN}>
+            Select
+          </button>
+        ) : (
+          <>
+            {selected.size > 0 && <span className="font-medium text-slate-700">{selected.size} selected</span>}
+            <button
+              type="button"
+              onClick={() => setSelected(new Set(shown.map((r) => r.transactionId)))}
+              className={BTN}
+            >
+              Select all {shown.length.toLocaleString()} shown
+            </button>
+            {selected.size > 0 && (
+              <>
+                <span className="ml-2 text-xs text-slate-500">Set reimbursable:</span>
+                <button type="button" aria-label="Set reimbursable: Yes" onClick={() => bulkSetReimbursable("yes")} className={BTN}>
+                  Yes
+                </button>
+                <button type="button" aria-label="Set reimbursable: No" onClick={() => bulkSetReimbursable("no")} className={BTN}>
+                  No
+                </button>
+                <button
+                  type="button"
+                  aria-label="Set reimbursable: Unreviewed"
+                  onClick={() => bulkSetReimbursable(null)}
+                  className={BTN}
+                >
+                  Unreviewed
+                </button>
+              </>
+            )}
+            <button type="button" onClick={stopSelecting} className="ml-auto text-xs text-slate-500 hover:text-slate-700">
+              Done
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Suggestions for every "Category (yours)" box, shared by all rows. */}
+      <datalist id={CATEGORY_LIST_ID}>
+        {categories.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       <DataTable<TxnRow>
         rows={rows}
-        columns={columns}
+        columns={shownColumns}
+        onFilteredChange={setShown}
         rowKey={(r) => r.transactionId}
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${r.notes}`}
         searchPlaceholder="Search merchant, notes…"
@@ -336,6 +465,11 @@ export function TransactionsTable({
     </div>
   );
 }
+
+const CATEGORY_LIST_ID = "txn-category-options";
+
+const BTN =
+  "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
 
 const TONES: Record<string, string> = {
   emerald: "text-emerald-700",

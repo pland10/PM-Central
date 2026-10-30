@@ -87,6 +87,7 @@ export function DataTable<T>({
   initialColumnFilters,
   exportName,
   stickyHeader = true,
+  onFilteredChange,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -105,6 +106,9 @@ export function DataTable<T>({
   // Keep the header row pinned while the page scrolls (wide screens). On by
   // default for all list tables; pass stickyHeader={false} to opt out.
   stickyHeader?: boolean;
+  // Called with the rows currently shown (after search/filters/sort) whenever
+  // they change, e.g. for a "select all shown" action.
+  onFilteredChange?: (rows: T[]) => void;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
@@ -215,6 +219,17 @@ export function DataTable<T>({
 
     return r;
   }, [rows, q, facetValues, colFilters, sort, columns, search, facets]);
+
+  // Only report when the shown rows actually differ: `filtered` is recomputed
+  // whenever a parent passes a fresh inline `search`/`columns`, and reporting
+  // an equal list would re-render that parent in a loop.
+  const reported = useRef<T[] | null>(null);
+  useEffect(() => {
+    const prev = reported.current;
+    if (prev && prev.length === filtered.length && prev.every((r, i) => r === filtered[i])) return;
+    reported.current = filtered;
+    onFilteredChange?.(filtered);
+  }, [filtered, onFilteredChange]);
 
   // Single click: sort by this column alone (asc → desc → off). Shift-click:
   // add/cycle this column as an additional sort key (asc → desc → remove).

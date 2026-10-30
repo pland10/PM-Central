@@ -7,9 +7,11 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
+vi.mock("@/lib/transaction-categories-db", () => ({ resolveCategoryForSave: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import { isFeatureEnabled } from "@/config/features";
+import { resolveCategoryForSave } from "@/lib/transaction-categories-db";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { PATCH } from "@/app/api/plaid/transactions/[transactionId]/route";
 
@@ -62,5 +64,22 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     const res = await patch({ reimbursable: "yes" });
     expect(res.status).toBe(404);
     expect(executeRaw.mock.calls.some((c) => /UPDATE/.test(sqlOf(c[0])))).toBe(false);
+  });
+
+  it("saves the category under its list spelling (adding it while the list is open)", async () => {
+    vi.mocked(resolveCategoryForSave).mockResolvedValue({ name: "Payroll", isNew: false });
+    const res = await patch({ categoryOverride: "pay roll" });
+    expect(res.status).toBe(200);
+    expect(resolveCategoryForSave).toHaveBeenCalledWith("pay roll", { isAdmin: true, by: "admin@pmi.com" });
+    const update = executeRaw.mock.calls.find((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(update.values[0]).toBe("Payroll");
+  });
+
+  it("rejects a category that isn't on the locked list", async () => {
+    vi.mocked(resolveCategoryForSave).mockResolvedValue({ error: "Not an approved category." });
+    const res = await patch({ categoryOverride: "Snacks" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Not an approved category." });
+    expect(executeRaw.mock.calls.some((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))).toBe(false);
   });
 });
