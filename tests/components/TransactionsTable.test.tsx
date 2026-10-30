@@ -298,11 +298,27 @@ describe("TransactionsTable", () => {
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
   });
 
-  it("keeps the Plaid category column narrow, with the full name on hover", () => {
+  it("no longer shows the Plaid category column", () => {
     setup();
-    const cell = screen.getAllByText("home improvement")[0];
-    expect(cell.className).toMatch(/\bmax-w-\[6\.5rem\]/);
-    expect(cell.className).toMatch(/\btruncate\b/);
-    expect(cell.getAttribute("title")).toBe("home improvement");
+    expect(screen.queryByRole("columnheader", { name: /category \(plaid\)/i })).toBeNull();
+  });
+
+  describe("pending transactions are locked", () => {
+    const pendingRow: TxnRow = { ...rows[0], transactionId: "p1", pending: true };
+
+    it("disables every inline editor on a pending row", () => {
+      render(<TransactionsTable initialRows={[pendingRow]} accounts={[]} />);
+      for (const label of ["reimbursable-p1", "quickbooks-p1", "rentvine-p1", "category-p1", "notes-p1"]) {
+        expect(screen.getByLabelText(label)).toBeDisabled();
+      }
+    });
+
+    it("can't be picked in bulk select", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], pendingRow]} accounts={[]} />);
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      expect(screen.getByLabelText("select-p1")).toBeDisabled();
+      expect(screen.getByLabelText("select-t1")).not.toBeDisabled();
+    });
   });
 });
