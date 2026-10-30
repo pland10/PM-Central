@@ -38,6 +38,15 @@ every merge, including the final `dev` → `main` to production. Never merge
 without asking first, never leave a promotion for the user to open manually,
 and never push straight to `dev` or `main`.
 
+> **Temporary auto-merge window — through 2026-11-06 (inclusive).** The user
+> granted standing approval (2026-10-30) to merge without asking, for both
+> feature → `dev` and `dev` → `main`. Conditions: CI green on the current head,
+> no merge conflict; tell the user after each merge what went in; still ask
+> first if a promotion picks up changes that didn't come from this approval's
+> work (e.g. another session's PR on `dev`); stop immediately if the user says
+> so. **After 2026-11-06 this note is void** — go back to asking before every
+> merge, and remove this note in the next PR.
+
 **Hosting: production is on Vercel; dev is still on Railway** (until dev moves
 to Vercel Preview — see `DEPLOY-VERCEL.md`). Both auto-deploy their branch
 (`main` → Vercel prod, `dev` → Railway dev), so **code merges deploy

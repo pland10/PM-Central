@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $executeRaw: vi.fn().mockResolvedValue(1), $executeRawUnsafe: vi.fn().mockResolvedValue(1) },
+  prisma: {
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+    property: { findFirst: vi.fn() },
+  },
 }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
@@ -81,5 +85,28 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Not an approved category." });
     expect(executeRaw.mock.calls.some((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))).toBe(false);
+  });
+
+  it("links an existing property", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue({ id: "x" } as never);
+    const res = await patch({ propertyId: "4521" });
+    expect(res.status).toBe(200);
+    expect(prisma.property.findFirst).toHaveBeenCalledWith({ where: { externalId: "4521" }, select: { id: true } });
+    const update = executeRaw.mock.calls.find((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(sqlOf(update)).toMatch(/property_external_id =/);
+    expect(update.values[0]).toBe("4521");
+  });
+
+  it("refuses a property that doesn't exist", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue(null);
+    const res = await patch({ propertyId: "nope" });
+    expect(res.status).toBe(400);
+    expect(executeRaw.mock.calls.some((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))).toBe(false);
+  });
+
+  it("clears the property without a lookup", async () => {
+    const res = await patch({ propertyId: null });
+    expect(res.status).toBe(200);
+    expect(prisma.property.findFirst).not.toHaveBeenCalled();
   });
 });

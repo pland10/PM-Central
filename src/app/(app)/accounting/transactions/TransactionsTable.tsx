@@ -5,6 +5,7 @@ import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
+import type { PropertyOption } from "@/lib/property-options";
 import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -23,6 +24,7 @@ export function TransactionsTable({
   hiddenCount = 0,
   canManageFilters = false,
   categories: initialCategories = [],
+  properties = [],
 }: {
   initialRows: TxnRow[];
   accounts: string[];
@@ -30,6 +32,7 @@ export function TransactionsTable({
   hiddenCount?: number; // left out by Admin → Transaction filters
   canManageFilters?: boolean; // admins get a link to the filters page
   categories?: string[]; // the shared category list (suggestions while typing)
+  properties?: PropertyOption[]; // existing properties a transaction can be linked to
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
@@ -123,6 +126,25 @@ export function TransactionsTable({
     [rows]
   );
 
+  // Property typeahead: unique display labels (a repeated label gets its id
+  // appended) and lookups both ways. Only these can be saved.
+  const propertyLookup = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const p of properties) seen.set(p.label, (seen.get(p.label) ?? 0) + 1);
+    const labelById = new Map<string, string>();
+    const idByLabel = new Map<string, string>();
+    for (const p of properties) {
+      const label = (seen.get(p.label) ?? 0) > 1 ? `${p.label} (#${p.externalId})` : p.label;
+      labelById.set(p.externalId, label);
+      idByLabel.set(label.toLowerCase(), p.externalId);
+    }
+    return { labelById, idByLabel };
+  }, [properties]);
+  const propertyLabel = useCallback(
+    (id: string | null) => (id ? (propertyLookup.labelById.get(id) ?? `Property #${id}`) : ""),
+    [propertyLookup]
+  );
+
   const columns = useMemo<Column<TxnRow>[]>(
     () => [
       {
@@ -158,6 +180,43 @@ export function TransactionsTable({
             {r.pending && <span className="ml-1 text-xs text-amber-600">(pending)</span>}
           </span>
         ),
+      },
+      {
+        key: "property",
+        header: "Property",
+        sortable: true,
+        sortValue: (r) => propertyLabel(r.propertyId).toLowerCase(),
+        exportValue: (r) => propertyLabel(r.propertyId),
+        filter: { type: "select", value: (r) => propertyLabel(r.propertyId) },
+        render: (r) => {
+          const current = propertyLabel(r.propertyId);
+          return (
+            <input
+              key={`prop-${r.transactionId}-${r.propertyId ?? ""}`}
+              aria-label={`property-${r.transactionId}`}
+              onKeyDown={blurOnEnter}
+              defaultValue={current}
+              list={PROPERTY_LIST_ID}
+              placeholder="Search…"
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v === current) return;
+                if (!v) {
+                  if (r.propertyId) save(r.transactionId, { propertyId: null });
+                  return;
+                }
+                const id = propertyLookup.idByLabel.get(v.toLowerCase());
+                if (!id) {
+                  e.target.value = current;
+                  setError(`“${v}” isn't one of your properties — pick a property from the list.`);
+                  return;
+                }
+                if (id !== r.propertyId) save(r.transactionId, { propertyId: id });
+              }}
+              className="w-44 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            />
+          );
+        },
       },
       {
         key: "category",
@@ -292,7 +351,7 @@ export function TransactionsTable({
         ),
       },
     ],
-    [save, accounts]
+    [save, accounts, propertyLabel, propertyLookup]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -447,6 +506,13 @@ export function TransactionsTable({
         )}
       </div>
 
+      {/* Suggestions for every Property box: existing properties only. */}
+      <datalist id={PROPERTY_LIST_ID}>
+        {[...propertyLookup.labelById.values()].map((label) => (
+          <option key={label} value={label} />
+        ))}
+      </datalist>
+
       {/* Suggestions for every "Category (yours)" box, shared by all rows. */}
       <datalist id={CATEGORY_LIST_ID}>
         {categories.map((c) => (
@@ -470,6 +536,7 @@ export function TransactionsTable({
 }
 
 const CATEGORY_LIST_ID = "txn-category-options";
+const PROPERTY_LIST_ID = "txn-property-options";
 
 // Enter saves a text box: blurring it runs the same onBlur save as clicking away.
 function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {

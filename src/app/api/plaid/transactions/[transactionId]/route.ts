@@ -52,6 +52,13 @@ export async function PATCH(
     }
   }
 
+  // Only an existing property can be linked (the page's typeahead offers just
+  // those; this guards against stale or hand-crafted requests).
+  if (patch.propertyId) {
+    const exists = await prisma.property.findFirst({ where: { externalId: patch.propertyId }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: "Pick a property from the list." }, { status: 400 });
+  }
+
   // Build the SET clause from exactly the fields the user changed.
   const sets: Prisma.Sql[] = [];
   if (patch.reimbursable !== undefined) sets.push(Prisma.sql`reimbursable = ${patch.reimbursable}`);
@@ -59,6 +66,7 @@ export async function PATCH(
   if (patch.recordedQuickbooks !== undefined) sets.push(Prisma.sql`recorded_quickbooks = ${patch.recordedQuickbooks}`);
   if (patch.recordedRentvine !== undefined) sets.push(Prisma.sql`recorded_rentvine = ${patch.recordedRentvine}`);
   if (patch.notes !== undefined) sets.push(Prisma.sql`notes = ${patch.notes}`);
+  if (patch.propertyId !== undefined) sets.push(Prisma.sql`property_external_id = ${patch.propertyId}`);
 
   if (sets.length === 0) {
     return NextResponse.json({ error: "No fields to update." }, { status: 400 });
