@@ -1,0 +1,105 @@
+// @vitest-environment jsdom
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TransactionsTable } from "@/app/(app)/accounting/transactions/TransactionsTable";
+import type { TxnRow } from "@/lib/plaid-db";
+
+const rows: TxnRow[] = [
+  {
+    transactionId: "t1",
+    postedDate: "2026-10-27",
+    accountName: "American Express",
+    merchantName: "The Home Depot",
+    name: "HOMEDEPOT #1",
+    amount: 100,
+    category: "HOME_IMPROVEMENT",
+    pending: false,
+    reimbursable: null,
+    categoryOverride: "",
+    recordedQuickbooks: false,
+    recordedRentvine: false,
+    notes: "",
+  },
+  {
+    transactionId: "t2",
+    postedDate: "2026-10-20",
+    accountName: "The Home Depot",
+    merchantName: "Lowe's",
+    name: "LOWES #2",
+    amount: 200,
+    category: "HOME_IMPROVEMENT",
+    pending: false,
+    reimbursable: "yes",
+    categoryOverride: "",
+    recordedQuickbooks: true,
+    recordedRentvine: false,
+    notes: "",
+  },
+];
+
+let fetchMock: ReturnType<typeof vi.fn>;
+beforeEach(() => {
+  fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+  vi.stubGlobal("fetch", fetchMock);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+function setup() {
+  const user = userEvent.setup();
+  render(<TransactionsTable initialRows={rows} accounts={["American Express", "The Home Depot"]} />);
+  return { user };
+}
+
+describe("TransactionsTable", () => {
+  it("shows a summary across all rows", () => {
+    setup();
+    // total spend = 100 + 200
+    expect(screen.getByText("$300")).toBeInTheDocument();
+    // one row still unreviewed for reimbursable (tile label is a span; the
+    // facet dropdown also has an "Unreviewed" <option>, so scope to the span)
+    const unreviewed = screen.getByText("Unreviewed", { selector: "span" }).closest("div")!;
+    expect(within(unreviewed).getByText("1")).toBeInTheDocument();
+  });
+
+  it("marks a transaction recorded in QuickBooks via PATCH", async () => {
+    const { user } = setup();
+    await user.click(screen.getByLabelText("quickbooks-t1"));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/plaid/transactions/t1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body)).toEqual({ recordedQuickbooks: true });
+  });
+
+  it("sets reimbursable from the dropdown", async () => {
+    const { user } = setup();
+    await user.selectOptions(screen.getByLabelText("reimbursable-t1"), "yes");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/plaid/transactions/t1");
+    expect(JSON.parse(init.body)).toEqual({ reimbursable: "yes" });
+  });
+
+  it("commits a category override on blur", async () => {
+    const { user } = setup();
+    const input = screen.getByLabelText("category-t1");
+    await user.type(input, "Supplies");
+    await user.tab(); // blur
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
+  });
+
+  it("doesn't PATCH when a text field is left unchanged", async () => {
+    const { user } = setup();
+    const input = screen.getByLabelText("category-t1");
+    await user.click(input);
+    await user.tab();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

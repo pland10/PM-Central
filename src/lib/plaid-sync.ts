@@ -20,8 +20,41 @@ const DDL: Prisma.Sql[] = [
   Prisma.sql`CREATE INDEX IF NOT EXISTS plaid_transactions_item_id_idx ON plaid_transactions (item_id)`,
 ];
 
+// Hand-entered annotation columns on plaid_transactions (editable from the
+// Transactions tab: reimbursable?, your own category, recorded in QuickBooks /
+// Rentvine, notes). Kept out of the CREATE above because the sync never writes
+// them — the upsert's ON CONFLICT only SETs Plaid-owned columns, so a re-sync
+// never clobbers an edit. Additive + idempotent; documented in
+// prisma/sql/plaid.sql so they can be pre-applied (db-change skill, Pattern B).
+const ANNOTATION_DDL = [
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS reimbursable TEXT`, // 'yes' | 'no' | null
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS category_override TEXT`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS recorded_quickbooks BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS recorded_rentvine BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_at TIMESTAMPTZ`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT`,
+];
+
+// Lazy ensure-guard (db-change skill, Pattern B): run the additive ALTERs once
+// per process, before the first read/write/sync that depends on the columns.
+// Statements are static (no user input), so $executeRawUnsafe is safe here.
+let annotationColumns: Promise<void> | null = null;
+export function ensurePlaidAnnotationColumns(prisma: PrismaClient): Promise<void> {
+  if (!annotationColumns) {
+    annotationColumns = (async () => {
+      for (const stmt of ANNOTATION_DDL) await prisma.$executeRawUnsafe(stmt);
+    })().catch((e) => {
+      annotationColumns = null; // let a later call retry
+      throw e;
+    });
+  }
+  return annotationColumns;
+}
+
 export async function ensurePlaidTables(prisma: PrismaClient): Promise<void> {
   for (const stmt of DDL) await prisma.$executeRaw(stmt);
+  await ensurePlaidAnnotationColumns(prisma);
 }
 
 async function accountNames(accessToken: string): Promise<Record<string, string>> {

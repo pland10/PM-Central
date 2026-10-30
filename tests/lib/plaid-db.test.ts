@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: vi.fn() } }));
+// $executeRawUnsafe backs the annotation-column ensure-guard fetchPlaidTransactions runs first.
+vi.mock("@/lib/prisma", () => ({
+  prisma: { $queryRaw: vi.fn(), $executeRawUnsafe: vi.fn().mockResolvedValue(1) },
+}));
 
 import { prisma } from "@/lib/prisma";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
@@ -18,6 +21,11 @@ const raw = (over: Record<string, unknown> = {}) => ({
   amount: 54.23,
   category: "HOME_IMPROVEMENT",
   pending: false,
+  reimbursable: null,
+  category_override: null,
+  recorded_quickbooks: false,
+  recorded_rentvine: false,
+  notes: null,
   ...over,
 });
 
@@ -42,6 +50,42 @@ describe("fetchPlaidTransactions", () => {
     });
     // merchant falls back to the raw name when merchant_name is null
     expect(res.rows[1].merchantName).toBe("HOMEDEPOT #1234");
+  });
+
+  it("maps the hand-entered annotation columns", async () => {
+    queryRaw
+      .mockResolvedValueOnce([
+        raw({
+          reimbursable: "yes",
+          category_override: "Supplies",
+          recorded_quickbooks: true,
+          recorded_rentvine: false,
+          notes: "owner to repay",
+        }),
+      ])
+      .mockResolvedValueOnce([{ n: 1 }]);
+
+    const res = await fetchPlaidTransactions();
+
+    expect(res.rows[0]).toMatchObject({
+      reimbursable: "yes",
+      categoryOverride: "Supplies",
+      recordedQuickbooks: true,
+      recordedRentvine: false,
+      notes: "owner to repay",
+    });
+  });
+
+  it("defaults annotations when unset (null in the DB)", async () => {
+    queryRaw.mockResolvedValueOnce([raw()]).mockResolvedValueOnce([{ n: 1 }]);
+    const res = await fetchPlaidTransactions();
+    expect(res.rows[0]).toMatchObject({
+      reimbursable: null,
+      categoryOverride: "",
+      recordedQuickbooks: false,
+      recordedRentvine: false,
+      notes: "",
+    });
   });
 
   it("degrades to an empty result when the table doesn't exist yet", async () => {

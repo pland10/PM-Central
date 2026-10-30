@@ -1,11 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
+import type { Reimbursable } from "@/lib/transactions-view";
 
 // Server-only read layer for the Accounting → Transactions tab. Reads the
 // plaid_transactions mirror that scripts/sync-plaid.ts fills (see
-// prisma/sql/plaid.sql). Degrades to an empty result if the table isn't there
-// yet (before the SQL is applied / the first sync), so the page can show its
-// connect/empty state instead of erroring.
+// prisma/sql/plaid.sql), including the hand-entered annotation columns
+// (reimbursable?, category override, recorded-in-QuickBooks/Rentvine, notes).
+// Degrades to an empty result if the table isn't there yet (before the SQL is
+// applied / the first sync), so the page can show its connect/empty state
+// instead of erroring.
 
 export type TxnRow = {
   transactionId: string;
@@ -16,6 +20,12 @@ export type TxnRow = {
   amount: number;
   category: string;
   pending: boolean;
+  // Hand-entered (editable on the page):
+  reimbursable: Reimbursable;
+  categoryOverride: string;
+  recordedQuickbooks: boolean;
+  recordedRentvine: boolean;
+  notes: string;
 };
 
 export type TransactionsResult = {
@@ -33,6 +43,11 @@ type RawTxn = {
   amount: Prisma.Decimal | number | null;
   category: string | null;
   pending: boolean | null;
+  reimbursable: string | null;
+  category_override: string | null;
+  recorded_quickbooks: boolean | null;
+  recorded_rentvine: boolean | null;
+  notes: string | null;
 };
 
 function money(v: Prisma.Decimal | number | null): number {
@@ -47,8 +62,12 @@ function isoDate(d: Date | null): string | null {
 
 export async function fetchPlaidTransactions(limit = 200): Promise<TransactionsResult> {
   try {
+    // Make sure the annotation columns exist before selecting them (self-heals
+    // on a DB where the additive SQL hasn't been applied yet).
+    await ensurePlaidAnnotationColumns(prisma);
     const rows = await prisma.$queryRaw<RawTxn[]>(Prisma.sql`
-      SELECT transaction_id, posted_date, account_name, merchant_name, name, amount, category, pending
+      SELECT transaction_id, posted_date, account_name, merchant_name, name, amount, category, pending,
+             reimbursable, category_override, recorded_quickbooks, recorded_rentvine, notes
       FROM plaid_transactions
       ORDER BY posted_date DESC NULLS LAST, synced_at DESC
       LIMIT ${limit}`);
@@ -72,6 +91,11 @@ export async function fetchPlaidTransactions(limit = 200): Promise<TransactionsR
       amount: money(r.amount),
       category: r.category ?? "",
       pending: !!r.pending,
+      reimbursable: r.reimbursable === "yes" ? "yes" : r.reimbursable === "no" ? "no" : null,
+      categoryOverride: r.category_override ?? "",
+      recordedQuickbooks: !!r.recorded_quickbooks,
+      recordedRentvine: !!r.recorded_rentvine,
+      notes: r.notes ?? "",
     }));
 
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();
