@@ -297,4 +297,12 @@ describe("TransactionsTable", () => {
     expect(box.className).toMatch(/\bw-max\b/);
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
   });
+
+  it("keeps the Plaid category column narrow, with the full name on hover", () => {
+    setup();
+    const cell = screen.getAllByText("home improvement")[0];
+    expect(cell.className).toMatch(/\bmax-w-\[6\.5rem\]/);
+    expect(cell.className).toMatch(/\btruncate\b/);
+    expect(cell.getAttribute("title")).toBe("home improvement");
+  });
 });
