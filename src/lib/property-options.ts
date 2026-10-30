@@ -27,3 +27,29 @@ export async function propertyLabelMap(): Promise<Record<string, string>> {
   for (const o of opts) map[o.externalId] = o.label;
   return map;
 }
+
+// One entry in the Transactions property picker: a property, or one unit of a
+// multi-unit property. Labels are unique (repeats get the property id).
+export type PropertyChoice = { label: string; propertyId: string; unitId: string | null };
+
+export function buildPropertyChoices(
+  props: PropertyOption[],
+  units: { unitId: string; propertyExternalId: string; name: string }[]
+): PropertyChoice[] {
+  const seen = new Map<string, number>();
+  for (const p of props) seen.set(p.label, (seen.get(p.label) ?? 0) + 1);
+  const unitsByProp = new Map<string, { unitId: string; name: string }[]>();
+  for (const u of units) unitsByProp.set(u.propertyExternalId, [...(unitsByProp.get(u.propertyExternalId) ?? []), u]);
+
+  const out: PropertyChoice[] = [];
+  for (const p of props) {
+    const label = (seen.get(p.label) ?? 0) > 1 ? `${p.label} (#${p.externalId})` : p.label;
+    out.push({ label, propertyId: p.externalId, unitId: null });
+    const pu = unitsByProp.get(p.externalId) ?? [];
+    // Units only matter where there's more than one.
+    if (pu.length > 1) {
+      for (const u of pu) out.push({ label: `${label} — ${u.name || `Unit #${u.unitId}`}`, propertyId: p.externalId, unitId: u.unitId });
+    }
+  }
+  return out;
+}

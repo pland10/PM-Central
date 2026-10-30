@@ -7,6 +7,7 @@ vi.mock("@/lib/prisma", () => ({
     $executeRaw: vi.fn().mockResolvedValue(1),
     $executeRawUnsafe: vi.fn().mockResolvedValue(1),
     property: { findFirst: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
@@ -108,5 +109,33 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     const res = await patch({ propertyId: null });
     expect(res.status).toBe(200);
     expect(prisma.property.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("links a unit of the chosen property", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue({ id: "x" } as never);
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ n: 1 }] as never);
+    const res = await patch({ propertyId: "48", unitId: "45" });
+    expect(res.status).toBe(200);
+    const check = vi.mocked(prisma.$queryRaw).mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(sqlOf(check)).toMatch(/FROM rentvine_units WHERE unit_id = .* AND property_external_id = /);
+    expect(check.values).toEqual(["45", "48"]);
+    const update = executeRaw.mock.calls.find((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))![0] as { sql: string; values: unknown[] };
+    expect(sqlOf(update)).toMatch(/unit_external_id =/);
+    expect(update.values.slice(0, 2)).toEqual(["48", "45"]);
+  });
+
+  it("refuses a unit that isn't on that property", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue({ id: "x" } as never);
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ n: 0 }] as never);
+    expect((await patch({ propertyId: "48", unitId: "999" })).status).toBe(400);
+    expect(executeRaw.mock.calls.some((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))).toBe(false);
+  });
+
+  it("clears the unit whenever the property changes without one", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue({ id: "x" } as never);
+    await patch({ propertyId: "12" });
+    const update = executeRaw.mock.calls.find((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])))![0] as { sql: string; values: unknown[] };
+    expect(sqlOf(update)).toMatch(/unit_external_id =/);
+    expect(update.values.slice(0, 2)).toEqual(["12", null]);
   });
 });

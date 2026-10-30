@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   accountConfigFromEnv,
+  fetchRentvineUnits,
   fetchRentvineWorkOrders,
   liveRentvineSource,
   type RentvineAccountConfig,
@@ -226,5 +227,31 @@ describe("fetchRentvineWorkOrders", () => {
 
   it("refuses to run without credentials", async () => {
     await expect(fetchRentvineWorkOrders({ ...config, apiKey: "" })).rejects.toThrow(/credentials missing/);
+  });
+});
+
+describe("fetchRentvineUnits", () => {
+  it("maps every unit (all pages) with its property and active flag", async () => {
+    stubFetch([
+      [
+        /\/properties\/units$/,
+        onePage([
+          { unit: { unitID: "45", propertyID: "48", name: "Unit 1", isActive: "1", dateTimeDeactivated: null }, token: "t" },
+          { unit: { unitID: "46", propertyID: "48", name: "Unit 2", isActive: "1", dateTimeDeactivated: "" }, token: "t" },
+          { unit: { unitID: "47", propertyID: "48", name: "Unit 3", isActive: "0", dateTimeDeactivated: "2026-01-01 00:00:00" }, token: "t" },
+          { unit: { unitID: "", propertyID: "48", name: "ghost", isActive: "1" }, token: "t" },
+        ]),
+      ],
+    ]);
+
+    expect(await fetchRentvineUnits(config)).toEqual([
+      { unitId: "45", propertyExternalId: "48", name: "Unit 1", active: true },
+      { unitId: "46", propertyExternalId: "48", name: "Unit 2", active: true },
+      { unitId: "47", propertyExternalId: "48", name: "Unit 3", active: false },
+    ]);
+  });
+
+  it("refuses to run without credentials", async () => {
+    await expect(fetchRentvineUnits({ ...config, apiSecret: "" })).rejects.toThrow(/credentials missing/);
   });
 });

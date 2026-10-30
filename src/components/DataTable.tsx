@@ -88,6 +88,8 @@ export function DataTable<T>({
   exportName,
   stickyHeader = true,
   onFilteredChange,
+  wide = false,
+  dense = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -109,6 +111,11 @@ export function DataTable<T>({
   // Called with the rows currently shown (after search/filters/sort) whenever
   // they change, e.g. for a "select all shown" action.
   onFilteredChange?: (rows: T[]) => void;
+  // Let the table grow wider than the page (the page then scrolls sideways,
+  // header still pinned) instead of clipping columns past the edge.
+  wide?: boolean;
+  // Tighter cell padding, for tables with many columns.
+  dense?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
@@ -304,6 +311,7 @@ export function DataTable<T>({
   }
 
   const openCol = open ? columns.find((c) => c.key === open.key) : null;
+  const cellPad = dense ? "px-2 py-2" : "px-4 py-3";
 
   return (
     <div>
@@ -370,8 +378,8 @@ export function DataTable<T>({
         // so there's only ever one scrollbar. overflow-x-clip (unlike hidden/auto)
         // doesn't create a scroll container, so `sticky` still works; below lg,
         // wide tables scroll sideways instead (header just isn't pinned there).
-        className={`rounded-lg border border-slate-200 bg-white overflow-x-auto ${
-          stickyHeader ? "lg:overflow-x-clip" : ""
+        className={`rounded-lg border border-slate-200 bg-white ${
+          wide ? "w-max min-w-full" : `overflow-x-auto ${stickyHeader ? "lg:overflow-x-clip" : ""}`
         }`}
       >
         <table className="w-full text-sm">
@@ -385,7 +393,8 @@ export function DataTable<T>({
                   <th
                     key={c.key}
                     className={[
-                      "px-4 py-3 font-medium",
+                      cellPad,
+                      "font-medium",
                       c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "",
                       c.nowrap ? "whitespace-nowrap" : "",
                       // Keep the header visible while the rows scroll. The cell
@@ -444,7 +453,7 @@ export function DataTable<T>({
                 {columns.map((c) => (
                   <td
                     key={c.key}
-                    className={`px-4 py-3 ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}
+                    className={`${cellPad} ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}
                   >
                     {c.render(row)}
                   </td>
