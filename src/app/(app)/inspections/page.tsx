@@ -42,9 +42,11 @@ export default async function InspectionsPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="This week" value={stats.thisWeek} />
         <StatTile label="This month" value={stats.thisMonth} />
+        <StatTile label="Upcoming" value={stats.upcoming} />
+        <StatTile label="Overdue" value={stats.overdue} tone={stats.overdue > 0 ? "red" : "slate"} />
         <StatTile
           label="Needs attention"
           value={stats.needsAttention}
@@ -60,6 +62,7 @@ export default async function InspectionsPage() {
 
 const TILE_TONES: Record<string, string> = {
   amber: "text-amber-700",
+  red: "text-red-700",
   slate: "text-slate-800",
 };
 

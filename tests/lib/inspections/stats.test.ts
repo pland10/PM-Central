@@ -38,8 +38,27 @@ describe("summarizeInspections", () => {
       total: 5,
       thisWeek: 2, // #1, #5
       thisMonth: 3, // #1, #2, #5
+      upcoming: 1, // #5 is dated 10-31 (future)
+      overdue: 0, // past-dated rows are all done/handled
       needsAttention: 2, // #2, #4 (#3 is resolved)
     });
+  });
+
+  it("counts upcoming (future) and overdue (past, not done) inspections", () => {
+    const rows = [
+      row({ id: 1, inspection_date: "2026-11-05", overall_status: "" }), // future → upcoming
+      row({ id: 2, inspection_date: "2026-11-02", overall_status: "Scheduled" }), // future → upcoming
+      row({ id: 3, inspection_date: "2026-10-10", overall_status: "" }), // past, blank → overdue
+      row({ id: 4, inspection_date: "2026-10-12", overall_status: "Scheduled" }), // past, still scheduled → overdue
+      row({ id: 5, inspection_date: "2026-10-12", overall_status: "Passed" }), // past, done → not overdue
+      row({ id: 6, inspection_date: "2026-10-09", overall_status: "Scheduled", resolution_status: "work_order" }), // handled → not overdue
+      row({ id: 7, inspection_date: "2026-10-28", overall_status: "" }), // today → neither
+      row({ id: 8, inspection_date: null, overall_status: "" }), // no date → neither
+    ];
+
+    const s = summarizeInspections(rows, NOW);
+    expect(s.upcoming).toBe(2); // #1, #2
+    expect(s.overdue).toBe(2); // #3, #4
   });
 
   it("handles a datetime value, not just a bare date", () => {
@@ -52,6 +71,8 @@ describe("summarizeInspections", () => {
       total: 0,
       thisWeek: 0,
       thisMonth: 0,
+      upcoming: 0,
+      overdue: 0,
       needsAttention: 0,
     });
   });
