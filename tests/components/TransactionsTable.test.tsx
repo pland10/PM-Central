@@ -180,4 +180,30 @@ describe("TransactionsTable", () => {
       expect(screen.queryByLabelText("select-t1")).toBeNull();
     });
   });
+
+  describe("category search box", () => {
+    it("suggests the category list while typing", () => {
+      render(<TransactionsTable initialRows={rows} accounts={[]} categories={["Payroll", "Supplies"]} />);
+      const input = screen.getByLabelText("category-t1");
+      const list = document.getElementById(input.getAttribute("list")!)!;
+      expect([...list.querySelectorAll("option")].map((o) => o.getAttribute("value"))).toEqual(["Payroll", "Supplies"]);
+    });
+
+    it("shows the server's reason and reverts when a category is refused", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "“Snacks” isn't an approved category." }) });
+      const { user } = setup();
+      await user.type(screen.getByLabelText("category-t1"), "Snacks");
+      await user.tab();
+      expect(await screen.findByText(/isn't an approved category/i)).toBeInTheDocument();
+      expect((screen.getByLabelText("category-t1") as HTMLInputElement).value).toBe("");
+    });
+
+    it("shows the saved spelling the server chose", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, patch: { categoryOverride: "Payroll" } }) });
+      const { user } = setup();
+      await user.type(screen.getByLabelText("category-t1"), "pay roll");
+      await user.tab();
+      await screen.findByDisplayValue("Payroll");
+    });
+  });
 });

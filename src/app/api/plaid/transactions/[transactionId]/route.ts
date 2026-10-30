@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import { sanitizeAnnotationPatch } from "@/lib/transactions-view";
+import { resolveCategoryForSave } from "@/lib/transaction-categories-db";
 
 // Saves the hand-entered annotations on one transaction (reimbursable?, your
 // own category, recorded in QuickBooks / Rentvine, notes) from the Transactions
@@ -33,6 +34,23 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}));
   const patch = sanitizeAnnotationPatch(body);
+
+  // A typed category is checked against the shared list: look-alikes save under
+  // the list's spelling, new ones are added while the list is open, and a locked
+  // list refuses unknown ones (admins excepted).
+  if (patch.categoryOverride) {
+    try {
+      const decision = await resolveCategoryForSave(patch.categoryOverride, {
+        isAdmin: !user || user.role === "admin", // basic-auth operator = admin
+        by: user?.email ?? "operator",
+      });
+      if ("error" in decision) return NextResponse.json({ error: decision.error }, { status: 400 });
+      patch.categoryOverride = decision.name;
+    } catch (e) {
+      console.error(`[plaid] category check failed for ${transactionId}:`, e);
+      return NextResponse.json({ error: "Could not save." }, { status: 500 });
+    }
+  }
 
   // Build the SET clause from exactly the fields the user changed.
   const sets: Prisma.Sql[] = [];

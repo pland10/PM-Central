@@ -360,6 +360,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </svg>
                 Transaction filters
               </Link>
+              <Link
+                href="/admin/transaction-categories"
+                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0"
+                  style={{ color: BRAND.colors.primary }}
+                  aria-hidden="true"
+                >
+                  <path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42z" />
+                  <circle cx="7" cy="7" r="1.5" />
+                </svg>
+                Transaction categories
+              </Link>
             </div>
           )}
         </nav>

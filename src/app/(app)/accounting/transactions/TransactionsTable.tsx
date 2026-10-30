@@ -22,15 +22,18 @@ export function TransactionsTable({
   capped = false,
   hiddenCount = 0,
   canManageFilters = false,
+  categories: initialCategories = [],
 }: {
   initialRows: TxnRow[];
   accounts: string[];
   capped?: boolean;
   hiddenCount?: number; // left out by Admin → Transaction filters
   canManageFilters?: boolean; // admins get a link to the filters page
+  categories?: string[]; // the shared category list (suggestions while typing)
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
+  const [categories, setCategories] = useState<string[]>(initialCategories);
 
   // Optimistically apply the edit, then persist. If the save fails, roll the
   // row back to what it was so the UI never diverges from the server.
@@ -49,11 +52,20 @@ export function TransactionsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "");
+      // The server may save a category under the list's spelling ("pay roll"
+      // → "Payroll"); show what was actually saved and add it to the list.
+      const saved = data?.patch?.categoryOverride;
+      if (typeof saved === "string") {
+        setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, categoryOverride: saved } : r)));
+        if (saved) setCategories((prev) => (prev.includes(saved) ? prev : [...prev, saved].sort((a, b) => a.localeCompare(b))));
+      }
       setError("");
-    } catch {
+    } catch (e) {
       if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
-      setError("A change couldn't be saved — reverted it. Please try again.");
+      const reason = e instanceof Error && e.message ? `${e.message} ` : "";
+      setError(`${reason}A change couldn't be saved — reverted it.`);
     }
   }, []);
 
@@ -168,12 +180,13 @@ export function TransactionsTable({
             key={`cat-${r.transactionId}-${r.categoryOverride}`}
             aria-label={`category-${r.transactionId}`}
             defaultValue={r.categoryOverride}
-            placeholder="—"
+            list={CATEGORY_LIST_ID}
+            placeholder="Search…"
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
             }}
-            className="w-28 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
           />
         ),
       },
@@ -431,6 +444,13 @@ export function TransactionsTable({
         )}
       </div>
 
+      {/* Suggestions for every "Category (yours)" box, shared by all rows. */}
+      <datalist id={CATEGORY_LIST_ID}>
+        {categories.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       <DataTable<TxnRow>
         rows={rows}
         columns={shownColumns}
@@ -445,6 +465,8 @@ export function TransactionsTable({
     </div>
   );
 }
+
+const CATEGORY_LIST_ID = "txn-category-options";
 
 const BTN =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
