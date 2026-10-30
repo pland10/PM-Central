@@ -38,4 +38,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci               # runs postinstall -> prisma generate
-      - run: node scripts/probe-units.mjs   # TEMPORARY probe — revert before merge
+      - run: npm run sync:balances

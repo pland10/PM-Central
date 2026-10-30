@@ -1,7 +1,12 @@
 import { PrismaClient, Prisma } from "@prisma/client";
-import { liveRentvineSource, accountConfigFromEnv } from "../src/import/sources/rentvine/client";
+import {
+  liveRentvineSource,
+  accountConfigFromEnv,
+  fetchRentvineUnits,
+} from "../src/import/sources/rentvine/client";
 import { rentvineToCanonical } from "../src/import/sources/rentvine/transform";
 import { loadCanonical } from "../src/import/load";
+import { saveRentvineUnits } from "../src/lib/rentvine-units";
 
 // Live Rentvine core sync — pulls properties, units, owners, active leases and
 // tenants from the Rentvine API and reconciles them into the DB:
@@ -41,6 +46,16 @@ async function main() {
   try {
     const counts = await loadCanonical(prisma, dataset, { mode: "sync" });
     console.log(`Synced "${account}" from rentvine:`, counts);
+
+    // Real Rentvine units (for the Transactions property/unit picker). Never
+    // fatal: a failure here must not fail the core sync.
+    try {
+      const units = await fetchRentvineUnits(config);
+      const saved = await saveRentvineUnits(prisma, units);
+      console.log(`Synced ${saved} Rentvine units (${units.filter((u) => u.active).length} active) into rentvine_units.`);
+    } catch (e) {
+      console.log(`  [warn] could not sync units: ${e instanceof Error ? e.message : e}`);
+    }
 
     // Heartbeat for the admin Data page (never fatal).
     try {

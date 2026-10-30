@@ -145,6 +145,42 @@ export async function fetchRentvineWorkOrders(
   return out;
 }
 
+export interface RvUnitLive {
+  unitId: string; // String(unitID)
+  propertyExternalId: string; // String(propertyID); matches Property.externalId
+  name: string; // e.g. "Unit 1", "2F"
+  active: boolean; // isActive and not deactivated
+}
+
+// Every unit across the account, from /properties/units (paged; rows wrap
+// `unit`). Verified Oct 2026: fields unitID, propertyID, name, isActive,
+// dateTimeDeactivated, address2, rent, beds, … Stored in the raw
+// rentvine_units table (src/lib/rentvine-units.ts) — the app's Prisma Unit rows
+// are placeholders built from active leases, not these.
+export async function fetchRentvineUnits(config: RentvineAccountConfig): Promise<RvUnitLive[]> {
+  if (!config.apiKey || !config.apiSecret) {
+    throw new Error(
+      `Rentvine credentials missing for account "${config.account}". ` +
+        `Set RENTVINE_${config.account.toUpperCase()}_API_KEY / _API_SECRET.`
+    );
+  }
+  const { rvGetAll, unwrap } = rvHttp(config);
+  const rows = await rvGetAll("/properties/units");
+  const out: RvUnitLive[] = [];
+  for (const row of rows) {
+    const u = unwrap(row, "unit");
+    const unitId = toStr(u.unitID);
+    if (!unitId) continue;
+    out.push({
+      unitId,
+      propertyExternalId: toStr(u.propertyID),
+      name: toStr(u.name).trim(),
+      active: toStr(u.isActive) === "1" && !toStr(u.dateTimeDeactivated).trim(),
+    });
+  }
+  return out;
+}
+
 export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
   const { rvGet, rvGetAll, unwrap } = rvHttp(config);
 

@@ -70,4 +70,9 @@ describe("sanitizeAnnotationPatch", () => {
     expect(sanitizeAnnotationPatch({ propertyId: null })).toEqual({ propertyId: null });
     expect(sanitizeAnnotationPatch({ propertyId: 12 })).toEqual({ propertyId: null });
   });
+
+  it("takes a unit id (trimmed), or null", () => {
+    expect(sanitizeAnnotationPatch({ propertyId: "48", unitId: " 45 " })).toEqual({ propertyId: "48", unitId: "45" });
+    expect(sanitizeAnnotationPatch({ unitId: "" })).toEqual({ unitId: null });
+  });
 });

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { formatCurrency } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
-import type { PropertyOption } from "@/lib/property-options";
+import type { PropertyChoice } from "@/lib/property-options";
 import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -32,7 +32,7 @@ export function TransactionsTable({
   hiddenCount?: number; // left out by Admin → Transaction filters
   canManageFilters?: boolean; // admins get a link to the filters page
   categories?: string[]; // the shared category list (suggestions while typing)
-  properties?: PropertyOption[]; // existing properties a transaction can be linked to
+  properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
@@ -126,22 +126,25 @@ export function TransactionsTable({
     [rows]
   );
 
-  // Property typeahead: unique display labels (a repeated label gets its id
-  // appended) and lookups both ways. Only these can be saved.
+  // Property typeahead: the choices (property, or property + unit) come in
+  // with unique labels; look them up both ways. Only these can be saved.
   const propertyLookup = useMemo(() => {
-    const seen = new Map<string, number>();
-    for (const p of properties) seen.set(p.label, (seen.get(p.label) ?? 0) + 1);
-    const labelById = new Map<string, string>();
-    const idByLabel = new Map<string, string>();
-    for (const p of properties) {
-      const label = (seen.get(p.label) ?? 0) > 1 ? `${p.label} (#${p.externalId})` : p.label;
-      labelById.set(p.externalId, label);
-      idByLabel.set(label.toLowerCase(), p.externalId);
+    const byKey = new Map<string, PropertyChoice>();
+    const byLabel = new Map<string, PropertyChoice>();
+    for (const c of properties) {
+      byKey.set(`${c.propertyId}|${c.unitId ?? ""}`, c);
+      byLabel.set(c.label.toLowerCase(), c);
     }
-    return { labelById, idByLabel };
+    return { byKey, byLabel };
   }, [properties]);
   const propertyLabel = useCallback(
-    (id: string | null) => (id ? (propertyLookup.labelById.get(id) ?? `Property #${id}`) : ""),
+    (r: Pick<TxnRow, "propertyId" | "unitId">) => {
+      if (!r.propertyId) return "";
+      const exact = propertyLookup.byKey.get(`${r.propertyId}|${r.unitId ?? ""}`);
+      if (exact) return exact.label;
+      const prop = propertyLookup.byKey.get(`${r.propertyId}|`)?.label ?? `Property #${r.propertyId}`;
+      return r.unitId ? `${prop} — Unit #${r.unitId}` : prop;
+    },
     [propertyLookup]
   );
 
@@ -185,14 +188,14 @@ export function TransactionsTable({
         key: "property",
         header: "Property",
         sortable: true,
-        sortValue: (r) => propertyLabel(r.propertyId).toLowerCase(),
-        exportValue: (r) => propertyLabel(r.propertyId),
-        filter: { type: "select", value: (r) => propertyLabel(r.propertyId) },
+        sortValue: (r) => propertyLabel(r).toLowerCase(),
+        exportValue: (r) => propertyLabel(r),
+        filter: { type: "select", value: (r) => propertyLabel(r) },
         render: (r) => {
-          const current = propertyLabel(r.propertyId);
+          const current = propertyLabel(r);
           return (
             <input
-              key={`prop-${r.transactionId}-${r.propertyId ?? ""}`}
+              key={`prop-${r.transactionId}-${r.propertyId ?? ""}-${r.unitId ?? ""}`}
               aria-label={`property-${r.transactionId}`}
               onKeyDown={blurOnEnter}
               defaultValue={current}
@@ -202,18 +205,20 @@ export function TransactionsTable({
                 const v = e.target.value.trim();
                 if (v === current) return;
                 if (!v) {
-                  if (r.propertyId) save(r.transactionId, { propertyId: null });
+                  if (r.propertyId) save(r.transactionId, { propertyId: null, unitId: null });
                   return;
                 }
-                const id = propertyLookup.idByLabel.get(v.toLowerCase());
-                if (!id) {
+                const choice = propertyLookup.byLabel.get(v.toLowerCase());
+                if (!choice) {
                   e.target.value = current;
                   setError(`“${v}” isn't one of your properties — pick a property from the list.`);
                   return;
                 }
-                if (id !== r.propertyId) save(r.transactionId, { propertyId: id });
+                if (choice.propertyId !== r.propertyId || choice.unitId !== r.unitId) {
+                  save(r.transactionId, { propertyId: choice.propertyId, unitId: choice.unitId });
+                }
               }}
-              className="w-44 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+              className="w-52 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
             />
           );
         },
@@ -508,8 +513,8 @@ export function TransactionsTable({
 
       {/* Suggestions for every Property box: existing properties only. */}
       <datalist id={PROPERTY_LIST_ID}>
-        {[...propertyLookup.labelById.values()].map((label) => (
-          <option key={label} value={label} />
+        {properties.map((c) => (
+          <option key={c.label} value={c.label} />
         ))}
       </datalist>
 

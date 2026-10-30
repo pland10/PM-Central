@@ -6,7 +6,9 @@ import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
 import { listHideRulesSafe } from "@/lib/transaction-filters-db";
 import { listCategoryNamesSafe } from "@/lib/transaction-categories-db";
-import { listPropertyOptions, type PropertyOption } from "@/lib/property-options";
+import { buildPropertyChoices, listPropertyOptions, type PropertyOption } from "@/lib/property-options";
+import { listActiveUnits } from "@/lib/rentvine-units";
+import { prisma } from "@/lib/prisma";
 import { patternToLike } from "@/lib/transaction-filters";
 import { AccountingTabs } from "../AccountingTabs";
 import { ConnectButton } from "./ConnectButton";
@@ -26,13 +28,16 @@ export default async function TransactionsPage() {
   const configured = isPlaidConfigured();
   // Admin hide filters (Admin → Transaction filters), e.g. *CSG FORTE*.
   const hideLikes = configured ? (await listHideRulesSafe()).map((r) => patternToLike(r.pattern)) : [];
-  const [{ rows, accounts, linkedCount, capped, hiddenCount }, categories, properties] = configured
+  const [{ rows, accounts, linkedCount, capped, hiddenCount }, categories, properties, units] = configured
     ? await Promise.all([
         fetchPlaidTransactions(2000, hideLikes),
         listCategoryNamesSafe(),
         listPropertyOptions().catch((): PropertyOption[] => []),
+        listActiveUnits(prisma),
       ])
-    : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, [], []];
+    : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, [], [], []];
+  // Properties, plus each unit of a multi-unit property, for the picker.
+  const propertyChoices = buildPropertyChoices(properties, units);
 
   return (
     <div className="mx-auto max-w-screen-2xl">
@@ -73,7 +78,7 @@ export default async function TransactionsPage() {
             hiddenCount={hiddenCount}
             canManageFilters={user?.role === "admin"}
             categories={categories}
-            properties={properties}
+            properties={propertyChoices}
           />
         </div>
       )}
