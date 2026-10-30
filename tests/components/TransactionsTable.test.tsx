@@ -127,4 +127,11 @@ describe("TransactionsTable", () => {
     expect(screen.getByText(/1 transaction hidden by filters/i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /manage filters/i })).toBeNull();
   });
+
+  it("keeps the Reimbursable / QuickBooks / Rentvine headers on one line", () => {
+    setup();
+    for (const name of [/reimbursable\?/i, /in quickbooks/i, /in rentvine/i]) {
+      expect(screen.getByRole("columnheader", { name }).className).toMatch(/\bwhitespace-nowrap\b/);
+    }
+  });
 });
