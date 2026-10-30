@@ -115,4 +115,16 @@ describe("TransactionsTable", () => {
     await user.tab();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("says how many transactions the admin filters are hiding, with a link for admins", () => {
+    render(<TransactionsTable initialRows={rows} accounts={[]} hiddenCount={12} canManageFilters />);
+    expect(screen.getByText(/12 transactions hidden by filters/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /manage filters/i }).getAttribute("href")).toBe("/admin/transaction-filters");
+  });
+
+  it("doesn't offer the filter link to non-admins", () => {
+    render(<TransactionsTable initialRows={rows} accounts={[]} hiddenCount={1} />);
+    expect(screen.getByText(/1 transaction hidden by filters/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /manage filters/i })).toBeNull();
+  });
 });

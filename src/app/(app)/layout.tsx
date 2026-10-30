@@ -339,6 +339,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </svg>
                 Data sources
               </Link>
+              <Link
+                href="/admin/transaction-filters"
+                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0"
+                  style={{ color: BRAND.colors.primary }}
+                  aria-hidden="true"
+                >
+                  <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+                </svg>
+                Transaction filters
+              </Link>
             </div>
           )}
         </nav>
