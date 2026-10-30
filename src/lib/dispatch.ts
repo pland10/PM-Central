@@ -18,7 +18,7 @@ export async function dispatchSource(source: DataSource): Promise<DispatchResult
   if (!token) {
     return { source: source.id, ok: false, status: 503, error: "GITHUB_DISPATCH_TOKEN not set." };
   }
-  const { owner, repo, workflow, ref } = source.dispatch;
+  const { owner, repo, workflow, ref, inputs } = source.dispatch;
   const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`;
   try {
     const res = await fetch(url, {
@@ -29,7 +29,7 @@ export async function dispatchSource(source: DataSource): Promise<DispatchResult
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ ref }),
+      body: JSON.stringify(inputs ? { ref, inputs } : { ref }),
     });
     if (res.status === 204) return { source: source.id, ok: true };
     const text = await res.text().catch(() => "");
@@ -56,8 +56,9 @@ export async function dispatchSources(sources: DataSource[]): Promise<DispatchRe
   const byWorkflow = new Map<string, DataSource>();
   for (const s of sources) {
     if (s.comingSoon) continue;
-    const { owner, repo, workflow, ref } = s.dispatch;
-    const key = `${owner}/${repo}/${workflow}@${ref}`;
+    const { owner, repo, workflow, ref, inputs } = s.dispatch;
+    // Same workflow + ref but different inputs (e.g. mode) is a distinct run.
+    const key = `${owner}/${repo}/${workflow}@${ref}:${JSON.stringify(inputs ?? null)}`;
     if (!byWorkflow.has(key)) byWorkflow.set(key, s);
   }
   return Promise.all([...byWorkflow.values()].map(dispatchSource));

@@ -62,6 +62,19 @@ describe("/api/cron/sync", () => {
     expect(init.headers.Authorization).toBe("Bearer gh-token");
   });
 
+  it("skips self-scheduled sources in the tier sweep, but still dispatches them by id", async () => {
+    // Plaid (bank_transactions) has its own daily GitHub cron, so the daily
+    // sweep must not double-run it…
+    await call("?tier=daily");
+    expect(dispatchedWorkflows()).not.toContain("pland10/PM-Central/actions/workflows/sync-plaid.yml");
+
+    // …but an explicit refresh of it still fires, with mode=sync.
+    github.mockClear();
+    await call(`?source=bank_transactions&key=${SECRET}`, {});
+    expect(dispatchedWorkflows()).toEqual(["pland10/PM-Central/actions/workflows/sync-plaid.yml"]);
+    expect(JSON.parse(String(github.mock.calls[0][1].body))).toEqual({ ref: "main", inputs: { mode: "sync" } });
+  });
+
   it("dispatches a single named source", async () => {
     await POST(
       new NextRequest("https://pmilighthouse.app/api/cron/sync?source=balances", {
