@@ -179,4 +179,11 @@ describe("DataTable", () => {
     await userEvent.setup().type(screen.getByRole("textbox"), "oak");
     expect(seen.at(-1)).toEqual(["3"]);
   });
+
+  it("centers a column's header and cells when asked", () => {
+    const cols: Column<Row>[] = [{ key: "city", header: "City", align: "center", render: (r) => r.city }];
+    render(<DataTable rows={rows} columns={cols} rowKey={(r) => r.id} />);
+    expect(screen.getByRole("columnheader", { name: /city/i }).className).toMatch(/\btext-center\b/);
+    expect(screen.getAllByRole("cell")[0].className).toMatch(/\btext-center\b/);
+  });
 });
