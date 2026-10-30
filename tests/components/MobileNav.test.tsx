@@ -34,5 +34,6 @@ describe("MobileNav admin links", () => {
     render(<MobileNav sections={[]} isAdmin version="v1" />);
     await user.click(screen.getByRole("button", { name: /open navigation/i }));
     expect(screen.getByRole("link", { name: /transaction filters/i }).getAttribute("href")).toBe("/admin/transaction-filters");
+    expect(screen.getByRole("link", { name: /transaction categories/i }).getAttribute("href")).toBe("/admin/transaction-categories");
   });
 });

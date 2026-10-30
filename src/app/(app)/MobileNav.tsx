@@ -164,6 +164,21 @@ export function MobileNav({
                     <NavIcon icon={<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />} />
                     Transaction filters
                   </Link>
+                  <Link
+                    href="/admin/transaction-categories"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <NavIcon
+                      icon={
+                        <>
+                          <path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42z" />
+                          <circle cx="7" cy="7" r="1.5" />
+                        </>
+                      }
+                    />
+                    Transaction categories
+                  </Link>
                 </div>
               )}
             </nav>

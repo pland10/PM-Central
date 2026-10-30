@@ -164,4 +164,19 @@ describe("DataTable", () => {
     expect(screen.getByRole("columnheader", { name: /city name/i }).className).toMatch(/\bwhitespace-nowrap\b/);
     expect(screen.getByRole("columnheader", { name: /address/i }).className).not.toMatch(/whitespace-nowrap/);
   });
+
+  it("reports the rows currently shown after filtering", async () => {
+    const seen: string[][] = [];
+    render(
+      <DataTable
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.id}
+        search={(r) => r.address}
+        onFilteredChange={(shown) => seen.push(shown.map((r) => r.id))}
+      />
+    );
+    await userEvent.setup().type(screen.getByRole("textbox"), "oak");
+    expect(seen.at(-1)).toEqual(["3"]);
+  });
 });
