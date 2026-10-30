@@ -3,6 +3,10 @@ import {
   CASH_ACCOUNTS,
   fetchCashOnHand,
   fetchReimbursables,
+  fetchMoneyOut,
+  mapMoneyOut,
+  paymentMethodLabel,
+  payeeTypeLabel,
   isRentvineConfigured,
 } from "@/lib/accounting";
 
@@ -140,5 +144,66 @@ describe("fetchReimbursables", () => {
     vi.stubEnv("RENTVINE_API_SECRET", "");
     const result = await fetchReimbursables();
     expect(result).toMatchObject({ ok: false, status: 503 });
+  });
+});
+
+describe("money out (check register)", () => {
+  it("labels payment methods, using otherPayoutTypeID when the type is Other", () => {
+    expect(paymentMethodLabel("2")).toBe("Check");
+    expect(paymentMethodLabel("3")).toBe("eCheck (ACH)");
+    expect(paymentMethodLabel("1", "3")).toBe("Bank Transfer"); // Other → otherPayoutType
+    expect(paymentMethodLabel("1", undefined)).toBe("Other");
+  });
+
+  it("labels payee types", () => {
+    expect(payeeTypeLabel("1")).toBe("Owner");
+    expect(payeeTypeLabel("3")).toBe("Vendor");
+    expect(payeeTypeLabel("4")).toBe("Manager");
+    expect(payeeTypeLabel("99")).toBe("");
+  });
+
+  it("maps rows (payee is contactName), totals the amount, newest first", () => {
+    const { rows, total } = mapMoneyOut([
+      dataRow({ datePosted: "2026-08-07", contactName: "LIGHTHOUSE MAINTENANCE SERVICES LLC", contactTypeID: "3", payoutTypeID: "2", checkNumber: "31", memo: "", payoutAmount: "$314.29" }),
+      dataRow({ datePosted: "2026-08-20", contactName: "Neil Maclean", contactTypeID: "1", payoutTypeID: "3", memo: "Owner Distribution", payoutAmount: "4,484.30" }),
+      totalsRow({ payoutAmount: "4798.59" }), // ignored
+    ]);
+
+    expect(total).toBe(4798.59);
+    expect(rows.map((r) => r.date)).toEqual(["2026-08-20", "2026-08-07"]); // newest first
+    expect(rows[0]).toEqual({
+      date: "2026-08-20",
+      payee: "Neil Maclean",
+      payeeType: "Owner",
+      method: "eCheck (ACH)",
+      checkNumber: "",
+      memo: "Owner Distribution",
+      amount: 4484.3,
+    });
+    expect(rows[1]).toMatchObject({ payee: "LIGHTHOUSE MAINTENANCE SERVICES LLC", payeeType: "Vendor", method: "Check", checkNumber: "31" });
+  });
+
+  it("runs the check-register report over the last 90 days, voided excluded", async () => {
+    const fetchMock = mockFetch({ rows: [] });
+
+    await fetchMoneyOut();
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/reports\/check-register\?exportTypeID=1&json=/);
+    const body = JSON.parse(decodeURIComponent(String(url).split("json=")[1]));
+    expect(body.filters).toContainEqual({ name: "datePosted", comparator: "last90Days" });
+    expect(body.filters).toContainEqual({ name: "isVoided", comparator: "booleanFalse" });
+    expect(body.displayColumns).toContain("payee");
+  });
+
+  it("returns 503 when credentials are missing", async () => {
+    vi.stubEnv("RENTVINE_API_KEY", "");
+    const result = await fetchMoneyOut();
+    expect(result).toMatchObject({ ok: false, status: 503 });
+  });
+
+  it("passes through a Rentvine HTTP error", async () => {
+    mockFetch({ message: "nope" }, 500);
+    expect(await fetchMoneyOut()).toMatchObject({ ok: false, status: 500 });
   });
 });
