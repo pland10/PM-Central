@@ -154,4 +154,14 @@ describe("DataTable", () => {
     // Pins below any sticky page header above it (pages set --sticky-offset).
     for (const th of table.querySelectorAll("th")) expect(th.style.top).toBe("var(--sticky-offset, 0px)");
   });
+
+  it("keeps a header on one line when the column asks for it", () => {
+    const cols: Column<Row>[] = [
+      { key: "address", header: "Address", render: (r) => r.address },
+      { key: "city", header: "City name", nowrap: true, render: (r) => r.city },
+    ];
+    render(<DataTable rows={rows} columns={cols} rowKey={(r) => r.id} />);
+    expect(screen.getByRole("columnheader", { name: /city name/i }).className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(screen.getByRole("columnheader", { name: /address/i }).className).not.toMatch(/whitespace-nowrap/);
+  });
 });

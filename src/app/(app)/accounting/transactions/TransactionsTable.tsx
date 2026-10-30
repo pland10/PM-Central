@@ -137,6 +137,7 @@ export function TransactionsTable({
       {
         key: "reimbursable",
         header: "Reimbursable?",
+        nowrap: true,
         sortable: true,
         sortValue: (r) => r.reimbursable ?? "",
         exportValue: (r) => (r.reimbursable === "yes" ? "Yes" : r.reimbursable === "no" ? "No" : ""),
@@ -166,6 +167,7 @@ export function TransactionsTable({
       {
         key: "recordedQuickbooks",
         header: "In QuickBooks",
+        nowrap: true,
         align: "right",
         sortable: true,
         sortValue: (r) => (r.recordedQuickbooks ? 1 : 0),
@@ -183,6 +185,7 @@ export function TransactionsTable({
       {
         key: "recordedRentvine",
         header: "In Rentvine",
+        nowrap: true,
         align: "right",
         sortable: true,
         sortValue: (r) => (r.recordedRentvine ? 1 : 0),
