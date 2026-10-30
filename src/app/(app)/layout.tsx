@@ -391,7 +391,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header
-          className="flex h-14 shrink-0 items-center justify-between border-b px-6"
+          className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-6"
           style={
             ENV_INDICATOR
               ? { backgroundColor: ENV_INDICATOR.bg, borderColor: ENV_INDICATOR.bg }
@@ -413,7 +413,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 {ENV_INDICATOR.label}
               </span>
             )}
-            <span className={ENV_INDICATOR ? "text-sm text-white/90" : "text-sm text-slate-500"}>
+            {/* Hidden on phones so the user's name and Sign out fit the bar. */}
+            <span
+              className={`hidden sm:inline ${ENV_INDICATOR ? "text-sm text-white/90" : "text-sm text-slate-500"}`}
+            >
               {BRAND.tagline}
             </span>
           </div>
@@ -450,7 +453,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Padding lives inside the scroller (not on it) so sticky table headers
             pin flush to the top edge instead of 1.5rem below it. */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-6">{children}</div>
+          <div className="p-4 sm:p-6">{children}</div>
         </main>
       </div>
     </div>
