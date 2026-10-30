@@ -8,6 +8,8 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { ENV_INDICATOR, IDLE_LOGOUT_MINUTES } from "@/config/environment";
 import { IdleLogout } from "@/components/IdleLogout";
 import { MobileNav, type MobileNavSection } from "./MobileNav";
+import { SidebarFooter } from "@/components/SidebarFooter";
+import { appVersion } from "@/config/version";
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
@@ -340,7 +342,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           )}
         </nav>
-        <div className="mt-auto p-3 text-xs text-slate-500">{BRAND.tagline}</div>
+        <SidebarFooter tagline={BRAND.tagline} version={appVersion()} />
       </aside>
 
       {/* Main */}
