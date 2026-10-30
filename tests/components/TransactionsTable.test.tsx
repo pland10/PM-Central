@@ -215,4 +215,18 @@ describe("TransactionsTable", () => {
     expect(screen.getByLabelText("quickbooks-t1").closest("td")!.className).toMatch(/\btext-center\b/);
     expect(screen.getByLabelText("reimbursable-t1").closest("td")!.className).toMatch(/\btext-center\b/);
   });
+
+  it("saves the category when you press Enter", async () => {
+    const { user } = setup();
+    await user.type(screen.getByLabelText("category-t1"), "Supplies{Enter}");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
+  });
+
+  it("saves notes when you press Enter", async () => {
+    const { user } = setup();
+    await user.type(screen.getByLabelText("notes-t1"), "owner to repay{Enter}");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ notes: "owner to repay" });
+  });
 });
