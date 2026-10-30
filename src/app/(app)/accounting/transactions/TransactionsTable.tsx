@@ -18,17 +18,26 @@ function prettyCategory(c: string): string {
 export function TransactionsTable({
   initialRows,
   accounts,
+  capped = false,
 }: {
   initialRows: TxnRow[];
   accounts: string[];
+  capped?: boolean;
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
 
-  // Optimistically apply the edit, then persist. On failure, warn rather than
-  // silently diverging from the server.
+  // Optimistically apply the edit, then persist. If the save fails, roll the
+  // row back to what it was so the UI never diverges from the server.
   const save = useCallback(async (id: string, patch: AnnotationPatch) => {
-    setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, ...patch } : r)));
+    let prevRow: TxnRow | undefined;
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.transactionId !== id) return r;
+        prevRow = r;
+        return { ...r, ...patch };
+      })
+    );
     try {
       const res = await fetch(`/api/plaid/transactions/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -38,7 +47,8 @@ export function TransactionsTable({
       if (!res.ok) throw new Error();
       setError("");
     } catch {
-      setError("A change couldn't be saved. Refresh to see what stuck.");
+      if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
+      setError("A change couldn't be saved — reverted it. Please try again.");
     }
   }, []);
 
@@ -95,7 +105,8 @@ export function TransactionsTable({
         sortable: true,
         sortValue: (r) => r.category,
         render: (r) => <span className="text-xs text-slate-400">{prettyCategory(r.category)}</span>,
-        filter: { type: "select", value: (r) => r.category },
+        // Filter on the prettified label so the popover options match the cells.
+        filter: { type: "select", value: (r) => prettyCategory(r.category) },
         exportValue: (r) => prettyCategory(r.category),
       },
       {
@@ -278,6 +289,13 @@ export function TransactionsTable({
           tone={summary.pendingRentvine > 0 ? "amber" : "slate"}
         />
       </div>
+
+      {capped && (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Showing the most recent {rows.length.toLocaleString()} transactions — the totals above
+          cover only these rows, not the full history.
+        </p>
+      )}
 
       {error && (
         <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>

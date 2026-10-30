@@ -54,10 +54,9 @@ export async function PATCH(
       Prisma.sql`UPDATE plaid_transactions SET ${Prisma.join(sets)} WHERE transaction_id = ${transactionId}`
     );
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not save." },
-      { status: 500 }
-    );
+    // Don't leak DB/driver internals to the browser; log the detail server-side.
+    console.error(`[plaid] annotation save failed for ${transactionId}:`, e);
+    return NextResponse.json({ error: "Could not save." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, patch });

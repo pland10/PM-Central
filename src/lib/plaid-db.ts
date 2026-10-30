@@ -32,6 +32,7 @@ export type TransactionsResult = {
   rows: TxnRow[];
   accounts: string[]; // distinct account names present, for a filter later
   linkedCount: number; // how many accounts are linked (plaid_items)
+  capped: boolean; // true when more rows exist than were loaded (summary is partial)
 };
 
 type RawTxn = {
@@ -60,7 +61,7 @@ function isoDate(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
 }
 
-export async function fetchPlaidTransactions(limit = 200): Promise<TransactionsResult> {
+export async function fetchPlaidTransactions(limit = 2000): Promise<TransactionsResult> {
   try {
     // Make sure the annotation columns exist before selecting them (self-heals
     // on a DB where the additive SQL hasn't been applied yet).
@@ -99,9 +100,11 @@ export async function fetchPlaidTransactions(limit = 200): Promise<TransactionsR
     }));
 
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();
-    return { rows: mapped, accounts, linkedCount };
+    // At the cap there may be older rows we didn't load, so the summary totals
+    // would be partial — let the page say so rather than present them as whole.
+    return { rows: mapped, accounts, linkedCount, capped: mapped.length >= limit };
   } catch {
     // Table not created yet (SQL not applied / first sync not run) — show empty.
-    return { rows: [], accounts: [], linkedCount: 0 };
+    return { rows: [], accounts: [], linkedCount: 0, capped: false };
   }
 }

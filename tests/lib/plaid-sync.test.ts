@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { syncOneItem } from "@/lib/plaid-sync";
+import { sqlOf } from "../helpers/sql";
 
 beforeEach(() => {
   vi.stubEnv("PLAID_CLIENT_ID", "cid");
@@ -69,5 +70,15 @@ describe("syncOneItem", () => {
     expect(r.removed).toBe(1);
     // two upserts + one delete + the cursor update
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(4);
+
+    // The delete spares rows the user has annotated (Plaid recycles ids).
+    const del = vi
+      .mocked(prisma.$executeRaw)
+      .mock.calls.map((c) => sqlOf(c[0]))
+      .find((s) => /DELETE FROM plaid_transactions/.test(s))!;
+    expect(del).toMatch(/reimbursable IS NULL/);
+    expect(del).toMatch(/recorded_quickbooks = false/);
+    expect(del).toMatch(/recorded_rentvine = false/);
+    expect(del).toMatch(/notes IS NULL/);
   });
 });

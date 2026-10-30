@@ -93,7 +93,7 @@ describe("fetchPlaidTransactions", () => {
 
     const res = await fetchPlaidTransactions();
 
-    expect(res).toEqual({ rows: [], accounts: [], linkedCount: 0 });
+    expect(res).toEqual({ rows: [], accounts: [], linkedCount: 0, capped: false });
   });
 
   it("still returns transactions when the items count query fails", async () => {

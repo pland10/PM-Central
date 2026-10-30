@@ -104,9 +104,19 @@ export async function syncOneItem(
   }
 
   if (result.removed.length) {
-    await prisma.$executeRaw(
-      Prisma.sql`DELETE FROM plaid_transactions WHERE transaction_id IN (${Prisma.join(result.removed)})`
-    );
+    // Prune removed transactions — but keep any the user has annotated. Plaid
+    // recycles ids (a pending charge is reported "removed" and re-added posted
+    // under a new id), and deleting an annotated row would destroy its
+    // reimbursable/category/recorded/notes values. Annotated rows Plaid dropped
+    // are left behind (orphans the user can clear by hand) rather than wiped.
+    await prisma.$executeRaw(Prisma.sql`
+      DELETE FROM plaid_transactions
+      WHERE transaction_id IN (${Prisma.join(result.removed)})
+        AND reimbursable IS NULL
+        AND (category_override IS NULL OR category_override = '')
+        AND recorded_quickbooks = false
+        AND recorded_rentvine = false
+        AND (notes IS NULL OR notes = '')`);
   }
   await prisma.$executeRaw(
     Prisma.sql`UPDATE plaid_items SET cursor = ${result.cursor}, last_synced_at = now() WHERE item_id = ${item.itemId}`

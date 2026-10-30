@@ -95,6 +95,19 @@ describe("TransactionsTable", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
   });
 
+  it("rolls back the optimistic edit when the save fails", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "nope" }) });
+    const { user } = setup();
+    const box = screen.getByLabelText("quickbooks-t1") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+
+    await user.click(box);
+
+    // the failure is surfaced and the checkbox reverts to its saved state
+    expect(await screen.findByText(/couldn't be saved/i)).toBeInTheDocument();
+    expect((screen.getByLabelText("quickbooks-t1") as HTMLInputElement).checked).toBe(false);
+  });
+
   it("doesn't PATCH when a text field is left unchanged", async () => {
     const { user } = setup();
     const input = screen.getByLabelText("category-t1");

@@ -19,9 +19,9 @@ export default async function TransactionsPage() {
   requireFeature("accounting");
   if (!canAccessAccounting(await getCurrentUser())) notFound();
   const configured = isPlaidConfigured();
-  const { rows, accounts, linkedCount } = configured
+  const { rows, accounts, linkedCount, capped } = configured
     ? await fetchPlaidTransactions()
-    : { rows: [], accounts: [], linkedCount: 0 };
+    : { rows: [], accounts: [], linkedCount: 0, capped: false };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -55,7 +55,7 @@ export default async function TransactionsPage() {
         </div>
       ) : (
         <div className="mt-4">
-          <TransactionsTable initialRows={rows} accounts={accounts} />
+          <TransactionsTable initialRows={rows} accounts={accounts} capped={capped} />
         </div>
       )}
     </div>
