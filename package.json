@@ -1,6 +1,6 @@
 {
   "name": "pm-central",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "PM-Central — a property management hub. Foundation: a list of properties, backed by a database, designed to pull from multiple sources.",
   "scripts": {
