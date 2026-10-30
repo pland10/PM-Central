@@ -138,4 +138,13 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     expect(sqlOf(update)).toMatch(/unit_external_id =/);
     expect(update.values.slice(0, 2)).toEqual(["12", null]);
   });
+
+  it("refuses to edit a pending transaction (no row matches pending = false)", async () => {
+    executeRaw.mockResolvedValueOnce(0); // the guarded UPDATE matched nothing
+    const res = await patch({ recordedQuickbooks: true });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/pending/i);
+    const update = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /UPDATE plaid_transactions/.test(s))!;
+    expect(update).toMatch(/pending = false/);
+  });
 });

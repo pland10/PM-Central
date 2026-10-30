@@ -12,10 +12,8 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 // in a sortable/filterable DataTable with the hand-entered columns editable
 // inline (reimbursable?, your own category, recorded in QuickBooks / Rentvine,
 // notes). Each edit is saved on its own via PATCH /api/plaid/transactions/:id.
-
-function prettyCategory(c: string): string {
-  return c ? c.replaceAll("_", " ").toLowerCase() : "";
-}
+// (Plaid's own category column was dropped as unhelpful; the `category` field is
+// still synced and kept in the DB for possible later use.)
 
 export function TransactionsTable({
   initialRows,
@@ -201,6 +199,8 @@ export function TransactionsTable({
               defaultValue={current}
               list={PROPERTY_LIST_ID}
               placeholder="Search…"
+              disabled={r.pending}
+              title={r.pending ? PENDING_HINT : undefined}
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v === current) return;
@@ -218,25 +218,10 @@ export function TransactionsTable({
                   save(r.transactionId, { propertyId: choice.propertyId, unitId: choice.unitId });
                 }
               }}
-              className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+              className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
             />
           );
         },
-      },
-      {
-        key: "category",
-        header: "Category (Plaid)",
-        sortable: true,
-        sortValue: (r) => r.category,
-        // Narrow: long Plaid names are cut with "…"; hover shows the whole thing.
-        render: (r) => (
-          <span title={prettyCategory(r.category)} className="block max-w-[6.5rem] truncate text-xs text-slate-400">
-            {prettyCategory(r.category)}
-          </span>
-        ),
-        // Filter on the prettified label so the popover options match the cells.
-        filter: { type: "select", value: (r) => prettyCategory(r.category) },
-        exportValue: (r) => prettyCategory(r.category),
       },
       {
         key: "amount",
@@ -266,11 +251,13 @@ export function TransactionsTable({
             defaultValue={r.categoryOverride}
             list={CATEGORY_LIST_ID}
             placeholder="Search…"
+            disabled={r.pending}
+            title={r.pending ? PENDING_HINT : undefined}
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
             }}
-            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
       },
@@ -286,12 +273,14 @@ export function TransactionsTable({
           <select
             aria-label={`reimbursable-${r.transactionId}`}
             value={r.reimbursable ?? ""}
+            disabled={r.pending}
+            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) =>
               save(r.transactionId, {
                 reimbursable: e.target.value === "yes" ? "yes" : e.target.value === "no" ? "no" : null,
               })
             }
-            className={`rounded border px-1.5 py-1 text-xs outline-none focus:border-brand-500 ${
+            className={`rounded border px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40 ${
               r.reimbursable === "yes"
                 ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                 : r.reimbursable === "no"
@@ -318,8 +307,10 @@ export function TransactionsTable({
             type="checkbox"
             aria-label={`quickbooks-${r.transactionId}`}
             checked={r.recordedQuickbooks}
+            disabled={r.pending}
+            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) => save(r.transactionId, { recordedQuickbooks: e.target.checked })}
-            className="h-4 w-4 accent-brand-500"
+            className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
       },
@@ -336,8 +327,10 @@ export function TransactionsTable({
             type="checkbox"
             aria-label={`rentvine-${r.transactionId}`}
             checked={r.recordedRentvine}
+            disabled={r.pending}
+            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) => save(r.transactionId, { recordedRentvine: e.target.checked })}
-            className="h-4 w-4 accent-brand-500"
+            className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
       },
@@ -352,11 +345,13 @@ export function TransactionsTable({
             onKeyDown={blurOnEnter}
             defaultValue={r.notes}
             placeholder="—"
+            disabled={r.pending}
+            title={r.pending ? PENDING_HINT : undefined}
             onBlur={(e) => {
               const v = e.target.value;
               if (v !== r.notes) save(r.transactionId, { notes: v });
             }}
-            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
       },
@@ -377,8 +372,10 @@ export function TransactionsTable({
                   type="checkbox"
                   aria-label={`select-${r.transactionId}`}
                   checked={selected.has(r.transactionId)}
+                  disabled={r.pending}
+                  title={r.pending ? PENDING_HINT : undefined}
                   onChange={() => toggleSelected(r.transactionId)}
-                  className="h-4 w-4 accent-brand-500"
+                  className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
                 />
               ),
             },
@@ -485,7 +482,7 @@ export function TransactionsTable({
             {selected.size > 0 && <span className="font-medium text-slate-700">{selected.size} selected</span>}
             <button
               type="button"
-              onClick={() => setSelected(new Set(shown.map((r) => r.transactionId)))}
+              onClick={() => setSelected(new Set(shown.filter((r) => !r.pending).map((r) => r.transactionId)))}
               className={BTN}
             >
               Select all {shown.length.toLocaleString()} shown
@@ -554,6 +551,11 @@ const PROPERTY_LIST_ID = "txn-property-options";
 function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
   if (e.key === "Enter") e.currentTarget.blur();
 }
+
+// Pending transactions get a new id when they post (Plaid links it via
+// pending_transaction_id), so an annotation made now would be orphaned — the
+// editors are disabled until a transaction posts.
+const PENDING_HINT = "Pending — you can edit this once it posts.";
 
 const BTN =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
