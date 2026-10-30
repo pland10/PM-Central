@@ -179,6 +179,7 @@ export function TransactionsTable({
           <input
             key={`cat-${r.transactionId}-${r.categoryOverride}`}
             aria-label={`category-${r.transactionId}`}
+            onKeyDown={blurOnEnter}
             defaultValue={r.categoryOverride}
             list={CATEGORY_LIST_ID}
             placeholder="Search…"
@@ -279,6 +280,7 @@ export function TransactionsTable({
           <input
             key={`notes-${r.transactionId}-${r.notes}`}
             aria-label={`notes-${r.transactionId}`}
+            onKeyDown={blurOnEnter}
             defaultValue={r.notes}
             placeholder="—"
             onBlur={(e) => {
@@ -468,6 +470,11 @@ export function TransactionsTable({
 }
 
 const CATEGORY_LIST_ID = "txn-category-options";
+
+// Enter saves a text box: blurring it runs the same onBlur save as clicking away.
+function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key === "Enter") e.currentTarget.blur();
+}
 
 const BTN =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
