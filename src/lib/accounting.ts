@@ -225,3 +225,121 @@ export async function fetchReimbursables(): Promise<ReimbursablesResult> {
     return errorResult(e);
   }
 }
+
+// --- Money out (payments) -------------------------------------------------
+//
+// Rentvine's "Money Out → Payments": every payment written from a bank account,
+// from the Check Register report. Each row has a real payee (the contact paid —
+// owner draw, vendor bill, etc.), which the reimbursables ledger doesn't carry.
+
+const MONEY_OUT_DAYS = 90; // default window ("last 90 days")
+
+export type MoneyOutRow = {
+  date: string; // datePosted, ISO (YYYY-MM-DD)
+  payee: string; // who was paid
+  payeeType: string; // Owner | Vendor | Manager | …
+  method: string; // Check | eCheck (ACH) | Bank Transfer | …
+  checkNumber: string;
+  memo: string;
+  amount: number;
+};
+
+export type MoneyOutResult =
+  | { ok: true; rows: MoneyOutRow[]; total: number; count: number; asOf: string }
+  | { ok: false; status: number; error: string };
+
+// Payment-type enumerations from the Check Register report meta.
+const PAYOUT_TYPES: Record<string, string> = { "1": "Other", "2": "Check", "3": "eCheck (ACH)", "4": "NACHA (ACH)" };
+const OTHER_PAYOUT_TYPES: Record<string, string> = {
+  "1": "Cash",
+  "2": "Credit/Debit Card",
+  "3": "Bank Transfer",
+  "4": "Check",
+  "5": "Other",
+};
+const PAYEE_TYPES: Record<string, string> = {
+  "1": "Owner",
+  "2": "Tenant",
+  "3": "Vendor",
+  "4": "Manager",
+  "5": "Association",
+  "6": "Applicant",
+  "7": "Screening Prospect",
+  "8": "Internal Technician",
+  "9": "Owner Lead",
+};
+
+// "Other" (payoutTypeID 1) carries the real method in otherPayoutTypeID.
+export function paymentMethodLabel(payoutTypeID: unknown, otherPayoutTypeID?: unknown): string {
+  const t = str(payoutTypeID);
+  if (t === "1") return OTHER_PAYOUT_TYPES[str(otherPayoutTypeID)] || "Other";
+  return PAYOUT_TYPES[t] || "";
+}
+
+export function payeeTypeLabel(id: unknown): string {
+  return PAYEE_TYPES[str(id)] || "";
+}
+
+// Map check-register rows (the payee's name is `contactName`, not `payee`) to
+// our shape, newest first, and total the amount. Pure, so it's unit-tested.
+export function mapMoneyOut(rows: ReportRow[]): { rows: MoneyOutRow[]; total: number } {
+  const data = rows.filter((r) => r?.rowTypeID === 3 && r.data);
+  let total = 0;
+  const mapped: MoneyOutRow[] = data.map((r) => {
+    const d = r.data!;
+    const amount = money(d.payoutAmount);
+    total += amount;
+    return {
+      date: str(d.datePosted),
+      payee: str(d.contactName),
+      payeeType: payeeTypeLabel(d.contactTypeID),
+      method: paymentMethodLabel(d.payoutTypeID, d.otherPayoutTypeID),
+      checkNumber: str(d.checkNumber),
+      memo: str(d.memo),
+      amount,
+    };
+  });
+  mapped.sort((a, b) => {
+    const ta = Date.parse(a.date);
+    const tb = Date.parse(b.date);
+    if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+    if (Number.isNaN(ta)) return 1;
+    if (Number.isNaN(tb)) return -1;
+    return tb - ta;
+  });
+  return { rows: mapped, total: Math.round(total * 100) / 100 };
+}
+
+export async function fetchMoneyOut(): Promise<MoneyOutResult> {
+  if (!isRentvineConfigured()) {
+    return {
+      ok: false,
+      status: 503,
+      error: "Rentvine isn't configured — set RENTVINE_API_KEY / RENTVINE_API_SECRET.",
+    };
+  }
+
+  try {
+    const rows = await runReport("check-register", {
+      displayColumns: [
+        "datePosted",
+        "payee",
+        "payoutTypeID",
+        "otherPayoutTypeID",
+        "checkNumber",
+        "memo",
+        "payoutAmount",
+        "contactTypeID",
+      ],
+      orderBys: ["datePosted"],
+      filters: [
+        { name: "datePosted", comparator: `last${MONEY_OUT_DAYS}Days` },
+        { name: "isVoided", comparator: "booleanFalse" },
+      ],
+    });
+    const { rows: mapped, total } = mapMoneyOut(rows);
+    return { ok: true, rows: mapped, total, count: mapped.length, asOf: today() };
+  } catch (e) {
+    return errorResult(e);
+  }
+}

@@ -2,13 +2,13 @@ import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
-import { fetchCashOnHand, fetchReimbursables, isRentvineConfigured } from "@/lib/accounting";
+import { fetchMoneyOut, isRentvineConfigured } from "@/lib/accounting";
 import { AccountingTabs } from "./AccountingTabs";
-import { CashOnHand, Reimbursables } from "./OverviewSections";
+import { MoneyOut } from "./OverviewSections";
 
-// Accounting → Overview tab: live cash on hand + reimbursables from Rentvine,
-// read on each load (no sync). The Transactions tab lives at
-// /accounting/transactions.
+// Accounting → Rentvine Transactions tab: live "money out" payments from
+// Rentvine (Check Register), read on each load (no sync). The Bank Transactions
+// tab (Plaid) lives at /accounting/transactions.
 export const dynamic = "force-dynamic";
 // Live Rentvine report fetches — headroom for serverless (Vercel); no-op on Railway.
 export const maxDuration = 60;
@@ -20,37 +20,35 @@ export default async function AccountingPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
-      <Overview />
+      <RentvineTransactions />
     </div>
   );
 }
 
-async function Overview() {
+async function RentvineTransactions() {
   if (!isRentvineConfigured()) {
     return (
       <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         Rentvine isn&apos;t configured for this environment. Set <code>RENTVINE_API_KEY</code> and{" "}
         <code>RENTVINE_API_SECRET</code> (and <code>RENTVINE_BASE_URL</code>) on the service to load
-        live accounting figures.
+        live payments.
       </p>
     );
   }
 
-  const [cash, reimb] = await Promise.all([fetchCashOnHand(), fetchReimbursables()]);
-  const asOf = (cash.ok && cash.asOf) || (reimb.ok && reimb.asOf) || "";
+  const data = await fetchMoneyOut();
 
   return (
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm text-slate-500">
-          Live from Rentvine — cash across the bank accounts, and what&apos;s outstanding on the
-          reimbursables account.
+          Money out — payments written from your Rentvine bank accounts over the last 90 days, with
+          who each one was paid to.
         </p>
-        {asOf && <span className="text-xs text-slate-400">As of {asOf}</span>}
+        {data.ok && data.asOf && <span className="text-xs text-slate-400">As of {data.asOf}</span>}
       </div>
 
-      <CashOnHand cash={cash} />
-      <Reimbursables reimb={reimb} />
+      <MoneyOut data={data} />
     </>
   );
 }
