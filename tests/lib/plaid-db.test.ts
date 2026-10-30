@@ -26,6 +26,7 @@ const raw = (over: Record<string, unknown> = {}) => ({
   recorded_quickbooks: false,
   recorded_rentvine: false,
   notes: null,
+  property_external_id: null,
   ...over,
 });
 
@@ -128,5 +129,12 @@ describe("fetchPlaidTransactions", () => {
     expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).not.toMatch(/ILIKE/);
     expect(queryRaw).toHaveBeenCalledTimes(2);
     expect(res.hiddenCount).toBe(0);
+  });
+
+  it("maps the linked property id", async () => {
+    queryRaw.mockResolvedValueOnce([raw({ property_external_id: "4521" })]).mockResolvedValueOnce([{ n: 1 }]);
+    const res = await fetchPlaidTransactions();
+    expect(res.rows[0].propertyId).toBe("4521");
+    expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).toMatch(/property_external_id/);
   });
 });

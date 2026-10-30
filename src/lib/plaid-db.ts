@@ -26,6 +26,7 @@ export type TxnRow = {
   recordedQuickbooks: boolean;
   recordedRentvine: boolean;
   notes: string;
+  propertyId: string | null; // linked property (Property.externalId)
 };
 
 export type TransactionsResult = {
@@ -50,6 +51,7 @@ type RawTxn = {
   recorded_quickbooks: boolean | null;
   recorded_rentvine: boolean | null;
   notes: string | null;
+  property_external_id: string | null;
 };
 
 function money(v: Prisma.Decimal | number | null): number {
@@ -75,7 +77,8 @@ export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] =
     await ensurePlaidAnnotationColumns(prisma);
     const rows = await prisma.$queryRaw<RawTxn[]>(Prisma.sql`
       SELECT transaction_id, posted_date, account_name, merchant_name, name, amount, category, pending,
-             reimbursable, category_override, recorded_quickbooks, recorded_rentvine, notes
+             reimbursable, category_override, recorded_quickbooks, recorded_rentvine, notes,
+             property_external_id
       FROM plaid_transactions
       ${hideLikes.length ? Prisma.sql`WHERE NOT ${matchesHidden(hideLikes)}` : Prisma.empty}
       ORDER BY posted_date DESC NULLS LAST, synced_at DESC
@@ -117,6 +120,7 @@ export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] =
       recordedQuickbooks: !!r.recorded_quickbooks,
       recordedRentvine: !!r.recorded_rentvine,
       notes: r.notes ?? "",
+      propertyId: r.property_external_id || null,
     }));
 
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();

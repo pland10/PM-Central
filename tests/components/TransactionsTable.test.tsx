@@ -20,6 +20,7 @@ const rows: TxnRow[] = [
     recordedQuickbooks: false,
     recordedRentvine: false,
     notes: "",
+    propertyId: null,
   },
   {
     transactionId: "t2",
@@ -35,6 +36,7 @@ const rows: TxnRow[] = [
     recordedQuickbooks: true,
     recordedRentvine: false,
     notes: "",
+    propertyId: null,
   },
 ];
 
@@ -228,5 +230,53 @@ describe("TransactionsTable", () => {
     await user.type(screen.getByLabelText("notes-t1"), "owner to repay{Enter}");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ notes: "owner to repay" });
+  });
+
+  describe("property typeahead", () => {
+    const properties = [
+      { externalId: "p1", label: "66 Francis Court · Elmont" },
+      { externalId: "p2", label: "25 Thorney Avenue · Huntington Station" },
+    ];
+    const renderWith = (r = rows) => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={r} accounts={[]} properties={properties} />);
+      return { user };
+    };
+
+    it("suggests existing properties while typing", () => {
+      renderWith();
+      const input = screen.getByLabelText("property-t1");
+      const list = document.getElementById(input.getAttribute("list")!)!;
+      expect([...list.querySelectorAll("option")].map((o) => o.getAttribute("value"))).toEqual([
+        "66 Francis Court · Elmont",
+        "25 Thorney Avenue · Huntington Station",
+      ]);
+    });
+
+    it("shows the linked property's name", () => {
+      renderWith([{ ...rows[0], propertyId: "p2" }, rows[1]]);
+      expect((screen.getByLabelText("property-t1") as HTMLInputElement).value).toBe("25 Thorney Avenue · Huntington Station");
+    });
+
+    it("saves the chosen property's id", async () => {
+      const { user } = renderWith();
+      await user.type(screen.getByLabelText("property-t1"), "66 francis court · elmont{Enter}");
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ propertyId: "p1" });
+    });
+
+    it("refuses anything that isn't an existing property, without saving", async () => {
+      const { user } = renderWith();
+      await user.type(screen.getByLabelText("property-t1"), "123 Nowhere Rd{Enter}");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(screen.getByText(/pick a property from the list/i)).toBeInTheDocument();
+      expect((screen.getByLabelText("property-t1") as HTMLInputElement).value).toBe("");
+    });
+
+    it("clears the property when the box is emptied", async () => {
+      const { user } = renderWith([{ ...rows[0], propertyId: "p1" }, rows[1]]);
+      await user.clear(screen.getByLabelText("property-t1"));
+      await user.keyboard("{Enter}");
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ propertyId: null });
+    });
   });
 });

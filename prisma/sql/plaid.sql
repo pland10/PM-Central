@@ -70,3 +70,4 @@ ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS recorded_rentvine BOOLEA
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_at TIMESTAMPTZ;       -- when an annotation was last saved
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT;              -- who saved it (email / 'operator')
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS property_external_id TEXT;      -- linked property (properties."externalId")
