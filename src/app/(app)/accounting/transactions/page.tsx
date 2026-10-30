@@ -2,14 +2,16 @@ import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
-import { formatCurrency } from "@/lib/format";
 import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
 import { AccountingTabs } from "../AccountingTabs";
 import { ConnectButton } from "./ConnectButton";
+import { TransactionsTable } from "./TransactionsTable";
 
 // Card/bank transactions (Amex, Home Depot, …) pulled from Plaid by the daily
-// sync (scripts/sync-plaid.ts) into plaid_transactions.
+// sync (scripts/sync-plaid.ts) into plaid_transactions. The table itself
+// (summary bar, sort/filter, inline-editable annotation columns) is the client
+// component TransactionsTable; this server component just loads the rows.
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -17,18 +19,19 @@ export default async function TransactionsPage() {
   requireFeature("accounting");
   if (!canAccessAccounting(await getCurrentUser())) notFound();
   const configured = isPlaidConfigured();
-  const { rows, linkedCount } = configured
+  const { rows, accounts, linkedCount, capped } = configured
     ? await fetchPlaidTransactions()
-    : { rows: [], linkedCount: 0 };
+    : { rows: [], accounts: [], linkedCount: 0, capped: false };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">
-          Card &amp; bank transactions from your connected accounts, refreshed daily.
+          Card &amp; bank transactions from your connected accounts, refreshed daily. Mark each one
+          reimbursable, set your own category, and tick it off as it&apos;s recorded.
         </p>
         <ConnectButton disabled={!configured} />
       </div>
@@ -51,40 +54,8 @@ export default async function TransactionsPage() {
           </p>
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">Account</th>
-                <th className="px-3 py-2 font-medium">Merchant</th>
-                <th className="px-3 py-2 font-medium">Category</th>
-                <th className="px-3 py-2 text-right font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rows.map((r) => (
-                <tr key={r.transactionId} className="align-top">
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.postedDate || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.accountName || "—"}</td>
-                  <td className="px-3 py-2 text-slate-800">
-                    {r.merchantName || "—"}
-                    {r.pending && <span className="ml-1 text-xs text-amber-600">(pending)</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-400">
-                    {r.category ? r.category.replaceAll("_", " ").toLowerCase() : ""}
-                  </td>
-                  <td
-                    className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
-                      r.amount < 0 ? "text-emerald-700" : "text-slate-800"
-                    }`}
-                  >
-                    {formatCurrency(r.amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <TransactionsTable initialRows={rows} accounts={accounts} capped={capped} />
         </div>
       )}
     </div>

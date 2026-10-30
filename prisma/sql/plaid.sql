@@ -57,3 +57,16 @@ CREATE INDEX IF NOT EXISTS plaid_transactions_posted_date_idx
     ON plaid_transactions (posted_date DESC);
 CREATE INDEX IF NOT EXISTS plaid_transactions_item_id_idx
     ON plaid_transactions (item_id);
+
+-- Hand-entered annotation columns, editable on the Transactions tab. The daily
+-- sync NEVER writes these (its upsert's ON CONFLICT only SETs Plaid-owned
+-- columns — see src/lib/plaid-sync.ts), so an edit survives a re-sync. Additive
+-- + idempotent; also applied in code by ensurePlaidAnnotationColumns so a DB
+-- that hasn't had this file run still self-heals on first read/write/sync.
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS reimbursable TEXT;              -- 'yes' | 'no' | null (unreviewed)
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS category_override TEXT;         -- the user's own category
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS recorded_quickbooks BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS recorded_rentvine BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_at TIMESTAMPTZ;       -- when an annotation was last saved
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT;              -- who saved it (email / 'operator')
