@@ -356,7 +356,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           }
         >
           <div className="flex items-center gap-3">
-            <MobileNav sections={mobileSections} isAdmin={user?.role === "admin"} light={!!ENV_INDICATOR} />
+            <MobileNav
+              sections={mobileSections}
+              isAdmin={user?.role === "admin"}
+              version={appVersion()}
+              light={!!ENV_INDICATOR}
+            />
             {ENV_INDICATOR && (
               <span
                 className="rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider"
