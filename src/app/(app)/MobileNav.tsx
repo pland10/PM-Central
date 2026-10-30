@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BRAND } from "@/config/brand";
 import { Logo } from "@/components/Logo";
+import { SidebarFooter } from "@/components/SidebarFooter";
 
 // Mobile navigation: a hamburger button + slide-in drawer, shown only below the
 // `md` breakpoint where the desktop sidebar is hidden. The server layout resolves
@@ -37,10 +38,12 @@ function NavIcon({ icon }: { icon: ReactNode }) {
 export function MobileNav({
   sections,
   isAdmin,
+  version,
   light = false,
 }: {
   sections: MobileNavSection[];
   isAdmin: boolean;
+  version: string;
   light?: boolean; // true on the colored env header (white trigger), else dark
 }) {
   const [open, setOpen] = useState(false);
@@ -156,6 +159,7 @@ export function MobileNav({
                 </div>
               )}
             </nav>
+            <SidebarFooter tagline={BRAND.tagline} version={version} />
           </aside>
         </div>
       )}
