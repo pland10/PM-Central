@@ -228,7 +228,12 @@ export function TransactionsTable({
         header: "Category (Plaid)",
         sortable: true,
         sortValue: (r) => r.category,
-        render: (r) => <span className="text-xs text-slate-400">{prettyCategory(r.category)}</span>,
+        // Narrow: long Plaid names are cut with "…"; hover shows the whole thing.
+        render: (r) => (
+          <span title={prettyCategory(r.category)} className="block max-w-[6.5rem] truncate text-xs text-slate-400">
+            {prettyCategory(r.category)}
+          </span>
+        ),
         // Filter on the prettified label so the popover options match the cells.
         filter: { type: "select", value: (r) => prettyCategory(r.category) },
         exportValue: (r) => prettyCategory(r.category),
