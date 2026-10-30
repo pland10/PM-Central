@@ -170,6 +170,20 @@ export function TransactionsTable({
         exportValue: (r) => prettyCategory(r.category),
       },
       {
+        key: "amount",
+        header: "Amount",
+        align: "right",
+        sortable: true,
+        sortValue: (r) => r.amount,
+        exportValue: (r) => r.amount,
+        filter: { type: "number", value: (r) => r.amount },
+        render: (r) => (
+          <span className={`tabular-nums ${r.amount < 0 ? "text-emerald-700" : "text-slate-800"}`}>
+            {formatCurrency(r.amount)}
+          </span>
+        ),
+      },
+      {
         key: "categoryOverride",
         header: "Category (yours)",
         sortable: true,
@@ -255,20 +269,6 @@ export function TransactionsTable({
             onChange={(e) => save(r.transactionId, { recordedRentvine: e.target.checked })}
             className="h-4 w-4 accent-brand-500"
           />
-        ),
-      },
-      {
-        key: "amount",
-        header: "Amount",
-        align: "right",
-        sortable: true,
-        sortValue: (r) => r.amount,
-        exportValue: (r) => r.amount,
-        filter: { type: "number", value: (r) => r.amount },
-        render: (r) => (
-          <span className={`tabular-nums ${r.amount < 0 ? "text-emerald-700" : "text-slate-800"}`}>
-            {formatCurrency(r.amount)}
-          </span>
         ),
       },
       {
