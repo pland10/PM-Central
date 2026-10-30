@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BRAND } from "@/config/brand";
 import { isFeatureEnabled, type FeatureKey } from "@/config/features";
+import { canAccessAccounting } from "@/lib/accounting-access";
 import { Logo } from "@/components/Logo";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -244,17 +245,22 @@ function NavLink({ item }: { item: (typeof nav)[number] }) {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
 
+  // Accounting carries financial data, so it's gated per-user on top of its
+  // feature flag — admins and anyone in ACCOUNTING_ALLOWED_EMAILS only.
+  const canSee = (feature: FeatureKey) =>
+    isFeatureEnabled(feature) && (feature !== "accounting" || canAccessAccounting(user));
+
   // Same visible nav the desktop sidebar renders, flattened for the mobile drawer.
   const mobileSections = navLayout
     .map((entry): MobileNavSection | null => {
       if ("item" in entry) {
         const it = navByFeature[entry.item];
-        if (!it || !isFeatureEnabled(it.feature)) return null;
+        if (!it || !canSee(it.feature)) return null;
         return { heading: null, items: [{ href: it.href, label: it.label, icon: it.icon }] };
       }
       const items = entry.items
         .map((f) => navByFeature[f])
-        .filter((it) => it && isFeatureEnabled(it.feature))
+        .filter((it) => it && canSee(it.feature))
         .map((it) => ({ href: it.href, label: it.label, icon: it.icon }));
       return items.length ? { heading: entry.heading, items } : null;
     })
@@ -281,12 +287,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {navLayout.map((entry) => {
             if ("item" in entry) {
               const item = navByFeature[entry.item];
-              if (!item || !isFeatureEnabled(item.feature)) return null;
+              if (!item || !canSee(item.feature)) return null;
               return <NavLink key={item.href} item={item} />;
             }
             const groupItems = entry.items
               .map((f) => navByFeature[f])
-              .filter((it) => it && isFeatureEnabled(it.feature));
+              .filter((it) => it && canSee(it.feature));
             if (groupItems.length === 0) return null;
             return (
               <div

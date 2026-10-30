@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isFeatureEnabled } from "@/config/features";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { canAccessAccounting } from "@/lib/accounting-access";
 import { isPlaidConfigured, plaidPost } from "@/lib/plaid";
 import { ensurePlaidTables, syncOneItem } from "@/lib/plaid-sync";
 
@@ -14,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   if (!isFeatureEnabled("accounting")) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+  if (!canAccessAccounting(await getCurrentUser())) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
   if (!isPlaidConfigured()) {
