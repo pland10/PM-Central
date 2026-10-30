@@ -186,4 +186,18 @@ describe("DataTable", () => {
     expect(screen.getByRole("columnheader", { name: /city/i }).className).toMatch(/\btext-center\b/);
     expect(screen.getAllByRole("cell")[0].className).toMatch(/\btext-center\b/);
   });
+
+  it("lets a wide table grow past the page edge (page scrolls sideways) instead of clipping it", () => {
+    const { container } = render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} wide />);
+    const box = container.querySelector("table")!.parentElement!;
+    expect(box.className).toMatch(/\bw-max\b/);
+    expect(box.className).toMatch(/\bmin-w-full\b/);
+    expect(box.className).not.toMatch(/overflow-x/);
+  });
+
+  it("uses tighter cell padding when dense", () => {
+    render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} dense />);
+    expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
+    expect(screen.getAllByRole("cell")[0].className).toMatch(/\bpx-2\b/);
+  });
 });

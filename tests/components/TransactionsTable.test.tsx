@@ -290,4 +290,11 @@ describe("TransactionsTable", () => {
       expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ propertyId: null, unitId: null });
     });
   });
+
+  it("is a dense, wide table so no column gets cut off", () => {
+    const { container } = render(<TransactionsTable initialRows={rows} accounts={[]} />);
+    const box = container.querySelector("table")!.parentElement!;
+    expect(box.className).toMatch(/\bw-max\b/);
+    expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
+  });
 });

@@ -178,7 +178,7 @@ export function TransactionsTable({
         render: (r) => (
           // Raw bank descriptions can be very long; wrap them in a narrow
           // column instead of pushing the editable columns off screen.
-          <span className="block max-w-[16rem] break-words text-slate-800">
+          <span className="block max-w-[14rem] break-words text-slate-800">
             {r.merchantName || "—"}
             {r.pending && <span className="ml-1 text-xs text-amber-600">(pending)</span>}
           </span>
@@ -218,7 +218,7 @@ export function TransactionsTable({
                   save(r.transactionId, { propertyId: choice.propertyId, unitId: choice.unitId });
                 }
               }}
-              className="w-52 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+              className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
             />
           );
         },
@@ -265,7 +265,7 @@ export function TransactionsTable({
               const v = e.target.value.trim();
               if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
             }}
-            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
           />
         ),
       },
@@ -351,7 +351,7 @@ export function TransactionsTable({
               const v = e.target.value;
               if (v !== r.notes) save(r.transactionId, { notes: v });
             }}
-            className="w-40 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
           />
         ),
       },
@@ -529,6 +529,8 @@ export function TransactionsTable({
         rows={rows}
         columns={shownColumns}
         onFilteredChange={setShown}
+        wide
+        dense
         rowKey={(r) => r.transactionId}
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${r.notes}`}
         searchPlaceholder="Search merchant, notes…"

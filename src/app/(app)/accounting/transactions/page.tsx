@@ -40,7 +40,7 @@ export default async function TransactionsPage() {
   const propertyChoices = buildPropertyChoices(properties, units);
 
   return (
-    <div className="mx-auto max-w-screen-2xl">
+    <div>
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
 
