@@ -14,7 +14,7 @@ export default async function InspectionsPage() {
   const stats = summarizeInspections(rows);
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-ink">Inspections</h1>

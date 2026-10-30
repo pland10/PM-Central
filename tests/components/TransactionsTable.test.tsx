@@ -206,4 +206,13 @@ describe("TransactionsTable", () => {
       await screen.findByDisplayValue("Payroll");
     });
   });
+
+  it("centers the Reimbursable / QuickBooks / Rentvine columns under their headers", () => {
+    setup();
+    for (const name of [/reimbursable\?/i, /in quickbooks/i, /in rentvine/i]) {
+      expect(screen.getByRole("columnheader", { name }).className).toMatch(/\btext-center\b/);
+    }
+    expect(screen.getByLabelText("quickbooks-t1").closest("td")!.className).toMatch(/\btext-center\b/);
+    expect(screen.getByLabelText("reimbursable-t1").closest("td")!.className).toMatch(/\btext-center\b/);
+  });
 });

@@ -19,7 +19,7 @@ export type ColumnFilter<T> = {
 export type Column<T> = {
   key: string;
   header: string;
-  align?: "left" | "right";
+  align?: "left" | "right" | "center";
   // Keep the header (and its sort arrow) on one line; the column widens to fit.
   nowrap?: boolean;
   sortable?: boolean;
@@ -386,7 +386,7 @@ export function DataTable<T>({
                     key={c.key}
                     className={[
                       "px-4 py-3 font-medium",
-                      c.align === "right" ? "text-right" : "",
+                      c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "",
                       c.nowrap ? "whitespace-nowrap" : "",
                       // Keep the header visible while the rows scroll. The cell
                       // needs its own background + border since the <tr>'s don't
@@ -442,7 +442,10 @@ export function DataTable<T>({
                 className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
               >
                 {columns.map((c) => (
-                  <td key={c.key} className={`px-4 py-3 ${c.align === "right" ? "text-right" : ""}`}>
+                  <td
+                    key={c.key}
+                    className={`px-4 py-3 ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}
+                  >
                     {c.render(row)}
                   </td>
                 ))}
