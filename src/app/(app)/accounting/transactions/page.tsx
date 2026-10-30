@@ -1,4 +1,7 @@
+import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { canAccessAccounting } from "@/lib/accounting-access";
 import { formatCurrency } from "@/lib/format";
 import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
@@ -12,6 +15,7 @@ export const maxDuration = 60;
 
 export default async function TransactionsPage() {
   requireFeature("accounting");
+  if (!canAccessAccounting(await getCurrentUser())) notFound();
   const configured = isPlaidConfigured();
   const { rows, linkedCount } = configured
     ? await fetchPlaidTransactions()

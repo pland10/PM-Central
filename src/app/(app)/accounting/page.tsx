@@ -1,4 +1,7 @@
+import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { canAccessAccounting } from "@/lib/accounting-access";
 import { formatCurrency } from "@/lib/format";
 import {
   fetchCashOnHand,
@@ -18,6 +21,7 @@ export const maxDuration = 60;
 
 export default async function AccountingPage() {
   requireFeature("accounting");
+  if (!canAccessAccounting(await getCurrentUser())) notFound();
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
