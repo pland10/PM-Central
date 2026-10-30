@@ -15,6 +15,7 @@ export type TxnAnnotation = {
   recordedRentvine: boolean; // recorded in Rentvine
   notes: string;
   propertyId: string | null; // linked property (Property.externalId), null = none
+  unitId: string | null; // linked Rentvine unit (rentvine_units.unit_id), null = whole property
 };
 
 const NOTES_MAX = 2000;
@@ -95,6 +96,10 @@ export function sanitizeAnnotationPatch(body: unknown): AnnotationPatch {
   if ("propertyId" in b) {
     const id = typeof b.propertyId === "string" ? b.propertyId.trim().slice(0, PROPERTY_ID_MAX) : "";
     out.propertyId = id || null;
+  }
+  if ("unitId" in b) {
+    const id = typeof b.unitId === "string" ? b.unitId.trim().slice(0, PROPERTY_ID_MAX) : "";
+    out.unitId = id || null;
   }
   if ("notes" in b) {
     out.notes = typeof b.notes === "string" ? b.notes.slice(0, NOTES_MAX) : "";

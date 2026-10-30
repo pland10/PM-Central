@@ -7,6 +7,7 @@ import { canAccessAccounting } from "@/lib/accounting-access";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import { sanitizeAnnotationPatch } from "@/lib/transactions-view";
 import { resolveCategoryForSave } from "@/lib/transaction-categories-db";
+import { unitBelongsToProperty } from "@/lib/rentvine-units";
 
 // Saves the hand-entered annotations on one transaction (reimbursable?, your
 // own category, recorded in QuickBooks / Rentvine, notes) from the Transactions
@@ -54,9 +55,18 @@ export async function PATCH(
 
   // Only an existing property can be linked (the page's typeahead offers just
   // those; this guards against stale or hand-crafted requests).
+  // A unit always travels with its property: changing the property without a
+  // unit clears the unit, and a unit must belong to that property.
+  if (patch.propertyId !== undefined && patch.unitId === undefined) patch.unitId = null;
+  if (patch.unitId && !patch.propertyId) {
+    return NextResponse.json({ error: "Pick a property from the list." }, { status: 400 });
+  }
   if (patch.propertyId) {
     const exists = await prisma.property.findFirst({ where: { externalId: patch.propertyId }, select: { id: true } });
     if (!exists) return NextResponse.json({ error: "Pick a property from the list." }, { status: 400 });
+    if (patch.unitId && !(await unitBelongsToProperty(prisma, patch.unitId, patch.propertyId))) {
+      return NextResponse.json({ error: "That unit isn't part of the property — pick from the list." }, { status: 400 });
+    }
   }
 
   // Build the SET clause from exactly the fields the user changed.
@@ -67,6 +77,7 @@ export async function PATCH(
   if (patch.recordedRentvine !== undefined) sets.push(Prisma.sql`recorded_rentvine = ${patch.recordedRentvine}`);
   if (patch.notes !== undefined) sets.push(Prisma.sql`notes = ${patch.notes}`);
   if (patch.propertyId !== undefined) sets.push(Prisma.sql`property_external_id = ${patch.propertyId}`);
+  if (patch.unitId !== undefined) sets.push(Prisma.sql`unit_external_id = ${patch.unitId}`);
 
   if (sets.length === 0) {
     return NextResponse.json({ error: "No fields to update." }, { status: 400 });
