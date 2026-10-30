@@ -29,7 +29,7 @@ export default async function TransactionsPage() {
     : { rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 };
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-screen-2xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
 

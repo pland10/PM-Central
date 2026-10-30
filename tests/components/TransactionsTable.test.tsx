@@ -134,4 +134,50 @@ describe("TransactionsTable", () => {
       expect(screen.getByRole("columnheader", { name }).className).toMatch(/\bwhitespace-nowrap\b/);
     }
   });
+
+  describe("bulk reimbursable", () => {
+    it("selects several transactions and sets them all reimbursable in one save", async () => {
+      const { user } = setup();
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getByLabelText("select-t1"));
+      await user.click(screen.getByLabelText("select-t2"));
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /set reimbursable: yes/i }));
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("/api/plaid/transactions");
+      expect(init.method).toBe("PATCH");
+      expect(JSON.parse(init.body)).toEqual({ ids: ["t1", "t2"], reimbursable: "yes" });
+      expect((screen.getByLabelText("reimbursable-t1") as HTMLSelectElement).value).toBe("yes");
+      expect(screen.queryByText(/selected/)).toBeNull(); // selection cleared after saving
+    });
+
+    it("selects everything currently shown (respecting the search)", async () => {
+      const { user } = setup();
+      await user.type(screen.getByPlaceholderText(/search merchant/i), "lowe");
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getByRole("button", { name: /select all 1 shown/i }));
+      await user.click(screen.getByRole("button", { name: /set reimbursable: no/i }));
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ ids: ["t2"], reimbursable: "no" });
+    });
+
+    it("rolls every row back if the bulk save fails", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "nope" }) });
+      const { user } = setup();
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getByLabelText("select-t1"));
+      await user.click(screen.getByRole("button", { name: /set reimbursable: no/i }));
+
+      expect(await screen.findByText(/couldn't be saved/i)).toBeInTheDocument();
+      expect((screen.getByLabelText("reimbursable-t1") as HTMLSelectElement).value).toBe("");
+    });
+
+    it("hides the checkboxes until Select is turned on", () => {
+      setup();
+      expect(screen.queryByLabelText("select-t1")).toBeNull();
+    });
+  });
 });
