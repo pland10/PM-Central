@@ -30,9 +30,11 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 | `/accounting/transactions/{id}` | one transaction, wraps `transaction` |
 | `/maintenance/work-orders` (fields) | `workOrder` also carries `estimatedAmount`, `dateDue`, `dateClosed`, `scheduledStartDate`/`actualEndDate`; a `contact` (vendor) wrapper rides along. Oct 2026: 52 of 482 WOs had an estimatedAmount, only 1 open one. |
 | `/accounting/bills` | wraps `bill` (+ `contact`). Has `workOrderID` (325 of 2874 bills; 374 voided) but **no amount field** — the total is the sum of the bill's charges (MCP `get_bill` with `charges`). Per-WO billed cost needs a per-bill charges fetch. |
+| `/properties/units` | **all units**, paged (3 pages of up to 20 rows, Oct 2026), rows wrap `unit` (+ `token`): `unitID, propertyID, name` ("Unit 1"), `isActive`, `dateTimeDeactivated`, `address2`, `rent`, `deposit`, `beds`, `fullBaths`, `leaseID`, … Also `/properties/{id}/units` and `/properties/units?propertyID=` (one property). `/units` → 404. Synced to raw `rentvine_units` by the core sync (`fetchRentvineUnits`). |
+| `/properties/{id}` | wraps `property`; has `isMultiUnit`, `portfolioID`, `propertyTypeID`, `maintenanceLimitAmount`, `markupPercent`, … |
 | `/accounting/settlements[/{id}]` | wraps `settlement` (`settlementDate`, `amount`, `expectedAmount`, `bankAccountGatewaySettlementID`) |
 
-**Known 404s** (don't retry): `/leases/{id}/lease-renewals`, `/leases/{id}/leaseRenewals`,
+**Known 404s** (don't retry): `/units`, `/leases/{id}/lease-renewals`, `/leases/{id}/leaseRenewals`,
 `/lease-renewals?leaseID=`, `/workorders`, `/work-orders` (use `/maintenance/work-orders`),
 `/property-types`, `/propertyTypes`, `/accounting/owner-receipts`,
 `/accounting/receipts/owner`, `/accounting/payments`, `/accounting/contributions`.
@@ -46,6 +48,8 @@ LeadSimple stage — "Estimate Requested" / "Multiple Estimates" — instead).
 (Squatterwatch = group 4).
 
 ## Data quirks
+- The app's Prisma `Unit` rows are **placeholders** built from active leases
+  (numbered 1..n), not Rentvine units. Real units live in `rentvine_units`.
 - `primaryLeaseStatusID`: `"2"` Active, `"1"` Pending, `"6"` Closed.
 - After a renewal, a lease's own `endDate` can stay at the **prior** term's end —
   even before its `startDate`. The renewal record's `endDate` is authoritative;
