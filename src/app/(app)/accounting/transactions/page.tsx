@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { isPlaidConfigured } from "@/lib/plaid";
 import { fetchPlaidTransactions } from "@/lib/plaid-db";
+import { listHideRulesSafe } from "@/lib/transaction-filters-db";
+import { patternToLike } from "@/lib/transaction-filters";
 import { AccountingTabs } from "../AccountingTabs";
 import { ConnectButton } from "./ConnectButton";
 import { TransactionsTable } from "./TransactionsTable";
@@ -17,11 +19,14 @@ export const maxDuration = 60;
 
 export default async function TransactionsPage() {
   requireFeature("accounting");
-  if (!canAccessAccounting(await getCurrentUser())) notFound();
+  const user = await getCurrentUser();
+  if (!canAccessAccounting(user)) notFound();
   const configured = isPlaidConfigured();
-  const { rows, accounts, linkedCount, capped } = configured
-    ? await fetchPlaidTransactions()
-    : { rows: [], accounts: [], linkedCount: 0, capped: false };
+  // Admin hide filters (Admin → Transaction filters), e.g. *CSG FORTE*.
+  const hideLikes = configured ? (await listHideRulesSafe()).map((r) => patternToLike(r.pattern)) : [];
+  const { rows, accounts, linkedCount, capped, hiddenCount } = configured
+    ? await fetchPlaidTransactions(2000, hideLikes)
+    : { rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -42,7 +47,7 @@ export default async function TransactionsPage() {
           <code>PLAID_SECRET</code>, and <code>PLAID_ENV</code> on the service to enable connecting
           accounts.
         </p>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && hiddenCount === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="text-sm text-slate-600">
             {linkedCount > 0
@@ -55,7 +60,13 @@ export default async function TransactionsPage() {
         </div>
       ) : (
         <div className="mt-4">
-          <TransactionsTable initialRows={rows} accounts={accounts} capped={capped} />
+          <TransactionsTable
+            initialRows={rows}
+            accounts={accounts}
+            capped={capped}
+            hiddenCount={hiddenCount}
+            canManageFilters={user?.role === "admin"}
+          />
         </div>
       )}
     </div>

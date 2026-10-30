@@ -156,6 +156,14 @@ export function MobileNav({
                     />
                     Data sources
                   </Link>
+                  <Link
+                    href="/admin/transaction-filters"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <NavIcon icon={<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />} />
+                    Transaction filters
+                  </Link>
                 </div>
               )}
             </nav>

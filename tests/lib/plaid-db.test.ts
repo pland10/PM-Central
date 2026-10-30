@@ -93,7 +93,7 @@ describe("fetchPlaidTransactions", () => {
 
     const res = await fetchPlaidTransactions();
 
-    expect(res).toEqual({ rows: [], accounts: [], linkedCount: 0, capped: false });
+    expect(res).toEqual({ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 });
   });
 
   it("still returns transactions when the items count query fails", async () => {
@@ -105,5 +105,28 @@ describe("fetchPlaidTransactions", () => {
 
     expect(res.rows).toHaveLength(1);
     expect(res.linkedCount).toBe(0);
+  });
+
+  it("leaves out transactions matching the hide patterns, and counts them", async () => {
+    queryRaw
+      .mockResolvedValueOnce([raw()])
+      .mockResolvedValueOnce([{ n: 1 }])
+      .mockResolvedValueOnce([{ n: 7 }]);
+
+    const res = await fetchPlaidTransactions(2000, ["%CSG FORTE%"]);
+
+    const [listSql, , countSql] = queryRaw.mock.calls.map((c) => c[0] as { sql: string; values: unknown[] });
+    expect(listSql.sql).toMatch(/NOT \(COALESCE\(name, ''\) ILIKE ANY/);
+    expect(listSql.values).toContainEqual(["%CSG FORTE%"]);
+    expect(countSql.sql).toMatch(/COUNT\(\*\)/);
+    expect(res.hiddenCount).toBe(7);
+  });
+
+  it("doesn't filter or count when there are no hide patterns", async () => {
+    queryRaw.mockResolvedValueOnce([raw()]).mockResolvedValueOnce([{ n: 1 }]);
+    const res = await fetchPlaidTransactions();
+    expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).not.toMatch(/ILIKE/);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(res.hiddenCount).toBe(0);
   });
 });
