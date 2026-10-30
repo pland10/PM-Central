@@ -2,13 +2,16 @@ import { notFound } from "next/navigation";
 import { requireFeature } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
-import { fetchMoneyOut, isRentvineConfigured } from "@/lib/accounting";
+import { fetchManagementDraws, isRentvineConfigured } from "@/lib/accounting";
+import { prisma } from "@/lib/prisma";
+import { fetchBatchedMap, listRecentBatches, mergeBatched } from "@/lib/payout-batches";
 import { AccountingTabs } from "./AccountingTabs";
-import { MoneyOut } from "./OverviewSections";
+import { ManagementDraws } from "./ManagementDraws";
 
-// Accounting → Rentvine Transactions tab: live "money out" payments from
-// Rentvine (Check Register), read on each load (no sync). The Bank Transactions
-// tab (Plaid) lives at /accounting/transactions.
+// Accounting → Rentvine Transactions tab: the management-company trust draws
+// (PMI Lighthouse + Reimbursable) read live from Rentvine, with the batching
+// workflow for moving money from trust → operating. The Bank Transactions tab
+// (Plaid) lives at /accounting/transactions.
 export const dynamic = "force-dynamic";
 // Live Rentvine report fetches — headroom for serverless (Vercel); no-op on Railway.
 export const maxDuration = 60;
@@ -17,7 +20,7 @@ export default async function AccountingPage() {
   requireFeature("accounting");
   if (!canAccessAccounting(await getCurrentUser())) notFound();
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
       <RentvineTransactions />
@@ -36,19 +39,20 @@ async function RentvineTransactions() {
     );
   }
 
-  const data = await fetchMoneyOut();
+  const draws = await fetchManagementDraws();
+  if (!draws.ok) {
+    return (
+      <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        Couldn&apos;t load payments from Rentvine: {draws.error}
+      </p>
+    );
+  }
 
-  return (
-    <>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          Money out — payments written from your Rentvine bank accounts over the last 90 days, with
-          who each one was paid to.
-        </p>
-        {data.ok && data.asOf && <span className="text-xs text-slate-400">As of {data.asOf}</span>}
-      </div>
+  const [batched, recent] = await Promise.all([
+    fetchBatchedMap(prisma, draws.rows.map((r) => r.payoutId)),
+    listRecentBatches(prisma),
+  ]);
+  const rows = mergeBatched(draws.rows, batched);
 
-      <MoneyOut data={data} />
-    </>
-  );
+  return <ManagementDraws initialRows={rows} recentBatches={recent} asOf={draws.asOf} />;
 }

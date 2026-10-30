@@ -4,6 +4,7 @@ import {
   fetchCashOnHand,
   fetchReimbursables,
   fetchMoneyOut,
+  fetchManagementDraws,
   mapMoneyOut,
   paymentMethodLabel,
   payeeTypeLabel,
@@ -162,16 +163,17 @@ describe("money out (check register)", () => {
     expect(payeeTypeLabel("99")).toBe("");
   });
 
-  it("maps rows (payee is contactName), totals the amount, newest first", () => {
+  it("maps rows (payee is contactName, id is payoutID), totals the amount, newest first", () => {
     const { rows, total } = mapMoneyOut([
-      dataRow({ datePosted: "2026-08-07", contactName: "LIGHTHOUSE MAINTENANCE SERVICES LLC", contactTypeID: "3", payoutTypeID: "2", checkNumber: "31", memo: "", payoutAmount: "$314.29" }),
-      dataRow({ datePosted: "2026-08-20", contactName: "Neil Maclean", contactTypeID: "1", payoutTypeID: "3", memo: "Owner Distribution", payoutAmount: "4,484.30" }),
+      dataRow({ payoutID: "p1", datePosted: "2026-08-07", contactName: "LIGHTHOUSE MAINTENANCE SERVICES LLC", contactTypeID: "3", payoutTypeID: "2", checkNumber: "31", memo: "", payoutAmount: "$314.29" }),
+      dataRow({ payoutID: "p2", datePosted: "2026-08-20", contactName: "Neil Maclean", contactTypeID: "1", payoutTypeID: "3", memo: "Owner Distribution", payoutAmount: "4,484.30" }),
       totalsRow({ payoutAmount: "4798.59" }), // ignored
     ]);
 
     expect(total).toBe(4798.59);
     expect(rows.map((r) => r.date)).toEqual(["2026-08-20", "2026-08-07"]); // newest first
     expect(rows[0]).toEqual({
+      payoutId: "p2",
       date: "2026-08-20",
       payee: "Neil Maclean",
       payeeType: "Owner",
@@ -180,7 +182,7 @@ describe("money out (check register)", () => {
       memo: "Owner Distribution",
       amount: 4484.3,
     });
-    expect(rows[1]).toMatchObject({ payee: "LIGHTHOUSE MAINTENANCE SERVICES LLC", payeeType: "Vendor", method: "Check", checkNumber: "31" });
+    expect(rows[1]).toMatchObject({ payoutId: "p1", payee: "LIGHTHOUSE MAINTENANCE SERVICES LLC", payeeType: "Vendor", method: "Check", checkNumber: "31" });
   });
 
   it("runs the check-register report over the last 90 days, voided excluded", async () => {
@@ -205,5 +207,22 @@ describe("money out (check register)", () => {
   it("passes through a Rentvine HTTP error", async () => {
     mockFetch({ message: "nope" }, 500);
     expect(await fetchMoneyOut()).toMatchObject({ ok: false, status: 500 });
+  });
+
+  it("fetchManagementDraws keeps only the PMI Lighthouse draw payees", async () => {
+    mockFetch({
+      rows: [
+        dataRow({ payoutID: "1", datePosted: "2026-08-10", contactName: "PMI Lighthouse", payoutAmount: "100.00" }),
+        dataRow({ payoutID: "2", datePosted: "2026-08-11", contactName: "PMI Lighthouse Reimbursable", payoutAmount: "50.00" }),
+        dataRow({ payoutID: "3", datePosted: "2026-08-12", contactName: "Neil Maclean", payoutAmount: "999.00" }),
+      ],
+    });
+
+    const res = await fetchManagementDraws();
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.rows.map((r) => r.payee).sort()).toEqual(["PMI Lighthouse", "PMI Lighthouse Reimbursable"]);
+    expect(res.count).toBe(2);
+    expect(res.total).toBe(150);
   });
 });

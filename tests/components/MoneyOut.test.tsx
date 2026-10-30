@@ -10,8 +10,8 @@ const ok: MoneyOutResult = {
   total: 4798.59,
   asOf: "Oct 30, 2026",
   rows: [
-    { date: "2026-08-20", payee: "Neil Maclean", payeeType: "Owner", method: "eCheck (ACH)", checkNumber: "", memo: "Owner Distribution", amount: 4484.3 },
-    { date: "2026-08-07", payee: "LIGHTHOUSE MAINTENANCE SERVICES LLC", payeeType: "Vendor", method: "Check", checkNumber: "31", memo: "", amount: 314.29 },
+    { payoutId: "p2", date: "2026-08-20", payee: "Neil Maclean", payeeType: "Owner", method: "eCheck (ACH)", checkNumber: "", memo: "Owner Distribution", amount: 4484.3 },
+    { payoutId: "p1", date: "2026-08-07", payee: "LIGHTHOUSE MAINTENANCE SERVICES LLC", payeeType: "Vendor", method: "Check", checkNumber: "31", memo: "", amount: 314.29 },
   ],
 };
 
