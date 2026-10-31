@@ -2,19 +2,26 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/format";
-import type { ManagementDrawRow, BatchSummary } from "@/lib/payout-batches";
+import {
+  summarizeByAccount,
+  type AccountTotal,
+  type BatchWithItems,
+  type ManagementDrawRow,
+} from "@/lib/payout-batches";
 
 // Rentvine Transactions tab: the management-company trust draws (PMI Lighthouse
-// + Reimbursable). Review the payments, tick the ones you're about to move from
-// trust → operating, and "lock in" a batch. Locking only records the batch
-// (keyed on Rentvine's payout id so nothing is drawn twice) — you still move the
-// money at the bank.
+// + Reimbursable). Tick the payments you're moving from trust → operating and
+// "lock in" a batch; batched payments drop off the To-draw list and live under
+// Batches, where you can drill in and pull one back out if you made a mistake.
+// Locking/removing only records the batch (keyed on Rentvine's payout id) — you
+// still move the money at the bank.
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function fmtDate(v: string): string {
+function fmtDate(v: string | null): string {
+  if (!v) return "—";
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(v);
   if (Number.isNaN(d.getTime())) return v || "—";
@@ -23,40 +30,35 @@ function fmtDate(v: string): string {
 
 export function ManagementDraws({
   initialRows,
-  recentBatches,
+  batches: initialBatches,
   asOf,
 }: {
   initialRows: ManagementDrawRow[];
-  recentBatches: BatchSummary[];
+  batches: BatchWithItems[];
   asOf: string;
 }) {
   const [rows, setRows] = useState<ManagementDrawRow[]>(initialRows);
-  const [batches, setBatches] = useState<BatchSummary[]>(recentBatches);
+  const [batches, setBatches] = useState<BatchWithItems[]>(initialBatches);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ batchId: number; count: number; total: number } | null>(null);
+  const [done, setDone] = useState<{ batchId: number; count: number; total: number; byAccount: AccountTotal[] } | null>(null);
+  const [undo, setUndo] = useState<{ amount: number; bankAccount: string; batchId: number } | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const openRows = rows.filter((r) => !r.batched);
+  const selectedRows = openRows.filter((r) => selected.has(r.payoutId));
+  const selTotal = round2(selectedRows.reduce((s, r) => s + r.amount, 0));
+  const selByAccount = summarizeByAccount(selectedRows);
+  const allOpenSelected = openRows.length > 0 && selectedRows.length === openRows.length;
 
   const stats = useMemo(() => {
-    let batchedCount = 0;
-    let batchedTotal = 0;
-    let openCount = 0;
-    let openTotal = 0;
-    for (const r of rows) {
-      if (r.batched) {
-        batchedCount++;
-        batchedTotal += r.amount;
-      } else {
-        openCount++;
-        openTotal += r.amount;
-      }
-    }
-    return { batchedCount, batchedTotal: round2(batchedTotal), openCount, openTotal: round2(openTotal) };
-  }, [rows]);
-
-  const selectedRows = rows.filter((r) => selected.has(r.payoutId) && !r.batched);
-  const selTotal = round2(selectedRows.reduce((s, r) => s + r.amount, 0));
+    const openTotal = round2(openRows.reduce((s, r) => s + r.amount, 0));
+    const batchedTotal = round2(batches.reduce((s, b) => s + b.total, 0));
+    return { openCount: openRows.length, openTotal, batchedCount: batches.reduce((s, b) => s + b.count, 0), batchedTotal };
+  }, [openRows, batches]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -66,32 +68,44 @@ export function ManagementDraws({
       return next;
     });
   }
-
+  function toggleAll() {
+    setSelected(allOpenSelected ? new Set() : new Set(openRows.map((r) => r.payoutId)));
+  }
   function start() {
     setDone(null);
+    setUndo(null);
     setError("");
     setSelecting(true);
   }
   function cancel() {
     setSelecting(false);
     setSelected(new Set());
+    setNote("");
   }
-  function selectAllOpen() {
-    setSelected(new Set(rows.filter((r) => !r.batched).map((r) => r.payoutId)));
+  function toggleExpand(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   async function lockIn() {
     if (selectedRows.length === 0) return;
     setSaving(true);
     setError("");
+    const picked = selectedRows;
     try {
       const res = await fetch("/api/accounting/payout-batches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: selectedRows.map((r) => ({
+          note: note.trim() || undefined,
+          items: picked.map((r) => ({
             payoutId: r.payoutId,
             payee: r.payee,
+            bankAccount: r.bankAccount,
             postedDate: r.date,
             memo: r.memo,
             amount: r.amount,
@@ -101,22 +115,61 @@ export function ManagementDraws({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't lock the batch.");
 
-      const ids = new Set(selectedRows.map((r) => r.payoutId));
+      const ids = new Set(picked.map((r) => r.payoutId));
       const stamp = new Date().toISOString();
-      setRows((prev) =>
-        prev.map((r) => (ids.has(r.payoutId) ? { ...r, batched: true, batchId: data.batchId, batchedAt: stamp } : r))
-      );
+      setRows((prev) => prev.map((r) => (ids.has(r.payoutId) ? { ...r, batched: true, batchId: data.batchId, batchedAt: stamp } : r)));
       setBatches((prev) => [
-        { id: data.batchId, createdAt: stamp, createdBy: "", note: "", count: data.count, total: data.total },
+        {
+          id: data.batchId,
+          createdAt: stamp,
+          createdBy: "",
+          note: note.trim(),
+          count: data.count,
+          total: data.total,
+          items: picked.map((r) => ({ payoutId: r.payoutId, payee: r.payee, bankAccount: r.bankAccount, memo: r.memo, postedDate: r.date, amount: r.amount })),
+        },
         ...prev,
       ]);
-      setDone({ batchId: data.batchId, count: data.count, total: data.total });
+      setDone({ batchId: data.batchId, count: data.count, total: data.total, byAccount: summarizeByAccount(picked) });
+      setExpanded((prev) => new Set(prev).add(data.batchId));
       setSelecting(false);
       setSelected(new Set());
+      setNote("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't lock the batch.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeItem(payoutId: string) {
+    setError("");
+    try {
+      const res = await fetch("/api/accounting/payout-batches/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payoutId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.removed) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't remove it.");
+
+      const { amount, bankAccount, batchId } = data.removed as { amount: number; bankAccount: string; batchId: number };
+      setUndo({ amount, bankAccount, batchId });
+      setDone(null);
+      // Drop the item from its batch (or the whole batch if it's now empty).
+      setBatches((prev) =>
+        prev
+          .map((b) => {
+            if (b.id !== batchId) return b;
+            const items = b.items.filter((i) => i.payoutId !== payoutId);
+            return { ...b, items, count: items.length, total: round2(b.total - amount) };
+          })
+          .filter((b) => !(b.id === batchId && data.batchEmptied))
+      );
+      // The payment returns to the To-draw list (if it's still in the window).
+      setRows((prev) => prev.map((r) => (r.payoutId === payoutId ? { ...r, batched: false, batchId: null, batchedAt: null } : r)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't remove it.");
     }
   }
 
@@ -130,112 +183,113 @@ export function ManagementDraws({
         {asOf && <span className="text-xs text-slate-400">As of {asOf}</span>}
       </div>
 
-      {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile label="To draw" value={formatCurrency(stats.openTotal)} hint={`${stats.openCount} payment${stats.openCount === 1 ? "" : "s"} not yet batched`} tone={stats.openCount > 0 ? "amber" : "slate"} />
-        <Tile label="Batched" value={formatCurrency(stats.batchedTotal)} hint={`${stats.batchedCount} done`} tone="emerald" />
-        <Tile label="All draws" value={formatCurrency(round2(stats.openTotal + stats.batchedTotal))} hint={`${rows.length} total`} tone="slate" />
+        <Tile label="To draw" value={formatCurrency(stats.openTotal)} hint={`${stats.openCount} payment${stats.openCount === 1 ? "" : "s"}`} tone={stats.openCount > 0 ? "amber" : "slate"} />
+        <Tile label="Batched" value={formatCurrency(stats.batchedTotal)} hint={`${stats.batchedCount} in ${batches.length} batch${batches.length === 1 ? "" : "es"}`} tone="emerald" />
+        <Tile label="All draws" value={formatCurrency(round2(stats.openTotal + stats.batchedTotal))} hint="trust → operating" tone="slate" />
       </div>
 
       {done && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <div className="font-semibold">
-            ✓ Batch #{done.batchId} locked — {formatCurrency(done.total)} across {done.count} payment
-            {done.count === 1 ? "" : "s"}.
+            ✓ Batch #{done.batchId} locked — {formatCurrency(done.total)} across {done.count} payment{done.count === 1 ? "" : "s"}.
           </div>
-          <div className="mt-1">
-            Now go to the bank and move <span className="font-semibold">{formatCurrency(done.total)}</span> from the{" "}
-            <span className="font-semibold">Trust</span> account to <span className="font-semibold">Operating</span>.
-          </div>
+          <div className="mt-1">Now move the money to <span className="font-semibold">Operating</span> at the bank:</div>
+          <ul className="mt-1 space-y-0.5">
+            {done.byAccount.map((a) => (
+              <li key={a.account}>
+                <span className="font-semibold">{formatCurrency(a.total)}</span> from {a.account}{" "}
+                <span className="text-emerald-700/70">({a.count} payment{a.count === 1 ? "" : "s"})</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
-      {error && (
-        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      {undo && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Pulled a payment back out of batch #{undo.batchId}. If you&apos;d already moved the money, move{" "}
+          <span className="font-semibold">{formatCurrency(undo.amount)}</span> back from{" "}
+          <span className="font-semibold">Operating</span> to{" "}
+          <span className="font-semibold">{undo.bankAccount || "Trust"}</span>.
+        </div>
       )}
+
+      {error && <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {/* Action bar */}
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         {!selecting ? (
-          <button
-            type="button"
-            onClick={start}
-            disabled={stats.openCount === 0}
-            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
-          >
+          <button type="button" onClick={start} disabled={stats.openCount === 0} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
             Pay the management company
           </button>
         ) : (
           <>
-            <span className="font-medium text-slate-700">
-              {selectedRows.length} selected · {formatCurrency(selTotal)}
-            </span>
-            <button type="button" onClick={selectAllOpen} className={BTN}>
-              Select all to-draw
-            </button>
-            <button
-              type="button"
-              onClick={lockIn}
-              disabled={saving || selectedRows.length === 0}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
-            >
+            <span className="font-medium text-slate-700">{selectedRows.length} selected · {formatCurrency(selTotal)}</span>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Batch note (optional)"
+              aria-label="Batch note"
+              className="w-48 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-brand-500"
+            />
+            <button type="button" onClick={lockIn} disabled={saving || selectedRows.length === 0} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
               {saving ? "Locking…" : "Lock in batch"}
             </button>
-            <button type="button" onClick={cancel} className="ml-auto text-xs text-slate-500 hover:text-slate-700">
-              Cancel
-            </button>
+            <button type="button" onClick={cancel} className="ml-auto text-xs text-slate-500 hover:text-slate-700">Cancel</button>
           </>
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {selecting && selByAccount.length > 0 && (
+        <p className="mb-3 -mt-1 text-xs text-slate-500">
+          From: {selByAccount.map((a) => `${a.account} ${formatCurrency(a.total)}`).join(" · ")}
+        </p>
+      )}
+
+      {openRows.length === 0 ? (
         <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-          No management-company payments in the last 90 days.
+          Nothing left to draw — every management-company payment in the last 90 days is batched.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                {selecting && <th className="w-8 px-3 py-2" />}
+                {selecting && (
+                  <th className="w-8 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="select-all"
+                      checked={allOpenSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = selectedRows.length > 0 && selectedRows.length < openRows.length;
+                      }}
+                      onChange={toggleAll}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">Payee</th>
+                <th className="px-3 py-2 font-medium">Account</th>
                 <th className="px-3 py-2 font-medium">Memo</th>
                 <th className="px-3 py-2 text-right font-medium">Amount</th>
-                <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((r) => (
+              {openRows.map((r) => (
                 <tr key={r.payoutId} className={`align-top ${selected.has(r.payoutId) ? "bg-brand-50" : ""}`}>
                   {selecting && (
                     <td className="px-3 py-2">
-                      {!r.batched && (
-                        <input
-                          type="checkbox"
-                          aria-label={`select-${r.payoutId}`}
-                          checked={selected.has(r.payoutId)}
-                          onChange={() => toggle(r.payoutId)}
-                          className="h-4 w-4 accent-brand-500"
-                        />
-                      )}
+                      <input type="checkbox" aria-label={`select-${r.payoutId}`} checked={selected.has(r.payoutId)} onChange={() => toggle(r.payoutId)} className="h-4 w-4 accent-brand-500" />
                     </td>
                   )}
                   <td className="whitespace-nowrap px-3 py-2 text-slate-500">{fmtDate(r.date)}</td>
                   <td className="px-3 py-2 text-slate-800">{r.payee || "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.bankAccount || "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{r.memo || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">
-                    {formatCurrency(r.amount)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    {r.batched ? (
-                      <span className="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-                        Batched · #{r.batchId}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">To draw</span>
-                    )}
-                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatCurrency(r.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -245,39 +299,74 @@ export function ManagementDraws({
 
       {batches.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Recent batches</h2>
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Batch</th>
-                  <th className="px-3 py-2 font-medium">When</th>
-                  <th className="px-3 py-2 text-right font-medium">Payments</th>
-                  <th className="px-3 py-2 text-right font-medium">Total moved</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {batches.map((b) => (
-                  <tr key={b.id}>
-                    <td className="px-3 py-2 font-medium text-slate-700">#{b.id}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-500">{fmtDate(b.createdAt)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{b.count}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">
-                      {formatCurrency(b.total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Batches</h2>
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {batches.map((b) => {
+              const open = expanded.has(b.id);
+              return (
+                <div key={b.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(b.id)}
+                    aria-label={`batch-${b.id}`}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                  >
+                    <span className="text-slate-400">{open ? "▾" : "▸"}</span>
+                    <span className="font-medium text-slate-700">#{b.id}</span>
+                    <span className="text-slate-500">{fmtDate(b.createdAt)}</span>
+                    {b.note && <span className="truncate text-slate-500">— {b.note}</span>}
+                    <span className="ml-auto whitespace-nowrap text-slate-500">{b.count} payment{b.count === 1 ? "" : "s"}</span>
+                    <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrency(b.total)}</span>
+                  </button>
+                  {open && (
+                    <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50 px-3 py-2">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                          <tr>
+                            <th className="py-1 pr-3 font-medium">Payee</th>
+                            <th className="py-1 pr-3 font-medium">Account</th>
+                            <th className="py-1 pr-3 font-medium">Memo</th>
+                            <th className="py-1 pr-3 text-right font-medium">Amount</th>
+                            <th className="py-1" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {b.items.map((it) => (
+                            <tr key={it.payoutId} className="align-top">
+                              <td className="py-1 pr-3 text-slate-700">{it.payee || "—"}</td>
+                              <td className="whitespace-nowrap py-1 pr-3 text-slate-600">{it.bankAccount || "—"}</td>
+                              <td className="py-1 pr-3 text-slate-600">{it.memo || "—"}</td>
+                              <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-slate-800">{formatCurrency(it.amount)}</td>
+                              <td className="py-1 text-right">
+                                <button
+                                  type="button"
+                                  aria-label={`remove-${it.payoutId}`}
+                                  onClick={() => removeItem(it.payoutId)}
+                                  className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-red-400 hover:text-red-600"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {b.items.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="py-2 text-center text-xs text-slate-400">No payments in this batch.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
     </div>
   );
 }
-
-const BTN =
-  "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
 
 const TILE_TONES: Record<string, string> = {
   emerald: "text-emerald-700",
