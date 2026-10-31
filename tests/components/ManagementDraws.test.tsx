@@ -18,6 +18,8 @@ const batches: BatchWithItems[] = [
     note: "July draw",
     count: 1,
     total: 999,
+    confirmed: true, // already confirmed → screen not locked
+    confirmedAt: "2026-08-03T00:00:00Z",
     items: [{ payoutId: "c", payee: "PMI Lighthouse", bankAccount: "Residential Trust", memo: "old", postedDate: "2026-08-01", amount: 999 }],
   },
 ];
@@ -79,6 +81,29 @@ describe("ManagementDraws", () => {
     expect(await screen.findByText(/Batch #5 locked/)).toBeInTheDocument();
     expect(screen.getByText(/from Residential Trust/)).toBeInTheDocument();
     expect(screen.getByText(/from Security Deposit/)).toBeInTheDocument();
+  });
+
+  it("locks the screen while a batch is unconfirmed, allows only remove, and unlocks on confirm", async () => {
+    const pending: BatchWithItems[] = [
+      { id: 7, createdAt: "2026-08-20T00:00:00Z", createdBy: "", note: "", count: 1, total: 100, confirmed: false, confirmedAt: null, items: [{ payoutId: "a", payee: "PMI Lighthouse", bankAccount: "Residential Trust", memo: "fees", postedDate: "2026-08-10", amount: 100 }] },
+    ];
+    const user = userEvent.setup();
+    render(<ManagementDraws initialRows={[rows[1]]} batches={pending} asOf="" />); // one open row so "Pay" could be enabled
+
+    // Locked: can't start a new batch; told the screen is locked.
+    expect(screen.getByRole("button", { name: /pay the management company/i })).toBeDisabled();
+    expect(screen.getByText(/this screen is locked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Batch #7 locked/)).toBeInTheDocument();
+
+    // But you can still drill in and remove a payment from the pending batch.
+    await user.click(screen.getByLabelText("batch-7"));
+    expect(screen.getByLabelText("remove-a")).toBeInTheDocument();
+
+    // Confirming the money moved unlocks the screen.
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, batchId: 7 }) });
+    await user.click(screen.getByRole("button", { name: /confirm money moved/i }));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/accounting/payout-batches/confirm");
+    expect(await screen.findByRole("button", { name: /pay the management company/i })).not.toBeDisabled();
   });
 
   it("drills into a batch and pulls an item back out, telling you to move it back", async () => {

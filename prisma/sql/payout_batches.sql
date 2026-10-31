@@ -19,8 +19,14 @@ CREATE TABLE IF NOT EXISTS payout_batches (
     created_by   TEXT,                       -- email / 'operator'
     note         TEXT,
     item_count   INT NOT NULL DEFAULT 0,
-    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0
+    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+    confirmed_at TIMESTAMPTZ,                 -- when the bank transfer was confirmed (null = pending; locks the screen)
+    confirmed_by TEXT
 );
+
+-- Additive for tables created before the confirmation gate.
+ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_by TEXT;
 
 -- One row per payment that's been batched, keyed on Rentvine's payoutID so a
 -- payment can only ever land in one batch. Amount/payee/etc. are snapshotted at
