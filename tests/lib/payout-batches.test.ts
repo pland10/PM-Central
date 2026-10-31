@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { createPayoutBatch, mergeBatched, removeBatchItem, summarizeByAccount } from "@/lib/payout-batches";
+import { confirmPayoutBatch, createPayoutBatch, mergeBatched, removeBatchItem, summarizeByAccount } from "@/lib/payout-batches";
 import type { MoneyOutRow } from "@/lib/accounting";
 import { sqlOf } from "../helpers/sql";
 
@@ -111,6 +111,21 @@ function fakeRemovePrisma(opts: { found?: { batch_id: number; amount: number; ba
   const prisma = { $executeRaw: executeRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0), $queryRaw: queryRaw } as unknown as PrismaClient;
   return { prisma, executeRaw };
 }
+
+describe("confirmPayoutBatch", () => {
+  it("stamps confirmed_at only while still pending, reporting whether it changed a row", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const prisma = { $executeRaw: executeRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0) } as unknown as PrismaClient;
+
+    expect(await confirmPayoutBatch(prisma, 7, "admin@pmi.com")).toBe(true);
+    const sql = sqlOf(executeRaw.mock.calls[0][0]);
+    expect(sql).toMatch(/UPDATE payout_batches SET confirmed_at = now\(\)/);
+    expect(sql).toMatch(/confirmed_at IS NULL/); // no-op if already confirmed
+
+    executeRaw.mockResolvedValue(0);
+    expect(await confirmPayoutBatch(prisma, 7, "admin@pmi.com")).toBe(false);
+  });
+});
 
 describe("removeBatchItem", () => {
   it("deletes the item and drops the batch when it's now empty", async () => {

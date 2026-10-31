@@ -9,7 +9,10 @@ import type { MoneyOutRow } from "@/lib/accounting";
 const DDL = [
   `CREATE TABLE IF NOT EXISTS payout_batches (
     id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), created_by TEXT,
-    note TEXT, item_count INT NOT NULL DEFAULT 0, total_amount NUMERIC(14,2) NOT NULL DEFAULT 0)`,
+    note TEXT, item_count INT NOT NULL DEFAULT 0, total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+    confirmed_at TIMESTAMPTZ, confirmed_by TEXT)`,
+  `ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ`, // for tables created before confirmation
+  `ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_by TEXT`,
   `CREATE TABLE IF NOT EXISTS payout_batch_items (
     payout_id TEXT PRIMARY KEY, batch_id INT NOT NULL, payee TEXT, bank_account TEXT, posted_date DATE, memo TEXT,
     amount NUMERIC(14,2) NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), created_by TEXT)`,
@@ -169,6 +172,8 @@ export type BatchSummary = {
   note: string;
   count: number;
   total: number;
+  confirmed: boolean; // the money was actually moved at the bank
+  confirmedAt: string | null;
 };
 
 export type BatchLineItem = {
@@ -187,8 +192,8 @@ export async function listBatchesWithItems(prisma: PrismaClient, limit = 20): Pr
   try {
     await ensurePayoutBatchTables(prisma);
     const heads = await prisma.$queryRaw<
-      { id: number; created_at: Date; created_by: string | null; note: string | null; item_count: number; total_amount: Prisma.Decimal | number }[]
-    >(Prisma.sql`SELECT id, created_at, created_by, note, item_count, total_amount FROM payout_batches ORDER BY id DESC LIMIT ${limit}`);
+      { id: number; created_at: Date; created_by: string | null; note: string | null; item_count: number; total_amount: Prisma.Decimal | number; confirmed_at: Date | null }[]
+    >(Prisma.sql`SELECT id, created_at, created_by, note, item_count, total_amount, confirmed_at FROM payout_batches ORDER BY id DESC LIMIT ${limit}`);
     if (heads.length === 0) return [];
 
     const items = await prisma.$queryRaw<
@@ -219,11 +224,23 @@ export async function listBatchesWithItems(prisma: PrismaClient, limit = 20): Pr
       note: h.note ?? "",
       count: h.item_count,
       total: num(h.total_amount),
+      confirmed: h.confirmed_at != null,
+      confirmedAt: h.confirmed_at ? h.confirmed_at.toISOString() : null,
       items: byBatch.get(h.id) ?? [],
     }));
   } catch {
     return [];
   }
+}
+
+// Confirm the money for a batch actually moved at the bank. Unlocks the screen.
+// Returns false if the batch is gone or was already confirmed.
+export async function confirmPayoutBatch(prisma: PrismaClient, batchId: number, by: string | null): Promise<boolean> {
+  await ensurePayoutBatchTables(prisma);
+  const n = await prisma.$executeRaw(
+    Prisma.sql`UPDATE payout_batches SET confirmed_at = now(), confirmed_by = ${by} WHERE id = ${batchId} AND confirmed_at IS NULL`
+  );
+  return n > 0;
 }
 
 export type RemoveResult = {
