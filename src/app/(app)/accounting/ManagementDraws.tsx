@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/format";
 import {
   summarizeByAccount,
-  type AccountTotal,
   type BatchWithItems,
   type ManagementDrawRow,
 } from "@/lib/payout-batches";
@@ -43,10 +42,16 @@ export function ManagementDraws({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ batchId: number; count: number; total: number; byAccount: AccountTotal[] } | null>(null);
   const [undo, setUndo] = useState<{ amount: number; bankAccount: string; batchId: number } | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  // A batch whose money hasn't been confirmed moved yet locks the screen: the
+  // only thing allowed is removing a payment from that batch, until you confirm.
+  const pending = batches.find((b) => !b.confirmed) ?? null;
+  const locked = !!pending;
+  const pendingByAccount = pending ? summarizeByAccount(pending.items) : [];
 
   const openRows = rows.filter((r) => !r.batched);
   const selectedRows = openRows.filter((r) => selected.has(r.payoutId));
@@ -72,7 +77,7 @@ export function ManagementDraws({
     setSelected(allOpenSelected ? new Set() : new Set(openRows.map((r) => r.payoutId)));
   }
   function start() {
-    setDone(null);
+    if (locked) return;
     setUndo(null);
     setError("");
     setSelecting(true);
@@ -126,11 +131,13 @@ export function ManagementDraws({
           note: note.trim(),
           count: data.count,
           total: data.total,
+          confirmed: false,
+          confirmedAt: null,
           items: picked.map((r) => ({ payoutId: r.payoutId, payee: r.payee, bankAccount: r.bankAccount, memo: r.memo, postedDate: r.date, amount: r.amount })),
         },
         ...prev,
       ]);
-      setDone({ batchId: data.batchId, count: data.count, total: data.total, byAccount: summarizeByAccount(picked) });
+      setUndo(null);
       setExpanded((prev) => new Set(prev).add(data.batchId));
       setSelecting(false);
       setSelected(new Set());
@@ -155,7 +162,6 @@ export function ManagementDraws({
 
       const { amount, bankAccount, batchId } = data.removed as { amount: number; bankAccount: string; batchId: number };
       setUndo({ amount, bankAccount, batchId });
-      setDone(null);
       // Drop the item from its batch (or the whole batch if it's now empty).
       setBatches((prev) =>
         prev
@@ -170,6 +176,26 @@ export function ManagementDraws({
       setRows((prev) => prev.map((r) => (r.payoutId === payoutId ? { ...r, batched: false, batchId: null, batchedAt: null } : r)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't remove it.");
+    }
+  }
+
+  async function confirmMoved(batchId: number) {
+    setConfirming(true);
+    setError("");
+    setUndo(null);
+    try {
+      const res = await fetch("/api/accounting/payout-batches/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't confirm.");
+      setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: true, confirmedAt: new Date().toISOString() } : b)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't confirm.");
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -189,20 +215,33 @@ export function ManagementDraws({
         <Tile label="All draws" value={formatCurrency(round2(stats.openTotal + stats.batchedTotal))} hint="trust → operating" tone="slate" />
       </div>
 
-      {done && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+      {pending && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="font-semibold">
-            ✓ Batch #{done.batchId} locked — {formatCurrency(done.total)} across {done.count} payment{done.count === 1 ? "" : "s"}.
+            Batch #{pending.id} locked — {formatCurrency(pending.total)} across {pending.count} payment{pending.count === 1 ? "" : "s"}. Move the money, then confirm.
           </div>
-          <div className="mt-1">Now move the money to <span className="font-semibold">Operating</span> at the bank:</div>
+          <div className="mt-1">Move to <span className="font-semibold">Operating</span> at the bank:</div>
           <ul className="mt-1 space-y-0.5">
-            {done.byAccount.map((a) => (
+            {pendingByAccount.map((a) => (
               <li key={a.account}>
                 <span className="font-semibold">{formatCurrency(a.total)}</span> from {a.account}{" "}
-                <span className="text-emerald-700/70">({a.count} payment{a.count === 1 ? "" : "s"})</span>
+                <span className="text-amber-700/70">({a.count} payment{a.count === 1 ? "" : "s"})</span>
               </li>
             ))}
           </ul>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => confirmMoved(pending.id)}
+              disabled={confirming}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {confirming ? "Confirming…" : "Confirm money moved"}
+            </button>
+            <span className="text-xs text-amber-800">
+              Until you confirm, this screen is locked — you can only remove a payment from the batch below.
+            </span>
+          </div>
         </div>
       )}
 
@@ -220,7 +259,7 @@ export function ManagementDraws({
       {/* Action bar */}
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         {!selecting ? (
-          <button type="button" onClick={start} disabled={stats.openCount === 0} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
+          <button type="button" onClick={start} disabled={stats.openCount === 0 || locked} title={locked ? "Confirm the pending batch first" : undefined} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
             Pay the management company
           </button>
         ) : (
