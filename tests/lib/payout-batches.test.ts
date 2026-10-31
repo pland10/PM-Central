@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { createPayoutBatch, mergeBatched } from "@/lib/payout-batches";
+import { createPayoutBatch, mergeBatched, removeBatchItem, summarizeByAccount } from "@/lib/payout-batches";
 import type { MoneyOutRow } from "@/lib/accounting";
 import { sqlOf } from "../helpers/sql";
 
@@ -8,6 +8,7 @@ afterEach(() => vi.clearAllMocks());
 
 const row = (over: Partial<MoneyOutRow>): MoneyOutRow => ({
   payoutId: "x",
+  bankAccount: "Residential Trust",
   date: "2026-08-01",
   payee: "PMI Lighthouse",
   payeeType: "Manager",
@@ -41,6 +42,22 @@ describe("mergeBatched", () => {
     const merged = mergeBatched([row({ payoutId: "a" }), row({ payoutId: "b" })], new Map([["a", { batchId: 3, batchedAt: "2026-08-02T00:00:00Z" }]]));
     expect(merged[0]).toMatchObject({ payoutId: "a", batched: true, batchId: 3 });
     expect(merged[1]).toMatchObject({ payoutId: "b", batched: false, batchId: null, batchedAt: null });
+  });
+});
+
+describe("summarizeByAccount", () => {
+  it("rolls draws up by source account, biggest first", () => {
+    const out = summarizeByAccount([
+      { bankAccount: "Residential Trust", amount: 100 },
+      { bankAccount: "Security Deposit", amount: 50 },
+      { bankAccount: "Residential Trust", amount: 25 },
+      { bankAccount: "", amount: 10 },
+    ]);
+    expect(out).toEqual([
+      { account: "Residential Trust", count: 2, total: 125 },
+      { account: "Security Deposit", count: 1, total: 50 },
+      { account: "—", count: 1, total: 10 },
+    ]);
   });
 });
 
@@ -78,5 +95,40 @@ describe("createPayoutBatch", () => {
     const res = await createPayoutBatch(prisma, []);
     expect(res).toEqual({ batchId: null, count: 0, total: 0, skipped: [] });
     expect(queryRaw).not.toHaveBeenCalled(); // never inserted a header
+  });
+});
+
+// Routes the two SELECTs removeBatchItem runs: the item lookup and the remaining
+// count/total after the delete.
+function fakeRemovePrisma(opts: { found?: { batch_id: number; amount: number; bank_account: string | null }; remaining: number; total?: number }) {
+  const executeRaw = vi.fn().mockResolvedValue(1);
+  const queryRaw = vi.fn(async (q: unknown) => {
+    const sql = sqlOf(q);
+    if (/FROM payout_batch_items WHERE payout_id/.test(sql)) return opts.found ? [opts.found] : [];
+    if (/COUNT\(\*\)/.test(sql)) return [{ n: opts.remaining, total: opts.total ?? 0 }];
+    return [];
+  });
+  const prisma = { $executeRaw: executeRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0), $queryRaw: queryRaw } as unknown as PrismaClient;
+  return { prisma, executeRaw };
+}
+
+describe("removeBatchItem", () => {
+  it("deletes the item and drops the batch when it's now empty", async () => {
+    const { prisma, executeRaw } = fakeRemovePrisma({ found: { batch_id: 7, amount: 999, bank_account: "Residential Trust" }, remaining: 0 });
+    const res = await removeBatchItem(prisma, "c");
+    expect(res).toEqual({ removed: { payoutId: "c", amount: 999, bankAccount: "Residential Trust", batchId: 7 }, batchEmptied: true });
+    expect(executeRaw.mock.calls.some((c) => /DELETE FROM payout_batches/.test(sqlOf(c[0])))).toBe(true);
+  });
+
+  it("re-totals the batch when items remain", async () => {
+    const { prisma, executeRaw } = fakeRemovePrisma({ found: { batch_id: 7, amount: 50, bank_account: "Security Deposit" }, remaining: 2, total: 150 });
+    const res = await removeBatchItem(prisma, "x");
+    expect(res.batchEmptied).toBe(false);
+    expect(executeRaw.mock.calls.some((c) => /UPDATE payout_batches SET item_count/.test(sqlOf(c[0])))).toBe(true);
+  });
+
+  it("returns removed:null when the payment isn't in a batch", async () => {
+    const { prisma } = fakeRemovePrisma({ remaining: 0 });
+    expect(await removeBatchItem(prisma, "nope")).toEqual({ removed: null, batchEmptied: false });
   });
 });

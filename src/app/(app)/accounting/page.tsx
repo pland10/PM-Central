@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { fetchManagementDraws, isRentvineConfigured } from "@/lib/accounting";
 import { prisma } from "@/lib/prisma";
-import { fetchBatchedMap, listRecentBatches, mergeBatched } from "@/lib/payout-batches";
+import { fetchBatchedMap, listBatchesWithItems, mergeBatched } from "@/lib/payout-batches";
 import { AccountingTabs } from "./AccountingTabs";
 import { ManagementDraws } from "./ManagementDraws";
 
@@ -48,11 +48,11 @@ async function RentvineTransactions() {
     );
   }
 
-  const [batched, recent] = await Promise.all([
+  const [batched, batches] = await Promise.all([
     fetchBatchedMap(prisma, draws.rows.map((r) => r.payoutId)),
-    listRecentBatches(prisma),
+    listBatchesWithItems(prisma),
   ]);
   const rows = mergeBatched(draws.rows, batched);
 
-  return <ManagementDraws initialRows={rows} recentBatches={recent} asOf={draws.asOf} />;
+  return <ManagementDraws initialRows={rows} batches={batches} asOf={draws.asOf} />;
 }

@@ -25,6 +25,7 @@ function sanitizeItems(raw: unknown): BatchItemInput[] {
       payoutId,
       amount: Number.isFinite(amount) ? amount : 0,
       payee: typeof o.payee === "string" ? o.payee.slice(0, 200) : undefined,
+      bankAccount: typeof o.bankAccount === "string" ? o.bankAccount.slice(0, 120) : undefined,
       postedDate: typeof o.postedDate === "string" ? o.postedDate.slice(0, 10) : undefined,
       memo: typeof o.memo === "string" ? o.memo.slice(0, 500) : undefined,
     });

@@ -79,6 +79,12 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
+// Rentvine names bank accounts like "Residential Trust Bank Account"; drop the
+// trailing "Bank Account" for a cleaner label.
+function cleanAccountName(v: string): string {
+  return v.replace(/\s*bank account$/i, "").trim();
+}
+
 function today(): string {
   return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -236,6 +242,7 @@ const MONEY_OUT_DAYS = 90; // default window ("last 90 days")
 
 export type MoneyOutRow = {
   payoutId: string; // Rentvine payoutID (stable key for batching)
+  bankAccount: string; // source bank account the payment was drawn from
   date: string; // datePosted, ISO (YYYY-MM-DD)
   payee: string; // who was paid
   payeeType: string; // Owner | Vendor | Manager | …
@@ -292,6 +299,7 @@ export function mapMoneyOut(rows: ReportRow[]): { rows: MoneyOutRow[]; total: nu
     total += amount;
     return {
       payoutId: str(d.payoutID),
+      bankAccount: cleanAccountName(str(d.bankAccountName)),
       date: str(d.datePosted),
       payee: str(d.contactName),
       payeeType: payeeTypeLabel(d.contactTypeID),

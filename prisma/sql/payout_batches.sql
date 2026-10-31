@@ -29,11 +29,15 @@ CREATE TABLE IF NOT EXISTS payout_batch_items (
     payout_id    TEXT PRIMARY KEY,           -- Rentvine payoutID
     batch_id     INT NOT NULL,               -- → payout_batches.id
     payee        TEXT,
+    bank_account TEXT,                        -- source account drawn from (which trust account)
     posted_date  DATE,
     memo         TEXT,
     amount       NUMERIC(14,2) NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by   TEXT
 );
+
+-- Additive for tables created before bank_account existed.
+ALTER TABLE payout_batch_items ADD COLUMN IF NOT EXISTS bank_account TEXT;
 
 CREATE INDEX IF NOT EXISTS payout_batch_items_batch_idx ON payout_batch_items (batch_id);

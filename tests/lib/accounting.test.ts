@@ -165,8 +165,8 @@ describe("money out (check register)", () => {
 
   it("maps rows (payee is contactName, id is payoutID), totals the amount, newest first", () => {
     const { rows, total } = mapMoneyOut([
-      dataRow({ payoutID: "p1", datePosted: "2026-08-07", contactName: "LIGHTHOUSE MAINTENANCE SERVICES LLC", contactTypeID: "3", payoutTypeID: "2", checkNumber: "31", memo: "", payoutAmount: "$314.29" }),
-      dataRow({ payoutID: "p2", datePosted: "2026-08-20", contactName: "Neil Maclean", contactTypeID: "1", payoutTypeID: "3", memo: "Owner Distribution", payoutAmount: "4,484.30" }),
+      dataRow({ payoutID: "p1", bankAccountName: "Security Deposit Bank Account", datePosted: "2026-08-07", contactName: "LIGHTHOUSE MAINTENANCE SERVICES LLC", contactTypeID: "3", payoutTypeID: "2", checkNumber: "31", memo: "", payoutAmount: "$314.29" }),
+      dataRow({ payoutID: "p2", bankAccountName: "Residential Trust Bank Account", datePosted: "2026-08-20", contactName: "Neil Maclean", contactTypeID: "1", payoutTypeID: "3", memo: "Owner Distribution", payoutAmount: "4,484.30" }),
       totalsRow({ payoutAmount: "4798.59" }), // ignored
     ]);
 
@@ -174,6 +174,7 @@ describe("money out (check register)", () => {
     expect(rows.map((r) => r.date)).toEqual(["2026-08-20", "2026-08-07"]); // newest first
     expect(rows[0]).toEqual({
       payoutId: "p2",
+      bankAccount: "Residential Trust", // "Bank Account" suffix trimmed
       date: "2026-08-20",
       payee: "Neil Maclean",
       payeeType: "Owner",
