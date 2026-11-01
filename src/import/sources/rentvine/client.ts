@@ -1,3 +1,4 @@
+import { fetchWithRetry, type RetryOptions } from "@/lib/http-retry";
 import type { RentvineExport, RentvineSource, RvLease, RvProperty } from "./raw";
 
 // Live Rentvine extraction, per company account.
@@ -66,10 +67,26 @@ function rvHttp(config: RentvineAccountConfig) {
   const base = `https://${config.subdomain}.rentvine.com/api/manager`;
   const auth = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString("base64");
 
-  async function rvGet(path: string): Promise<{ json: unknown; headers: Headers }> {
-    const res = await fetch(base + path, {
-      headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
-    });
+  // `retry` tunes the transient-failure retry. Core collection fetches use the
+  // default (retry hard — a 500 there should not fail the whole sync); optional
+  // per-item enrichment passes { attempts: 1 } so a blip there just skips the
+  // enrichment instead of multiplying the sync time by the backoff.
+  async function rvGet(
+    path: string,
+    retry?: RetryOptions
+  ): Promise<{ json: unknown; headers: Headers }> {
+    const res = await fetchWithRetry(
+      base + path,
+      { headers: { Accept: "application/json", Authorization: `Basic ${auth}` } },
+      {
+        onRetry: ({ attempt, delayMs, status, error }) =>
+          console.warn(
+            `Rentvine GET ${path} ${status ? `HTTP ${status}` : String(error)} — retrying ` +
+              `(attempt ${attempt}) in ${Math.round(delayMs)}ms`
+          ),
+        ...retry,
+      }
+    );
     if (!res.ok) {
       throw new Error(`Rentvine GET ${path} -> HTTP ${res.status} ${res.statusText}`);
     }
@@ -78,13 +95,13 @@ function rvHttp(config: RentvineAccountConfig) {
 
   // Page through `?page=N` until the Pagination-Total-Pages header is exhausted
   // (falling back to "stop on empty page" if the header is absent).
-  async function rvGetAll(path: string): Promise<Record<string, unknown>[]> {
+  async function rvGetAll(path: string, retry?: RetryOptions): Promise<Record<string, unknown>[]> {
     const sep = path.includes("?") ? "&" : "?";
     const rows: Record<string, unknown>[] = [];
     let page = 1;
     let totalPages = 1;
     do {
-      const { json, headers } = await rvGet(`${path}${sep}page=${page}`);
+      const { json, headers } = await rvGet(`${path}${sep}page=${page}`, retry);
       const arr = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
       rows.push(...arr);
       const tp = toNum(headers.get("Pagination-Total-Pages"));
@@ -187,7 +204,7 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
   async function loadPropertyTypeNames(): Promise<Record<string, string>> {
     for (const path of ["/property-types", "/propertyTypes"]) {
       try {
-        const rows = await rvGetAll(path);
+        const rows = await rvGetAll(path, { attempts: 1 });
         const map: Record<string, string> = {};
         for (const row of rows) {
           const t = unwrap(row, "propertyType");
@@ -214,7 +231,7 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
     const out = new Map<number, string>();
     let rows: Record<string, unknown>[];
     try {
-      rows = await rvGetAll(`/leases/${sampleLeaseId}/renewals`);
+      rows = await rvGetAll(`/leases/${sampleLeaseId}/renewals`, { attempts: 1 });
     } catch {
       return out;
     }
@@ -296,7 +313,7 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
       for (const lease of activeLeases) {
         if (lease.leaseId == null) continue;
         try {
-          const { json } = await rvGet(`/leases/${lease.leaseId}/tenants`);
+          const { json } = await rvGet(`/leases/${lease.leaseId}/tenants`, { attempts: 1 });
           const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
           const primary =
             rows.find((r) => toStr(unwrap(r, "leaseTenant").isPrimary) === "1") ?? rows[0];
