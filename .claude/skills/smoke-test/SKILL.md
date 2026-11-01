@@ -29,6 +29,24 @@ an error tile means Rentvine creds or timeout.
 - PM-Central `sync-rentvine` → `Synced "pmilighthouse" …` line.
 - leadsimple-search `health-check` (`dry_run: "false"`) → `Sent to …` line.
 
+### Retry warnings (surface even on green)
+The Rentvine (`sync-rentvine`, `sync-balances`) and Plaid (`sync-plaid`) syncs
+retry transient upstream failures (429/5xx/network) with exponential backoff
+(`src/lib/http-retry.ts`). Each retry logs a `console.warn` to the Actions log:
+
+```
+Rentvine GET /properties HTTP 500 — retrying (attempt 1) in 412ms
+Plaid /transactions/sync HTTP 503 — retrying (attempt 2) in 790ms
+```
+
+So after reading a sync run's log, also grep it for `retrying (attempt`
+(`gh run view <id> --log | grep -i "retrying (attempt"`). A **green** run that
+needed retries still points at a flaky upstream — report the count and which
+endpoint, don't fold it into "all good". A run that **failed** after exhausting
+retries means the outage outlasted the backoff (seconds), not a one-off blip:
+re-dispatch, and if it fails again it's a real Rentvine/Plaid outage or a creds
+problem, not transient.
+
 ## Order
 1. `/api/health` first — if the DB is down nothing else is meaningful.
 2. Login, then the pages tied to what changed.
@@ -36,4 +54,6 @@ an error tile means Rentvine creds or timeout.
 
 ## Report
 One line per check with its result. Anything not checked is listed as **not
-checked**, never folded into "all good".
+checked**, never folded into "all good". If a green sync logged any
+`retrying (attempt …)` lines, add a line noting the endpoint and retry count —
+a pass that needed retries is not the same as a clean pass.
