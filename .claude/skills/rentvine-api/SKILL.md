@@ -56,6 +56,16 @@ LeadSimple stage — "Estimate Requested" / "Multiple Estimates" — instead).
   the core sync corrects it and logs `[renewal] lease <id>: end A -> B`.
 - Reports split deposits into manager-held (`heldSecurityDepositBalance`) vs
   owner-held; the report total adds both and overstates PMI's trust liability.
+- Work order **assignee ≠ vendor**. The *assignee* is the internal staff member
+  who owns the WO (a Rentvine **user**/login at PMI, e.g. Jasper Jed Belen) and
+  drives it: assignment → approvals → scheduling → work → billing. The *vendor*
+  is the outside contractor who does the physical work (the `contact` wrapper on
+  `/maintenance/work-orders`); it's separate and can be empty ("No vendor
+  assigned yet") while an assignee is set. "Resolved by Agent" is a third thing —
+  whether Rentvine's Cru AI closed the WO vs a person. None of these is the
+  **LeadSimple** assignee/stage: the two systems track WO ownership
+  independently and can disagree (see the "closed in Rentvine, open in
+  LeadSimple" mismatch and the `reconcile-rentvine` skill).
 
 ## Keys
 Rentvine has **one API key per integration** (Settings → API Keys). The
