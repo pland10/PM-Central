@@ -119,7 +119,7 @@ describe("ManagementDraws", () => {
 
     // reverse instruction: move it back from Operating
     expect(await screen.findByText(/pulled a payment back out of batch #3/i)).toBeInTheDocument();
-    expect(screen.getByText("$999")).toBeInTheDocument();
+    expect(screen.getByText("$999.00")).toBeInTheDocument();
     // batch emptied → gone
     expect(screen.queryByLabelText("batch-3")).toBeNull();
   });
