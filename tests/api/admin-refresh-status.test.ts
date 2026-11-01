@@ -2,10 +2,10 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
-vi.mock("@/lib/dispatch", () => ({ latestRunState: vi.fn(), hasDispatchToken: vi.fn(() => true) }));
+vi.mock("@/lib/dispatch", () => ({ latestRunState: vi.fn(), activeRun: vi.fn(), hasDispatchToken: vi.fn(() => true) }));
 
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import { latestRunState } from "@/lib/dispatch";
+import { activeRun, latestRunState } from "@/lib/dispatch";
 import { GET } from "@/app/api/admin/refresh/status/route";
 
 const get = (qs: string) => GET(new NextRequest(`https://pmilighthouse.app/api/admin/refresh/status?${qs}`));
@@ -34,5 +34,12 @@ describe("GET /api/admin/refresh/status", () => {
     const [src, since] = vi.mocked(latestRunState).mock.calls[0];
     expect(src.id).toBe("work_orders");
     expect((since as Date).toISOString()).toBe("2026-11-01T17:00:00.000Z");
+  });
+
+  it("with active=1, reports a run already queued or running (no since needed)", async () => {
+    vi.mocked(activeRun).mockResolvedValue({ state: "running", since: "2026-11-01T17:17:27Z" });
+    const res = await get("source=work_orders&active=1");
+    expect(await res.json()).toEqual({ state: "running", since: "2026-11-01T17:17:27Z" });
+    expect(latestRunState).not.toHaveBeenCalled();
   });
 });

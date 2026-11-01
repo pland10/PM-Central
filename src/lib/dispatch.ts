@@ -65,22 +65,34 @@ export async function dispatchSources(sources: DataSource[]): Promise<DispatchRe
 }
 
 // State of the workflow run a Refresh click started, for the admin Data page.
-// "pending" until GitHub lists a manual run created at/after the click (it can
-// take a few seconds to appear); then queued → running → success/failure.
+// "pending" until GitHub lists a run created at/after the click (it can take a
+// few seconds to appear); then queued → running → success/failure. Any trigger
+// counts (a scheduled run that starts after the click refreshes the data too).
 export type RunState =
   | { state: "pending" | "queued" | "running" }
   | { state: "success" | "failure"; url: string; startedAt: string | null }
   | { state: "error"; error: string };
 
+// A run already queued or running, so the page can pick it up after a reload.
+// `since` is its creation time, to follow it with latestRunState.
+export type ActiveRun = { state: "queued" | "running"; since: string } | { state: "idle" } | { state: "error"; error: string };
+
+type GhRun = {
+  status: string; // queued | in_progress | completed | pending | waiting | requested
+  conclusion: string | null;
+  created_at: string;
+  run_started_at?: string | null;
+  html_url: string;
+};
+
 // Clock-skew allowance between our server and GitHub when matching the run.
 const SKEW_MS = 60_000;
 
-export async function latestRunState(source: DataSource, since: Date): Promise<RunState> {
+async function recentRuns(source: DataSource): Promise<GhRun[] | { error: string }> {
   const token = process.env.GITHUB_DISPATCH_TOKEN;
-  if (!token) return { state: "error", error: "GITHUB_DISPATCH_TOKEN not set." };
+  if (!token) return { error: "GITHUB_DISPATCH_TOKEN not set." };
   const { owner, repo, workflow, ref } = source.dispatch;
   const url = new URL(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/runs`);
-  url.searchParams.set("event", "workflow_dispatch");
   url.searchParams.set("branch", ref);
   url.searchParams.set("per_page", "10");
   try {
@@ -92,28 +104,34 @@ export async function latestRunState(source: DataSource, since: Date): Promise<R
       },
       cache: "no-store",
     });
-    if (!res.ok) return { state: "error", error: `GitHub HTTP ${res.status}` };
-    const body = (await res.json()) as {
-      workflow_runs?: {
-        status: string;
-        conclusion: string | null;
-        created_at: string;
-        run_started_at?: string | null;
-        html_url: string;
-      }[];
-    };
-    const after = since.getTime() - SKEW_MS;
-    const run = (body.workflow_runs ?? [])
-      .filter((r) => Date.parse(r.created_at) >= after)
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-    if (!run) return { state: "pending" };
-    if (run.status !== "completed") return { state: run.status === "in_progress" ? "running" : "queued" };
-    return {
-      state: run.conclusion === "success" ? "success" : "failure",
-      url: run.html_url,
-      startedAt: run.run_started_at ?? null,
-    };
+    if (!res.ok) return { error: `GitHub HTTP ${res.status}` };
+    const body = (await res.json()) as { workflow_runs?: GhRun[] };
+    return (body.workflow_runs ?? []).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   } catch (e) {
-    return { state: "error", error: e instanceof Error ? e.message : "Status request failed." };
+    return { error: e instanceof Error ? e.message : "Status request failed." };
   }
+}
+
+const isActive = (r: GhRun) => r.status !== "completed";
+const activeState = (r: GhRun): "queued" | "running" => (r.status === "in_progress" ? "running" : "queued");
+
+export async function latestRunState(source: DataSource, since: Date): Promise<RunState> {
+  const runs = await recentRuns(source);
+  if (!Array.isArray(runs)) return { state: "error", error: runs.error };
+  const after = since.getTime() - SKEW_MS;
+  const run = runs.find((r) => Date.parse(r.created_at) >= after);
+  if (!run) return { state: "pending" };
+  if (isActive(run)) return { state: activeState(run) };
+  return {
+    state: run.conclusion === "success" ? "success" : "failure",
+    url: run.html_url,
+    startedAt: run.run_started_at ?? null,
+  };
+}
+
+export async function activeRun(source: DataSource): Promise<ActiveRun> {
+  const runs = await recentRuns(source);
+  if (!Array.isArray(runs)) return { state: "error", error: runs.error };
+  const run = runs.find(isActive); // newest first — the last in line is the one to wait for
+  return run ? { state: activeState(run), since: run.created_at } : { state: "idle" };
 }
