@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { getDataSource } from "@/config/data-sources";
-import { latestRunState } from "@/lib/dispatch";
+import { activeRun, latestRunState } from "@/lib/dispatch";
 
-// Admin-only: how is the refresh started at `since` doing? Polled by the
-// Refresh button on the admin Data page (?source=<id>&since=<ISO time>).
+// Admin-only, polled by the Refresh button on the admin Data page:
+//   ?source=<id>&since=<ISO time> — how is the run started at `since` doing?
+//   ?source=<id>&active=1         — is a run already queued/running? (on page load)
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
   }
   const source = getDataSource(req.nextUrl.searchParams.get("source") ?? "");
   if (!source) return NextResponse.json({ error: "Unknown data source." }, { status: 400 });
+  if (req.nextUrl.searchParams.get("active") === "1") return NextResponse.json(await activeRun(source));
   const since = new Date(req.nextUrl.searchParams.get("since") ?? "");
   if (Number.isNaN(since.getTime())) return NextResponse.json({ error: "Bad since time." }, { status: 400 });
 
