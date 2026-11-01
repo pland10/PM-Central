@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Tab bar shared by the Accounting pages: Rentvine Transactions (money-out
-// payments, from Rentvine) and Bank Transactions (card/bank activity, from Plaid).
+// Tab bar shared by the Accounting pages. Bank Transactions (card/bank activity,
+// from Plaid) is the default and lives at /accounting; Rentvine Transactions
+// (money-out payments, from Rentvine) lives at /accounting/rentvine.
 const TABS = [
-  { href: "/accounting", label: "Rentvine Transactions" },
-  { href: "/accounting/transactions", label: "Bank Transactions" },
+  { href: "/accounting", label: "Bank Transactions" },
+  { href: "/accounting/rentvine", label: "Rentvine Transactions" },
 ];
 
 export function AccountingTabs() {
