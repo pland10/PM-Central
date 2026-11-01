@@ -1,3 +1,4 @@
+import { fetchWithRetry } from "@/lib/http-retry";
 import type { BalanceProvider, Balances } from "../balances";
 
 // Rentvine balance provider (REST). Pulls the "Rent Roll Outstanding Balance"
@@ -36,9 +37,17 @@ export class RentvineRestProvider implements BalanceProvider {
     const url = `${base}/reports/rent-roll?exportTypeID=1&orientation=2&showHeader=true&reportID=${reportId}`;
     const auth = Buffer.from(`${key}:${secret}`).toString("base64");
 
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
-    });
+    const res = await fetchWithRetry(
+      url,
+      { headers: { Accept: "application/json", Authorization: `Basic ${auth}` } },
+      {
+        onRetry: ({ attempt, delayMs, status, error }) =>
+          console.warn(
+            `Rentvine balance report ${status ? `HTTP ${status}` : String(error)} — retrying ` +
+              `(attempt ${attempt}) in ${Math.round(delayMs)}ms`
+          ),
+      }
+    );
     if (!res.ok) {
       throw new Error(`Rentvine report request failed: HTTP ${res.status} ${res.statusText}`);
     }

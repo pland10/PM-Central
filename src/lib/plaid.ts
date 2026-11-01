@@ -9,6 +9,8 @@
 // prisma/sql/plaid.sql). This module holds the API plumbing and the pure
 // transaction-normalizer, which is what the tests target.
 
+import { fetchWithRetry } from "@/lib/http-retry";
+
 export type PlaidRawTransaction = {
   transaction_id?: string;
   account_id?: string;
@@ -76,16 +78,26 @@ export async function plaidPost<T = Record<string, unknown>>(
   path: string,
   body: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(`${plaidBaseUrl()}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify({
-      client_id: process.env.PLAID_CLIENT_ID || "",
-      secret: process.env.PLAID_SECRET || "",
-      ...body,
-    }),
-  });
+  const res = await fetchWithRetry(
+    `${plaidBaseUrl()}${path}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        client_id: process.env.PLAID_CLIENT_ID || "",
+        secret: process.env.PLAID_SECRET || "",
+        ...body,
+      }),
+    },
+    {
+      onRetry: ({ attempt, delayMs, status, error }) =>
+        console.warn(
+          `Plaid ${path} ${status ? `HTTP ${status}` : String(error)} — retrying ` +
+            `(attempt ${attempt}) in ${Math.round(delayMs)}ms`
+        ),
+    }
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     const err = new Error(`Plaid ${path} failed (HTTP ${res.status}). ${text.slice(0, 300)}`);
