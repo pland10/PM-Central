@@ -5,16 +5,20 @@ import { useRouter } from "next/navigation";
 
 // Refresh = dispatch the source's GitHub Actions workflow, then follow that run:
 // Queued… → Running… m:ss → Done ✓ (and reload the page so "Last refreshed"
-// updates) or Failed (linking to the run's log).
+// updates) or Failed (linking to the run's log). On page load it also picks up
+// a run that's already queued/running (scheduled, or clicked before a reload).
 type Phase =
   | { kind: "idle" }
   | { kind: "starting" }
-  | { kind: "waiting"; label: "Starting…" | "Queued…" | "Running…" }
+  | { kind: "waiting"; label: "Starting…" | "Queued — waiting for the current run" | "Running…" }
   | { kind: "done" }
   | { kind: "failed"; url?: string }
   | { kind: "error"; msg: string };
 
 const GIVE_UP_MS = 20 * 60_000; // stop watching after 20 minutes
+
+const labelFor = (state: "pending" | "queued" | "running") =>
+  state === "running" ? "Running…" : state === "queued" ? "Queued — waiting for the current run" : "Starting…";
 
 export function RefreshButton({
   source,
@@ -38,6 +42,27 @@ export function RefreshButton({
   };
   useEffect(() => stop, []);
 
+  // Pick up a run that's already going (survives a page reload).
+  useEffect(() => {
+    if (disabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/refresh/status?source=${encodeURIComponent(source)}&active=1`);
+        const a = await res.json().catch(() => ({}));
+        if (!cancelled && (a.state === "queued" || a.state === "running") && a.since) {
+          follow(a.since, a.state, Date.parse(a.since));
+        }
+      } catch {
+        /* nothing to resume */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, disabled]);
+
   async function run() {
     stop();
     setPhase({ kind: "starting" });
@@ -58,9 +83,14 @@ export function RefreshButton({
       return;
     }
 
-    const startedAt = Date.now();
-    setElapsed(0);
-    setPhase({ kind: "waiting", label: "Starting…" });
+    follow(since, "pending", Date.now());
+  }
+
+  // Poll the run created at/after `since` until it finishes.
+  function follow(since: string, initial: "pending" | "queued" | "running", startedAt: number) {
+    stop();
+    setElapsed(Date.now() - startedAt);
+    setPhase({ kind: "waiting", label: labelFor(initial) });
     ticker.current = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
 
     const poll = async () => {
@@ -78,8 +108,7 @@ export function RefreshButton({
           setPhase({ kind: "failed", url: s.url });
           return;
         }
-        if (s.state === "queued") setPhase({ kind: "waiting", label: "Queued…" });
-        if (s.state === "running") setPhase({ kind: "waiting", label: "Running…" });
+        if (s.state === "queued" || s.state === "running") setPhase({ kind: "waiting", label: labelFor(s.state) });
       } catch {
         /* transient — keep polling */
       }
