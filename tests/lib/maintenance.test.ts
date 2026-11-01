@@ -70,9 +70,9 @@ describe("attentionReason", () => {
   it("flags a work order Rentvine already completed or cancelled, ahead of everything else", () => {
     expect(attentionReason(wo({ rvStatus: "Completed", dueAt: daysAgo(40) }), NOW)).toEqual({
       kind: "rvClosed",
-      label: "Completed in Rentvine",
+      label: "Completed in Rentvine · open in LeadSimple",
     });
-    expect(attentionReason(wo({ rvStatus: "Cancelled" }), NOW)?.label).toBe("Cancelled in Rentvine");
+    expect(attentionReason(wo({ rvStatus: "Cancelled" }), NOW)?.label).toBe("Cancelled in Rentvine · open in LeadSimple");
   });
 
   it("does not treat Rentvine Open or Pending Closure as closed", () => {

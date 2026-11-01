@@ -47,10 +47,11 @@ const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, estimates: 1, ov
 // doesn't (or it's closed).
 export function attentionReason(r: WorkOrderRow, now: number): AttentionReason | null {
   if (r.terminal) return null;
-  // Done in Rentvine but still open in LeadSimple: a cleanup item — close it in
-  // LeadSimple rather than chase it, so it outranks Overdue/Stalled.
+  // Closed in Rentvine but still open in LeadSimple: the two systems disagree, so
+  // one needs fixing (close it in LeadSimple, or reopen it in Rentvine). The label
+  // names both sides; it outranks Overdue/Stalled.
   if (/^(completed|cancell?ed|canceled)$/i.test(r.rvStatus.trim())) {
-    return { kind: "rvClosed", label: `${r.rvStatus.trim()} in Rentvine` };
+    return { kind: "rvClosed", label: `${r.rvStatus.trim()} in Rentvine · open in LeadSimple` };
   }
   const last = ms(lastActivityAt(r));
   if (/estimate/i.test(r.stage) && last != null && last < now - ESTIMATE_WAIT_DAYS * DAY) {

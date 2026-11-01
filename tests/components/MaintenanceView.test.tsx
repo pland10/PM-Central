@@ -94,7 +94,7 @@ describe("MaintenanceView", () => {
 
     await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "rvClosed");
     expect(firstCells()).toEqual(["105"]);
-    expect(within(within(attention()).getByRole("table")).getByText("Completed in Rentvine")).toBeTruthy();
+    expect(within(within(attention()).getByRole("table")).getByText("Completed in Rentvine · open in LeadSimple")).toBeTruthy();
   });
 
   it("defaults the full list to open work orders and can show completed ones", async () => {

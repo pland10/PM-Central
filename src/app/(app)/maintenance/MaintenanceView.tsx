@@ -312,7 +312,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       key: "reason",
       label: "Reason",
       options: [
-        { value: "rvClosed", label: "Closed in Rentvine" },
+        { value: "rvClosed", label: "Closed in Rentvine, open in LeadSimple" },
         { value: "estimates", label: "Waiting on estimates" },
         { value: "overdue", label: "Overdue" },
         { value: "high", label: "High priority" },
