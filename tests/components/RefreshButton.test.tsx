@@ -65,7 +65,10 @@ describe("RefreshButton", () => {
   });
 
   it("after a reload, picks up a run that's already going and follows it to done", async () => {
-    active = { state: "running", since: "2026-11-01T17:17:27Z" };
+    // A recent start — a hardcoded wall-clock time would age past the
+    // component's 20-minute GIVE_UP_MS and make this test fail by the clock.
+    const since = new Date(Date.now() - 5_000).toISOString();
+    active = { state: "running", since };
     states = [{ state: "running" }, { state: "success" }];
     render(<RefreshButton source="work_orders" pollMs={5} />);
 
@@ -73,13 +76,22 @@ describe("RefreshButton", () => {
     expect(await screen.findByText(/done/i)).toBeTruthy();
     expect(refresh).toHaveBeenCalled();
     const follow = fetchMock.mock.calls.map((c) => String(c[0])).find((u) => u.includes("since="))!;
-    expect(new URL(follow, "https://x").searchParams.get("since")).toBe("2026-11-01T17:17:27Z");
+    expect(new URL(follow, "https://x").searchParams.get("since")).toBe(since);
   });
 
   it("explains a queued run is waiting for the current one", async () => {
-    active = { state: "queued", since: "2026-11-01T17:20:28Z" };
+    const since = new Date(Date.now() - 5_000).toISOString();
+    active = { state: "queued", since };
     states = [{ state: "queued" }, { state: "queued" }];
     render(<RefreshButton source="work_orders" pollMs={50} />);
     expect(await screen.findByText(/queued — waiting for the current run/i)).toBeTruthy();
+  });
+
+  it("keeps following a picked-up run even if it was created long ago (give-up counts from when watching began)", async () => {
+    active = { state: "running", since: new Date(Date.now() - 2 * 60 * 60_000).toISOString() }; // 2 hours old
+    states = [{ state: "running" }, { state: "success" }];
+    render(<RefreshButton source="work_orders" pollMs={5} />);
+    expect(await screen.findByText(/done/i)).toBeTruthy();
+    expect(screen.queryByText(/check back later/i)).toBeNull();
   });
 });
