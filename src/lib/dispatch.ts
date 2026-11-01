@@ -63,3 +63,57 @@ export async function dispatchSources(sources: DataSource[]): Promise<DispatchRe
   }
   return Promise.all([...byWorkflow.values()].map(dispatchSource));
 }
+
+// State of the workflow run a Refresh click started, for the admin Data page.
+// "pending" until GitHub lists a manual run created at/after the click (it can
+// take a few seconds to appear); then queued → running → success/failure.
+export type RunState =
+  | { state: "pending" | "queued" | "running" }
+  | { state: "success" | "failure"; url: string; startedAt: string | null }
+  | { state: "error"; error: string };
+
+// Clock-skew allowance between our server and GitHub when matching the run.
+const SKEW_MS = 60_000;
+
+export async function latestRunState(source: DataSource, since: Date): Promise<RunState> {
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) return { state: "error", error: "GITHUB_DISPATCH_TOKEN not set." };
+  const { owner, repo, workflow, ref } = source.dispatch;
+  const url = new URL(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/runs`);
+  url.searchParams.set("event", "workflow_dispatch");
+  url.searchParams.set("branch", ref);
+  url.searchParams.set("per_page", "10");
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return { state: "error", error: `GitHub HTTP ${res.status}` };
+    const body = (await res.json()) as {
+      workflow_runs?: {
+        status: string;
+        conclusion: string | null;
+        created_at: string;
+        run_started_at?: string | null;
+        html_url: string;
+      }[];
+    };
+    const after = since.getTime() - SKEW_MS;
+    const run = (body.workflow_runs ?? [])
+      .filter((r) => Date.parse(r.created_at) >= after)
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+    if (!run) return { state: "pending" };
+    if (run.status !== "completed") return { state: run.status === "in_progress" ? "running" : "queued" };
+    return {
+      state: run.conclusion === "success" ? "success" : "failure",
+      url: run.html_url,
+      startedAt: run.run_started_at ?? null,
+    };
+  } catch (e) {
+    return { state: "error", error: e instanceof Error ? e.message : "Status request failed." };
+  }
+}
