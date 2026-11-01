@@ -27,6 +27,17 @@ function shortWhen(iso: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// "Oct 14, 2026" in Eastern time (fixed zone, so server and browser agree).
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+
 function priorityBadge(priority: string) {
   if (!priority) return <span className="text-slate-300">—</span>;
   const styles: Record<string, string> = {
@@ -149,19 +160,40 @@ export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?:
         ),
     },
     {
+      key: "submitted",
+      header: "Submitted",
+      sortable: true,
+      sortValue: (r) => r.createdAt ?? "",
+      exportValue: (r) => fmtDate(r.createdAt),
+      render: (r) =>
+        r.createdAt ? (
+          <span className="whitespace-nowrap text-slate-600">{fmtDate(r.createdAt)}</span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
+    },
+    {
       key: "lastUpdate",
       header: "Latest update",
       sortable: true,
-      // Most recent update first; WOs with no update sort last (empty string).
-      sortValue: (r) => r.lastUpdateAt ?? "",
-      filter: { type: "text", value: (r) => r.lastUpdate },
+      // Most recent first: the Rentvine note's time, else LeadSimple's last change.
+      sortValue: (r) => r.lastUpdateAt ?? r.updatedAt ?? "",
+      filter: { type: "text", value: (r) => r.lastUpdate || (r.updatedAt ? "Updated in LeadSimple" : "") },
+      exportValue: (r) => r.lastUpdate || (r.updatedAt ? `Updated in LeadSimple ${fmtDate(r.updatedAt)}` : ""),
       render: (r) =>
+        // The Rentvine work-order chat note when there is one (rarely used), else
+        // when the LeadSimple record last changed (stage moves, edits).
         r.lastUpdate ? (
           <div className="max-w-[260px]">
             <div className="truncate text-slate-700" title={r.lastUpdate}>
               {r.lastUpdate}
             </div>
             <div className="text-xs text-slate-400">{shortWhen(r.lastUpdateAt)}</div>
+          </div>
+        ) : r.updatedAt ? (
+          <div className="leading-tight">
+            <div className="text-slate-500">Updated in LeadSimple</div>
+            <div className="text-xs text-slate-400">{fmtDate(r.updatedAt)}</div>
           </div>
         ) : (
           <span className="text-slate-300">—</span>
