@@ -6,7 +6,7 @@ import type { CategoryUsage } from "@/lib/transaction-categories";
 import { TransactionCategoriesManager } from "./TransactionCategoriesManager";
 
 // Admin → Transaction categories: the shared list behind "Category (yours)" on
-// Accounting → Transactions — usage counts, look-alike flags, merge/delete,
+// Accounting → Bank Transactions — usage counts, look-alike flags, merge/delete,
 // and the open/locked switch.
 export const dynamic = "force-dynamic";
 
@@ -28,8 +28,8 @@ export default async function TransactionCategoriesPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Transaction categories</h1>
         <p className="mt-1 text-sm text-slate-500">
           The list behind “Category (yours)” on{" "}
-          <Link href="/accounting/transactions" className="font-medium text-brand-600 hover:underline">
-            Accounting → Transactions
+          <Link href="/accounting" className="font-medium text-brand-600 hover:underline">
+            Accounting → Bank Transactions
           </Link>
           . Typing a look-alike of a listed category (e.g. “pay roll” for “Payroll”) saves under the
           listed spelling. Merge duplicates to move their transactions to the right name.

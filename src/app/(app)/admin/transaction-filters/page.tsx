@@ -5,7 +5,7 @@ import { listHideRulesSafe } from "@/lib/transaction-filters-db";
 import { TransactionFiltersManager } from "./TransactionFiltersManager";
 
 // Admin → Transaction filters: patterns (e.g. *CSG FORTE*) whose matching
-// card/bank transactions are hidden from Accounting → Transactions.
+// card/bank transactions are hidden from Accounting → Bank Transactions.
 export const dynamic = "force-dynamic";
 
 export default async function TransactionFiltersPage() {
@@ -19,8 +19,8 @@ export default async function TransactionFiltersPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Transaction filters</h1>
         <p className="mt-1 text-sm text-slate-500">
           Transactions whose description or merchant match a filter are hidden from{" "}
-          <Link href="/accounting/transactions" className="font-medium text-brand-600 hover:underline">
-            Accounting → Transactions
+          <Link href="/accounting" className="font-medium text-brand-600 hover:underline">
+            Accounting → Bank Transactions
           </Link>{" "}
           and left out of its totals. Use <code>*</code> as a wildcard (e.g. <code>*CSG FORTE*</code>);
           text without <code>*</code> matches anywhere. Not case-sensitive. Removing a filter brings
