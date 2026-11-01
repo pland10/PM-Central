@@ -87,8 +87,11 @@ export function RefreshButton({
   }
 
   // Poll the run created at/after `since` until it finishes.
+  // `startedAt` drives the m:ss shown (when the run began); the give-up limit
+  // counts from now, when this page started watching it.
   function follow(since: string, initial: "pending" | "queued" | "running", startedAt: number) {
     stop();
+    const watchingSince = Date.now();
     setElapsed(Date.now() - startedAt);
     setPhase({ kind: "waiting", label: labelFor(initial) });
     ticker.current = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
@@ -112,7 +115,7 @@ export function RefreshButton({
       } catch {
         /* transient — keep polling */
       }
-      if (Date.now() - startedAt > GIVE_UP_MS) {
+      if (Date.now() - watchingSince > GIVE_UP_MS) {
         stop();
         setPhase({ kind: "error", msg: "Still running — check back later." });
         return;

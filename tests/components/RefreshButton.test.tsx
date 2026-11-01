@@ -82,4 +82,12 @@ describe("RefreshButton", () => {
     render(<RefreshButton source="work_orders" pollMs={50} />);
     expect(await screen.findByText(/queued — waiting for the current run/i)).toBeTruthy();
   });
+
+  it("keeps following a picked-up run even if it was created long ago (give-up counts from when watching began)", async () => {
+    active = { state: "running", since: new Date(Date.now() - 2 * 60 * 60_000).toISOString() }; // 2 hours old
+    states = [{ state: "running" }, { state: "success" }];
+    render(<RefreshButton source="work_orders" pollMs={5} />);
+    expect(await screen.findByText(/done/i)).toBeTruthy();
+    expect(screen.queryByText(/check back later/i)).toBeNull();
+  });
 });
