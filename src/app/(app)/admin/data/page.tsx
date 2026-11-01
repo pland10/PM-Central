@@ -107,8 +107,8 @@ export default async function AdminDataPage() {
       </div>
 
       <p className="mt-3 text-xs text-slate-400">
-        After clicking Refresh, the sync runs in the background (usually 1–2 minutes). Reload this
-        page to see the updated time.
+        After clicking Refresh, the sync runs in the background (usually 1–2 minutes). The button
+        shows its progress, and the time updates when it&apos;s done.
       </p>
     </div>
   );
