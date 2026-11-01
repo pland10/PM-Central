@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrencyCents } from "@/lib/format";
 import {
   summarizeByAccount,
   type BatchWithItems,
@@ -42,7 +42,7 @@ export function ManagementDraws({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [confirmedMsg, setConfirmedMsg] = useState("");
   const [error, setError] = useState("");
   const [undo, setUndo] = useState<{ amount: number; bankAccount: string; batchId: number } | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -79,6 +79,7 @@ export function ManagementDraws({
   function start() {
     if (locked) return;
     setUndo(null);
+    setConfirmedMsg("");
     setError("");
     setSelecting(true);
   }
@@ -180,22 +181,26 @@ export function ManagementDraws({
   }
 
   async function confirmMoved(batchId: number) {
-    setConfirming(true);
     setError("");
     setUndo(null);
+    // Unlock immediately (the save can take a few seconds against a cold DB);
+    // revert if it actually fails.
+    setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: true, confirmedAt: new Date().toISOString() } : b)));
+    setConfirmedMsg(`✓ Batch #${batchId} confirmed — the screen is unlocked.`);
     try {
       const res = await fetch("/api/accounting/payout-batches/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ batchId }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't confirm.");
-      setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: true, confirmedAt: new Date().toISOString() } : b)));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(`${typeof data?.error === "string" ? data.error : "Couldn't confirm"} (${res.status})`);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't confirm.");
-    } finally {
-      setConfirming(false);
+      setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: false, confirmedAt: null } : b)));
+      setConfirmedMsg("");
+      setError(e instanceof Error ? e.message : "Couldn't confirm — try again.");
     }
   }
 
@@ -210,21 +215,21 @@ export function ManagementDraws({
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile label="To draw" value={formatCurrency(stats.openTotal)} hint={`${stats.openCount} payment${stats.openCount === 1 ? "" : "s"}`} tone={stats.openCount > 0 ? "amber" : "slate"} />
-        <Tile label="Batched" value={formatCurrency(stats.batchedTotal)} hint={`${stats.batchedCount} in ${batches.length} batch${batches.length === 1 ? "" : "es"}`} tone="emerald" />
-        <Tile label="All draws" value={formatCurrency(round2(stats.openTotal + stats.batchedTotal))} hint="trust → operating" tone="slate" />
+        <Tile label="To draw" value={formatCurrencyCents(stats.openTotal)} hint={`${stats.openCount} payment${stats.openCount === 1 ? "" : "s"}`} tone={stats.openCount > 0 ? "amber" : "slate"} />
+        <Tile label="Batched" value={formatCurrencyCents(stats.batchedTotal)} hint={`${stats.batchedCount} in ${batches.length} batch${batches.length === 1 ? "" : "es"}`} tone="emerald" />
+        <Tile label="All draws" value={formatCurrencyCents(round2(stats.openTotal + stats.batchedTotal))} hint="trust → operating" tone="slate" />
       </div>
 
       {pending && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="font-semibold">
-            Batch #{pending.id} locked — {formatCurrency(pending.total)} across {pending.count} payment{pending.count === 1 ? "" : "s"}. Move the money, then confirm.
+            Batch #{pending.id} locked — {formatCurrencyCents(pending.total)} across {pending.count} payment{pending.count === 1 ? "" : "s"}. Move the money, then confirm.
           </div>
           <div className="mt-1">Move to <span className="font-semibold">Operating</span> at the bank:</div>
           <ul className="mt-1 space-y-0.5">
             {pendingByAccount.map((a) => (
               <li key={a.account}>
-                <span className="font-semibold">{formatCurrency(a.total)}</span> from {a.account}{" "}
+                <span className="font-semibold">{formatCurrencyCents(a.total)}</span> from {a.account}{" "}
                 <span className="text-amber-700/70">({a.count} payment{a.count === 1 ? "" : "s"})</span>
               </li>
             ))}
@@ -233,10 +238,9 @@ export function ManagementDraws({
             <button
               type="button"
               onClick={() => confirmMoved(pending.id)}
-              disabled={confirming}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
             >
-              {confirming ? "Confirming…" : "Confirm money moved"}
+              Confirm money moved
             </button>
             <span className="text-xs text-amber-800">
               Until you confirm, this screen is locked — you can only remove a payment from the batch below.
@@ -248,10 +252,14 @@ export function ManagementDraws({
       {undo && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Pulled a payment back out of batch #{undo.batchId}. If you&apos;d already moved the money, move{" "}
-          <span className="font-semibold">{formatCurrency(undo.amount)}</span> back from{" "}
+          <span className="font-semibold">{formatCurrencyCents(undo.amount)}</span> back from{" "}
           <span className="font-semibold">Operating</span> to{" "}
           <span className="font-semibold">{undo.bankAccount || "Trust"}</span>.
         </div>
+      )}
+
+      {confirmedMsg && !error && (
+        <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">{confirmedMsg}</p>
       )}
 
       {error && <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -264,7 +272,7 @@ export function ManagementDraws({
           </button>
         ) : (
           <>
-            <span className="font-medium text-slate-700">{selectedRows.length} selected · {formatCurrency(selTotal)}</span>
+            <span className="font-medium text-slate-700">{selectedRows.length} selected · {formatCurrencyCents(selTotal)}</span>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -282,7 +290,7 @@ export function ManagementDraws({
 
       {selecting && selByAccount.length > 0 && (
         <p className="mb-3 -mt-1 text-xs text-slate-500">
-          From: {selByAccount.map((a) => `${a.account} ${formatCurrency(a.total)}`).join(" · ")}
+          From: {selByAccount.map((a) => `${a.account} ${formatCurrencyCents(a.total)}`).join(" · ")}
         </p>
       )}
 
@@ -328,7 +336,7 @@ export function ManagementDraws({
                   <td className="px-3 py-2 text-slate-800">{r.payee || "—"}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.bankAccount || "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{r.memo || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatCurrency(r.amount)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatCurrencyCents(r.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -355,13 +363,14 @@ export function ManagementDraws({
                     <span className="text-slate-500">{fmtDate(b.createdAt)}</span>
                     {b.note && <span className="truncate text-slate-500">— {b.note}</span>}
                     <span className="ml-auto whitespace-nowrap text-slate-500">{b.count} payment{b.count === 1 ? "" : "s"}</span>
-                    <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrency(b.total)}</span>
+                    <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrencyCents(b.total)}</span>
                   </button>
                   {open && (
                     <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50 px-3 py-2">
                       <table className="w-full text-sm">
                         <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                           <tr>
+                            <th className="py-1 pr-3 font-medium">Date</th>
                             <th className="py-1 pr-3 font-medium">Payee</th>
                             <th className="py-1 pr-3 font-medium">Account</th>
                             <th className="py-1 pr-3 font-medium">Memo</th>
@@ -372,10 +381,11 @@ export function ManagementDraws({
                         <tbody>
                           {b.items.map((it) => (
                             <tr key={it.payoutId} className="align-top">
+                              <td className="whitespace-nowrap py-1 pr-3 text-slate-600">{fmtDate(it.postedDate)}</td>
                               <td className="py-1 pr-3 text-slate-700">{it.payee || "—"}</td>
                               <td className="whitespace-nowrap py-1 pr-3 text-slate-600">{it.bankAccount || "—"}</td>
                               <td className="py-1 pr-3 text-slate-600">{it.memo || "—"}</td>
-                              <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-slate-800">{formatCurrency(it.amount)}</td>
+                              <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-slate-800">{formatCurrencyCents(it.amount)}</td>
                               <td className="py-1 text-right">
                                 <button
                                   type="button"
@@ -390,7 +400,7 @@ export function ManagementDraws({
                           ))}
                           {b.items.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="py-2 text-center text-xs text-slate-400">No payments in this batch.</td>
+                              <td colSpan={6} className="py-2 text-center text-xs text-slate-400">No payments in this batch.</td>
                             </tr>
                           )}
                         </tbody>

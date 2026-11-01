@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrencyCents } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
 import type { PropertyChoice } from "@/lib/property-options";
 import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
@@ -233,7 +233,7 @@ export function TransactionsTable({
         filter: { type: "number", value: (r) => r.amount },
         render: (r) => (
           <span className={`tabular-nums ${r.amount < 0 ? "text-emerald-700" : "text-slate-800"}`}>
-            {formatCurrency(r.amount)}
+            {formatCurrencyCents(r.amount)}
           </span>
         ),
       },
@@ -423,10 +423,10 @@ export function TransactionsTable({
     <div>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryTile label="Transactions" value={String(summary.count)} />
-        <SummaryTile label="Total spend" value={formatCurrency(summary.totalSpend)} />
+        <SummaryTile label="Total spend" value={formatCurrencyCents(summary.totalSpend)} />
         <SummaryTile
           label="Reimbursable"
-          value={formatCurrency(summary.reimbursableTotal)}
+          value={formatCurrencyCents(summary.reimbursableTotal)}
           hint={`${summary.reimbursableCount} flagged`}
           tone="emerald"
         />

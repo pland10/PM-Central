@@ -62,7 +62,7 @@ describe("TransactionsTable", () => {
   it("shows a summary across all rows", () => {
     setup();
     // total spend = 100 + 200
-    expect(screen.getByText("$300")).toBeInTheDocument();
+    expect(screen.getByText("$300.00")).toBeInTheDocument();
     // one row still unreviewed for reimbursable (tile label is a span; the
     // facet dropdown also has an "Unreviewed" <option>, so scope to the span)
     const unreviewed = screen.getByText("Unreviewed", { selector: "span" }).closest("div")!;
