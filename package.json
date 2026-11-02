@@ -23,7 +23,8 @@
     "migrate:invoices": "tsx scripts/migrate-invoices-to-neon.ts",
     "migrate:inspections": "tsx scripts/migrate-inspections-to-neon.ts",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "migrate:invoicing-extras": "tsx scripts/migrate-invoicing-extras.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
