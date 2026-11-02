@@ -172,4 +172,47 @@ describe("MaintenanceView", () => {
     expect(screen.getByRole("dialog", { name: /notes for wo #103/i })).toBeTruthy();
     vi.unstubAllGlobals();
   });
+
+  describe("tech assignment", () => {
+    const staff = [
+      { name: "Ari Cohen", email: "ari@pmi.com" },
+      { name: "Paul Landman", email: "paul@pmi.com" },
+    ];
+    const list = () => screen.getByRole("region", { name: /all work orders/i });
+    const listRows = () =>
+      within(within(list()).getByRole("table")).getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0].textContent);
+
+    it("shows each work order's tech in a dropdown and saves a change", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, tech: staff[0] }) }));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+      render(<MaintenanceView rows={rows} now={NOW} staff={staff} techs={{ "102": staff[1] }} />);
+
+      const select103 = within(list()).getByLabelText("tech-103") as HTMLSelectElement;
+      expect(select103.value).toBe("");
+      expect((within(list()).getByLabelText("tech-102") as HTMLSelectElement).value).toBe("paul@pmi.com");
+
+      await user.selectOptions(select103, "ari@pmi.com");
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe("/api/work-orders/tech");
+      expect(JSON.parse(String(init.body))).toEqual({ woId: "103", techEmail: "ari@pmi.com" });
+      expect((within(list()).getByLabelText("tech-103") as HTMLSelectElement).value).toBe("ari@pmi.com");
+      vi.unstubAllGlobals();
+    });
+
+    it("can filter the list by tech, including unassigned", async () => {
+      const user = userEvent.setup();
+      render(<MaintenanceView rows={rows} now={NOW} staff={staff} techs={{ "102": staff[1] }} />);
+      const header = within(list()).getByRole("columnheader", { name: /^tech/i });
+      await user.click(within(header).getByRole("button", { name: /filter/i }));
+      await user.click(screen.getByRole("button", { name: /paul landman/i }));
+      expect(listRows()).toEqual(["102"]);
+    });
+
+    it("also shows the tech on the attention table", () => {
+      render(<MaintenanceView rows={rows} now={NOW} staff={staff} techs={{ "101": staff[0] }} />);
+      const attn = within(attention()).getByRole("table");
+      expect((within(attn).getByLabelText("tech-101") as HTMLSelectElement).value).toBe("ari@pmi.com");
+    });
+  });
 });

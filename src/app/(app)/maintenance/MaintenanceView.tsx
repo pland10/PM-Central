@@ -17,6 +17,7 @@ import {
 } from "@/lib/maintenance";
 import { pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
 import type { NoteSummary } from "@/lib/work-order-notes-db";
+import type { StaffMember } from "@/lib/work-order-notes";
 import { NotesCell } from "../work-orders/NotesCell";
 import { WorkOrderNotes } from "../work-orders/WorkOrderNotes";
 
@@ -130,16 +131,78 @@ export function MaintenanceView({
   rows,
   now,
   notes: initialNotes = {},
+  staff = [],
+  techs: initialTechs = {},
 }: {
   rows: WorkOrderRow[];
   now: number;
   notes?: Record<string, NoteSummary>; // PM-Central notes, by work order id
+  staff?: StaffMember[]; // PM-Central users — who can be picked as the tech
+  techs?: Record<string, StaffMember>; // in-house tech per work order id
 }) {
   const kpis = maintenanceKpis(rows, now);
   // Notes per work order (updated in place when one is added) and the work
   // order whose notes panel is open.
   const [notes, setNotes] = useState(initialNotes);
   const [notesFor, setNotesFor] = useState<WorkOrderRow | null>(null);
+  // In-house tech per work order (separate from the LeadSimple assignee).
+  const [techs, setTechs] = useState(initialTechs);
+  const [techError, setTechError] = useState("");
+  async function assignTech(r: WorkOrderRow, email: string) {
+    const before = techs[r.id];
+    const tech = staff.find((s) => s.email === email);
+    setTechs((prev) => {
+      const next = { ...prev };
+      if (tech) next[r.id] = tech;
+      else delete next[r.id];
+      return next;
+    });
+    try {
+      const res = await fetch("/api/work-orders/tech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ woId: r.id, techEmail: email || null }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Failed (${res.status})`);
+      setTechError("");
+    } catch (e) {
+      setTechs((prev) => {
+        const next = { ...prev };
+        if (before) next[r.id] = before;
+        else delete next[r.id];
+        return next;
+      });
+      setTechError(`Couldn't assign the tech on WO #${r.number}: ${e instanceof Error ? e.message : "error"}`);
+    }
+  }
+  const techColumn = <T,>(row: (x: T) => WorkOrderRow): Column<T> => ({
+    key: "tech",
+    header: "Tech",
+    sortable: true,
+    sortValue: (x) => (techs[row(x).id]?.name ?? "~").toLowerCase(),
+    filter: { type: "select", value: (x) => techs[row(x).id]?.name ?? "Unassigned" },
+    exportValue: (x) => techs[row(x).id]?.name ?? "",
+    render: (x) => {
+      const r = row(x);
+      return (
+        <select
+          aria-label={`tech-${r.number}`}
+          value={techs[r.id]?.email ?? ""}
+          onChange={(e) => assignTech(r, e.target.value)}
+          className={`max-w-[9rem] rounded border px-1.5 py-1 text-xs ${
+            techs[r.id] ? "border-slate-300 bg-white text-slate-700" : "border-dashed border-slate-300 bg-white text-slate-400"
+          }`}
+        >
+          <option value="">Unassigned</option>
+          {staff.map((s) => (
+            <option key={s.email} value={s.email}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      );
+    },
+  });
   const notesColumn = <T,>(row: (x: T) => WorkOrderRow): Column<T> => ({
     key: "notes",
     header: "Notes",
@@ -269,6 +332,7 @@ export function MaintenanceView({
       exportValue: (r) => when(lastActivityAt(r)),
       render: (r) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(r))}</span>,
     },
+    techColumn((r: WorkOrderRow) => r),
     notesColumn((r: WorkOrderRow) => r),
   ];
 
@@ -338,6 +402,7 @@ export function MaintenanceView({
       exportValue: (q) => when(lastActivityAt(q.row)),
       render: (q) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(q.row))}</span>,
     },
+    techColumn((q: Flagged) => q.row),
     notesColumn((q: Flagged) => q.row),
   ];
   const reasonFacet: Facet<Flagged>[] = [
@@ -403,6 +468,9 @@ export function MaintenanceView({
         </div>
       </section>
 
+      {techError && (
+        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{techError}</p>
+      )}
       <div className="mt-4 grid grid-cols-1 gap-4">
         <Section title="Work Orders Requiring Attention" meta={`${queue.length} work order${queue.length === 1 ? "" : "s"}`}>
           {queue.length === 0 ? (
