@@ -3,6 +3,7 @@ import { loadInvoices } from "@/lib/invoicing-query";
 import { propertyLabelMap } from "@/lib/property-options";
 import { InvoicingTable } from "./InvoicingTable";
 import { NewInvoiceButton } from "./NewInvoiceButton";
+import { InvoicingTabs } from "./InvoicingTabs";
 
 // Native Invoicing over PM-Central's single database (Prisma/Postgres). Create /
 // edit / status / print all happen here.
@@ -15,6 +16,7 @@ export default async function InvoicingPage() {
 
   return (
     <div>
+      <InvoicingTabs />
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-ink">Invoicing</h1>
