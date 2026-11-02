@@ -68,6 +68,9 @@ export async function dispatchSources(sources: DataSource[]): Promise<DispatchRe
 // "pending" until GitHub lists a run created at/after the click (it can take a
 // few seconds to appear); then queued → running → success/failure. Any trigger
 // counts (a scheduled run that starts after the click refreshes the data too).
+// Several sources share a workflow (Communications, Work orders and Payments
+// all run leadsimple-search sync.yml), so it follows the FIRST run after the
+// click — a later click's run must not hold this button's status hostage.
 export type RunState =
   | { state: "pending" | "queued" | "running" }
   | { state: "success" | "failure"; url: string; startedAt: string | null }
@@ -86,7 +89,10 @@ type GhRun = {
 };
 
 // Clock-skew allowance between our server and GitHub when matching the run.
-const SKEW_MS = 60_000;
+// `since` is the server's dispatch time (see /api/admin/refresh), so this only
+// covers server↔GitHub drift; kept small so a run started by an earlier click
+// isn't mistaken for this one.
+const SKEW_MS = 10_000;
 
 async function recentRuns(source: DataSource): Promise<GhRun[] | { error: string }> {
   const token = process.env.GITHUB_DISPATCH_TOKEN;
@@ -119,7 +125,8 @@ export async function latestRunState(source: DataSource, since: Date): Promise<R
   const runs = await recentRuns(source);
   if (!Array.isArray(runs)) return { state: "error", error: runs.error };
   const after = since.getTime() - SKEW_MS;
-  const run = runs.find((r) => Date.parse(r.created_at) >= after);
+  // runs are newest-first; the last match is the earliest run after the click.
+  const run = runs.filter((r) => Date.parse(r.created_at) >= after).at(-1);
   if (!run) return { state: "pending" };
   if (isActive(run)) return { state: activeState(run) };
   return {
@@ -132,6 +139,8 @@ export async function latestRunState(source: DataSource, since: Date): Promise<R
 export async function activeRun(source: DataSource): Promise<ActiveRun> {
   const runs = await recentRuns(source);
   if (!Array.isArray(runs)) return { state: "error", error: runs.error };
-  const run = runs.find(isActive); // newest first — the last in line is the one to wait for
+  // Oldest active run: it finishes first, so the status updates as each run
+  // lands rather than only after the last one queued.
+  const run = runs.filter(isActive).at(-1);
   return run ? { state: activeState(run), since: run.created_at } : { state: "idle" };
 }
