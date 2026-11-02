@@ -37,11 +37,11 @@ function isNewWaiting(r: WorkOrderRow, now: number): boolean {
   return !r.terminal && /^new wo$/i.test(r.stage.trim()) && created != null && created < now - NEW_WAITING_DAYS * DAY;
 }
 
-export type AttentionKind = "rvClosed" | "estimates" | "overdue" | "high" | "new" | "stalled";
+export type AttentionKind = "rvClosed" | "rvOnHold" | "estimates" | "overdue" | "high" | "new" | "stalled";
 export type AttentionReason = { kind: AttentionKind; label: string };
 // "estimates" outranks "overdue": LeadSimple sets every due date to created +
 // 30 days, so Overdue is mostly age, while a stuck estimate is a specific ask.
-const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, estimates: 1, overdue: 2, high: 3, new: 4, stalled: 5 };
+const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, rvOnHold: 1, estimates: 2, overdue: 3, high: 4, new: 5, stalled: 6 };
 
 // Why an open work order needs someone, most urgent reason first; null if it
 // doesn't (or it's closed).
@@ -52,6 +52,12 @@ export function attentionReason(r: WorkOrderRow, now: number): AttentionReason |
   // names both sides; it outranks Overdue/Stalled.
   if (/^(completed|cancell?ed|canceled)$/i.test(r.rvStatus.trim())) {
     return { kind: "rvClosed", label: `${r.rvStatus.trim()} in Rentvine · open in LeadSimple` };
+  }
+  // On Hold in Rentvine but still in an active LeadSimple stage: it should be
+  // Deferred in LeadSimple (which takes it off this list). Flagged instead of
+  // Overdue/Stalled, since the hold is why it isn't moving.
+  if (/^on ?hold$/i.test(r.rvStatus.trim())) {
+    return { kind: "rvOnHold", label: "On Hold in Rentvine · open in LeadSimple" };
   }
   const last = ms(lastActivityAt(r));
   if (/estimate/i.test(r.stage) && last != null && last < now - ESTIMATE_WAIT_DAYS * DAY) {
