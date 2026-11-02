@@ -66,7 +66,8 @@ export function RefreshButton({
   async function run() {
     stop();
     setPhase({ kind: "starting" });
-    const since = new Date(Date.now() - 5_000).toISOString();
+    // Fallback only — the dispatch response carries the server's time.
+    let since = new Date(Date.now() - 5_000).toISOString();
     try {
       const res = await fetch("/api/admin/refresh", {
         method: "POST",
@@ -78,6 +79,8 @@ export function RefreshButton({
         setPhase({ kind: "error", msg: d.error || `Failed (${res.status})` });
         return;
       }
+      const d = await res.json().catch(() => ({}));
+      if (typeof d.since === "string" && !Number.isNaN(Date.parse(d.since))) since = d.since;
     } catch (e) {
       setPhase({ kind: "error", msg: e instanceof Error ? e.message : "Failed" });
       return;

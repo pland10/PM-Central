@@ -29,7 +29,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This source isn't wired up yet." }, { status: 400 });
   }
 
+  // Server time just before dispatch: the button follows the first run created
+  // after it (the browser's clock may be off).
+  const since = new Date().toISOString();
   const result = await dispatchSource(source);
-  if (result.ok) return NextResponse.json({ ok: true });
+  if (result.ok) return NextResponse.json({ ok: true, since });
   return NextResponse.json({ error: result.error }, { status: result.status });
 }
