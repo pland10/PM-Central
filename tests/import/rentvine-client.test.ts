@@ -39,8 +39,18 @@ function stubAccount({
   renewals = [] as unknown[],
   renewalsStatus = 200,
   tenantContacts = {} as Record<string, unknown[]>,
+  groupList = null as unknown[] | null, // null → /properties/groups 404s
+  memberships = {} as Record<string, unknown[]>, // propertyID → groupProperty rows; missing → 500
 } = {}) {
   return stubFetch([
+    [/\/properties\/groups$/, groupList ? onePage(groupList) : jsonResponse({}, { status: 404 })],
+    [
+      /\/properties\/(\d+)\/groups$/,
+      (url) => {
+        const id = url.pathname.match(/properties\/(\d+)\/groups/)![1];
+        return memberships[id] ? onePage(memberships[id]) : jsonResponse({}, { status: 500 });
+      },
+    ],
     [/\/properties$/, onePage([{ property: { propertyID: "12", address: "66 Francis Court", city: "Elmont", stateID: "NY", postalCode: "11003", propertyTypeID: "1", portfolioID: "3", isActive: "1" } }])],
     [/\/portfolios$/, onePage([{ portfolio: { portfolioID: "3", name: "Owner LLC" } }])],
     [/\/leases$/, onePage(leases)],
@@ -98,6 +108,46 @@ describe("liveRentvineSource.extract", () => {
       },
     ]);
     expect(out.workOrders).toEqual([]); // synced separately; never wiped here
+  });
+
+  describe("property groups", () => {
+    const groupList = [
+      { propertyGroup: { propertyGroupID: "4", name: "Squatterwatch Properties" }, token: "t" },
+      { propertyGroup: { propertyGroupID: "7", name: "SureVestor Landlord Protection" }, token: "t" },
+    ];
+    const member = (groupID: string) => ({ groupProperty: { groupPropertyID: "1", propertyGroupID: groupID, propertyID: "12" }, token: "t" });
+
+    it("reads each property's group names from its membership", async () => {
+      stubAccount({ groupList, memberships: { "12": [member("4")] } });
+
+      const out = await liveRentvineSource(config).extract();
+
+      expect(out.properties[0].groups).toEqual(["Squatterwatch Properties"]);
+    });
+
+    it("reports an empty list for a property in no groups, so its tags clear", async () => {
+      stubAccount({ groupList, memberships: { "12": [] } });
+
+      const out = await liveRentvineSource(config).extract();
+
+      expect(out.properties[0].groups).toEqual([]);
+    });
+
+    it("leaves groups unknown when the membership lookup fails, so tags are kept", async () => {
+      stubAccount({ groupList, memberships: {} });
+
+      const out = await liveRentvineSource(config).extract();
+
+      expect(out.properties[0].groups).toBeUndefined();
+    });
+
+    it("leaves every property's groups unknown when the group list is unavailable", async () => {
+      stubAccount({ groupList: null, memberships: { "12": [member("4")] } });
+
+      const out = await liveRentvineSource(config).extract();
+
+      expect(out.properties[0].groups).toBeUndefined();
+    });
   });
 
   it("keeps only active leases", async () => {

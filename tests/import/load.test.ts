@@ -163,11 +163,16 @@ describe("loadCanonical", () => {
   });
 
   describe("sync mode (the nightly live refresh)", () => {
-    it("keeps existing tags when the source row carries none", async () => {
-      await load(dataset({ properties: [prop({ tags: [] })] }), { mode: "sync" });
+    it("keeps existing tags when the source didn't read them", async () => {
+      await load(dataset({ properties: [prop({ tags: undefined })] }), { mode: "sync" });
 
       expect(upsertArgs(db.property).update).not.toHaveProperty("tags");
       expect(upsertArgs(db.property).create).toHaveProperty("tags", ""); // new rows still get a value
+    });
+
+    it("clears tags when the source says the property is in no groups", async () => {
+      await load(dataset({ properties: [prop({ tags: [] })] }), { mode: "sync" });
+      expect(upsertArgs(db.property).update).toHaveProperty("tags", "");
     });
 
     it("updates tags when the source does carry them", async () => {
