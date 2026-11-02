@@ -97,6 +97,15 @@ describe("MaintenanceView", () => {
     expect(within(within(attention()).getByRole("table")).getByText("Completed in Rentvine · open in LeadSimple")).toBeTruthy();
   });
 
+  it("can filter the attention list to work orders On Hold in Rentvine", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={[...rows, wo({ number: "106", issue: "Fridge shelves", rvStatus: "On Hold" })]} now={NOW} />);
+
+    await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "rvOnHold");
+    expect(firstCells()).toEqual(["106"]);
+    expect(within(within(attention()).getByRole("table")).getByText("On Hold in Rentvine · open in LeadSimple")).toBeTruthy();
+  });
+
   it("defaults the full list to open work orders and can show completed ones", async () => {
     const user = userEvent.setup();
     render(<MaintenanceView rows={rows} now={NOW} />);
