@@ -66,12 +66,16 @@ function WoNumber({ r }: { r: WorkOrderRow }) {
 }
 
 function Property({ r }: { r: WorkOrderRow }) {
-  return r.propertyId ? (
-    <Link href={`/properties/${r.propertyId}`} className="text-slate-600 hover:text-brand-600">
-      {r.property}
-    </Link>
-  ) : (
-    <span className="text-slate-600">{r.property}</span>
+  return (
+    <div className="min-w-[10rem] leading-snug">
+      {r.propertyId ? (
+        <Link href={`/properties/${r.propertyId}`} className="text-slate-600 hover:text-brand-600">
+          {r.property}
+        </Link>
+      ) : (
+        <span className="text-slate-600">{r.property}</span>
+      )}
+    </div>
   );
 }
 
@@ -256,7 +260,7 @@ export function MaintenanceView({
       sortable: true,
       sortValue: (r) => r.issue.toLowerCase(),
       filter: { type: "text", value: (r) => r.issue },
-      render: (r) => <span className="text-slate-800">{r.issue}</span>,
+      render: (r) => <span className="block min-w-[11rem] max-w-[22rem] leading-snug text-slate-800">{r.issue}</span>,
     },
     {
       key: "property",
@@ -272,7 +276,7 @@ export function MaintenanceView({
       sortable: true,
       sortValue: (r) => pipelineRank(r.stage),
       filter: { type: "select", value: (r) => r.stage },
-      render: (r) => <span className="text-slate-600">{r.stage}</span>,
+      render: (r) => <span className="block max-w-[7.5rem] leading-snug text-slate-600">{r.stage}</span>,
     },
     {
       key: "rvStatus",
@@ -352,7 +356,7 @@ export function MaintenanceView({
       sortable: true,
       sortValue: (q) => q.row.issue.toLowerCase(),
       filter: { type: "text", value: (q) => q.row.issue },
-      render: (q) => <span className="text-slate-800">{q.row.issue}</span>,
+      render: (q) => <span className="block min-w-[11rem] max-w-[22rem] leading-snug text-slate-800">{q.row.issue}</span>,
     },
     {
       key: "stage",
@@ -360,7 +364,7 @@ export function MaintenanceView({
       sortable: true,
       sortValue: (q) => pipelineRank(q.row.stage),
       filter: { type: "select", value: (q) => q.row.stage },
-      render: (q) => <span className="whitespace-nowrap text-slate-600">{q.row.stage}</span>,
+      render: (q) => <span className="block max-w-[7.5rem] leading-snug text-slate-600">{q.row.stage}</span>,
     },
     {
       key: "action",
@@ -481,6 +485,7 @@ export function MaintenanceView({
                 rows={queue}
                 columns={attentionColumns}
                 rowKey={(q) => q.row.id}
+                dense
                 search={(q) => `${q.row.number} ${q.row.issue} ${q.row.property} ${q.row.vendor} ${q.reason.label}`}
                 searchPlaceholder="Search attention list…"
                 exportName="Maintenance - Attention"
@@ -526,6 +531,7 @@ export function MaintenanceView({
               rows={rows}
               columns={columns}
               rowKey={(r) => r.id}
+              dense
               search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.stage}`}
               searchPlaceholder="Search work order, property, vendor…"
               exportName="Maintenance"
