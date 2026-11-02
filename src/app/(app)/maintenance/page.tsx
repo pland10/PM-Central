@@ -1,5 +1,6 @@
 import { requireFeature } from "@/config/features";
 import { listWorkOrders } from "@/lib/work-orders-dashboard";
+import { noteSummaries } from "@/lib/work-order-notes-db";
 import { MaintenanceView } from "./MaintenanceView";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 // Off unless FEATURE_MAINTENANCE=on.
 export default async function MaintenancePage() {
   requireFeature("maintenance");
-  const rows = await listWorkOrders();
+  const [rows, notes] = await Promise.all([listWorkOrders(), noteSummaries()]);
 
   if (!rows) {
     return (
@@ -23,5 +24,5 @@ export default async function MaintenancePage() {
 
   // Server time, passed down so the KPIs/flags don't shift between the server
   // render and hydration.
-  return <MaintenanceView rows={rows} now={Date.now()} />;
+  return <MaintenanceView rows={rows} now={Date.now()} notes={notes} />;
 }

@@ -16,6 +16,9 @@ import {
   type RowStatus,
 } from "@/lib/maintenance";
 import { pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
+import type { NoteSummary } from "@/lib/work-order-notes-db";
+import { NotesCell } from "../work-orders/NotesCell";
+import { WorkOrderNotes } from "../work-orders/WorkOrderNotes";
 
 // The new Maintenance screen (FEATURE_MAINTENANCE): KPI tiles, the attention
 // queue and recent activity up top, the full work-order list below. Layout
@@ -123,8 +126,28 @@ const DOT: Record<ActivityItem["event"], string> = {
   updated: "bg-amber-500",
 };
 
-export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: number }) {
+export function MaintenanceView({
+  rows,
+  now,
+  notes: initialNotes = {},
+}: {
+  rows: WorkOrderRow[];
+  now: number;
+  notes?: Record<string, NoteSummary>; // PM-Central notes, by work order id
+}) {
   const kpis = maintenanceKpis(rows, now);
+  // Notes per work order (updated in place when one is added) and the work
+  // order whose notes panel is open.
+  const [notes, setNotes] = useState(initialNotes);
+  const [notesFor, setNotesFor] = useState<WorkOrderRow | null>(null);
+  const notesColumn = <T,>(row: (x: T) => WorkOrderRow): Column<T> => ({
+    key: "notes",
+    header: "Notes",
+    sortable: true,
+    sortValue: (x) => notes[row(x).id]?.latestAt ?? "",
+    exportValue: (x) => notes[row(x).id]?.latest ?? "",
+    render: (x) => <NotesCell summary={notes[row(x).id]} onOpen={() => setNotesFor(row(x))} />,
+  });
   // Every flagged work order (not just the top few), in urgency order; `order`
   // keeps that order available as the default sort.
   const queue = attentionQueue(rows, now, Infinity).map((q, order) => ({ ...q, order }));
@@ -246,6 +269,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       exportValue: (r) => when(lastActivityAt(r)),
       render: (r) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(r))}</span>,
     },
+    notesColumn((r: WorkOrderRow) => r),
   ];
 
   type Flagged = (typeof queue)[number];
@@ -265,6 +289,14 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       sortValue: (q) => q.row.issue.toLowerCase(),
       filter: { type: "text", value: (q) => q.row.issue },
       render: (q) => <span className="text-slate-800">{q.row.issue}</span>,
+    },
+    {
+      key: "stage",
+      header: "Stage",
+      sortable: true,
+      sortValue: (q) => pipelineRank(q.row.stage),
+      filter: { type: "select", value: (q) => q.row.stage },
+      render: (q) => <span className="whitespace-nowrap text-slate-600">{q.row.stage}</span>,
     },
     {
       key: "action",
@@ -306,6 +338,7 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
       exportValue: (q) => when(lastActivityAt(q.row)),
       render: (q) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(q.row))}</span>,
     },
+    notesColumn((q: Flagged) => q.row),
   ];
   const reasonFacet: Facet<Flagged>[] = [
     {
@@ -435,6 +468,18 @@ export function MaintenanceView({ rows, now }: { rows: WorkOrderRow[]; now: numb
           </div>
         </Section>
       </div>
+      {notesFor && (
+        <WorkOrderNotes
+          wo={{ id: notesFor.id, number: notesFor.number, issue: notesFor.issue }}
+          onClose={() => setNotesFor(null)}
+          onAdded={(note, count) =>
+            setNotes((prev) => ({
+              ...prev,
+              [notesFor.id]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
+            }))
+          }
+        />
+      )}
     </div>
   );
 }

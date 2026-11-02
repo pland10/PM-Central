@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { WorkOrdersTable, type WorkOrderRow } from "@/app/(app)/work-orders/WorkOrdersTable";
 
 function wo(over: Partial<WorkOrderRow>): WorkOrderRow {
@@ -48,5 +49,25 @@ describe("WorkOrdersTable", () => {
     const row = rowOf("100480");
     expect(within(row).getByText("Updated in LeadSimple")).toBeTruthy();
     expect(within(row).getByText("Oct 28, 2026")).toBeTruthy();
+  });
+
+  it("shows how many notes a work order has and the latest one", () => {
+    render(
+      <WorkOrdersTable
+        rows={[wo({})]}
+        notes={{ x: { count: 2, latest: "Owner approved", latestAt: "2026-11-02T14:00:00.000Z", latestBy: "Paul Landman" } }}
+      />
+    );
+    const row = rowOf("100480");
+    expect(within(row).getByText("Owner approved")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: /2 notes/i })).toBeTruthy();
+  });
+
+  it("opens the notes panel from the Notes column", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ notes: [], staff: [], assigneeEmail: "" }) })));
+    render(<WorkOrdersTable rows={[wo({})]} notes={{}} />);
+    await userEvent.setup().click(within(rowOf("100480")).getByRole("button", { name: /add note/i }));
+    expect(screen.getByRole("dialog", { name: /notes for wo #100480/i })).toBeTruthy();
+    vi.unstubAllGlobals();
   });
 });
