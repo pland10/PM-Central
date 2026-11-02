@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import type { NoteSummary } from "@/lib/work-order-notes-db";
+import { WorkOrderNotes } from "./WorkOrderNotes";
+import { NotesCell } from "./NotesCell";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { STAGE_ORDER, pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
 
@@ -56,7 +60,19 @@ function priorityBadge(priority: string) {
   );
 }
 
-export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?: string }) {
+export function WorkOrdersTable({
+  rows,
+  stage,
+  notes: initialNotes = {},
+}: {
+  rows: WorkOrderRow[];
+  stage?: string;
+  notes?: Record<string, NoteSummary>; // by work order id (LeadSimple process id)
+}) {
+  // PM-Central notes per work order; updated in place when a note is added.
+  const [notes, setNotes] = useState(initialNotes);
+  const [open, setOpen] = useState<WorkOrderRow | null>(null);
+
   // Stage dropdown in pipeline order (latest first), listing only stages present.
   const present = new Set(rows.map((r) => r.stage));
   const ordered = [...STAGE_ORDER].reverse().filter((s) => present.has(s));
@@ -199,6 +215,14 @@ export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?:
           <span className="text-slate-300">—</span>
         ),
     },
+    {
+      key: "notes",
+      header: "Notes",
+      sortable: true,
+      sortValue: (r) => notes[r.id]?.latestAt ?? "",
+      exportValue: (r) => notes[r.id]?.latest ?? "",
+      render: (r) => <NotesCell summary={notes[r.id]} onOpen={() => setOpen(r)} />,
+    },
   ];
 
   // Active/closed is a cross-cutting view toggle (terminal is derived, not a
@@ -220,17 +244,31 @@ export function WorkOrdersTable({ rows, stage }: { rows: WorkOrderRow[]; stage?:
   const drill = stage && present.has(stage);
 
   return (
-    <DataTable
-      rows={rows}
-      columns={columns}
-      rowKey={(r) => r.id}
-      search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.lastUpdate}`}
-      searchPlaceholder="Search all fields…"
-      exportName="Work Orders"
-      facets={facets}
-      initialSort={{ key: "stage", dir: "desc" }}
-      initialFacets={drill ? {} : { status: "active" }}
-      initialColumnFilters={drill ? { stage: { sels: [stage] } } : undefined}
-    />
+    <>
+      <DataTable
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.id}
+        search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.lastUpdate} ${notes[r.id]?.latest ?? ""}`}
+        searchPlaceholder="Search all fields…"
+        exportName="Work Orders"
+        facets={facets}
+        initialSort={{ key: "stage", dir: "desc" }}
+        initialFacets={drill ? {} : { status: "active" }}
+        initialColumnFilters={drill ? { stage: { sels: [stage] } } : undefined}
+      />
+      {open && (
+        <WorkOrderNotes
+          wo={{ id: open.id, number: open.number, issue: open.issue }}
+          onClose={() => setOpen(null)}
+          onAdded={(note, count) =>
+            setNotes((prev) => ({
+              ...prev,
+              [open.id]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
+            }))
+          }
+        />
+      )}
+    </>
   );
 }

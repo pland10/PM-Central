@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MaintenanceView } from "@/app/(app)/maintenance/MaintenanceView";
 import type { WorkOrderRow } from "@/lib/work-orders";
@@ -144,5 +144,32 @@ describe("MaintenanceView", () => {
     await user.selectOptions(within(attention()).getByRole("combobox", { name: /reason/i }), "estimates");
     expect(firstCells()).toEqual(["106"]);
     expect(within(within(attention()).getByRole("table")).getByText("Waiting on estimates 5 days")).toBeTruthy();
+  });
+
+  it("shows the LeadSimple stage in the attention table", () => {
+    render(<MaintenanceView rows={rows} now={NOW} />);
+    const table = within(attention()).getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: /stage/i })).toBeTruthy();
+    const row = within(table).getByText("101").closest("tr")!;
+    expect(within(row).getByText("Troubleshooting")).toBeTruthy();
+  });
+
+  it("shows notes on both tables and opens the notes panel", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ notes: [], staff: [], assigneeEmail: "" }) })));
+    const user = userEvent.setup();
+    render(
+      <MaintenanceView
+        rows={rows}
+        now={NOW}
+        notes={{ "101": { count: 1, latest: "Vendor coming Tue", latestAt: "2026-10-27T12:00:00.000Z", latestBy: "Paul" } }}
+      />
+    );
+    const attnRow = within(within(attention()).getByRole("table")).getByText("101").closest("tr")!;
+    expect(within(attnRow).getByText("Vendor coming Tue")).toBeTruthy();
+    const list = screen.getByRole("region", { name: /all work orders/i });
+    const listRow = within(list).getByText("Fridge noise").closest("tr")!;
+    await user.click(within(listRow).getByRole("button", { name: /add note/i }));
+    expect(screen.getByRole("dialog", { name: /notes for wo #103/i })).toBeTruthy();
+    vi.unstubAllGlobals();
   });
 });
