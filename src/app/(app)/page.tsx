@@ -246,12 +246,7 @@ export default async function DashboardPage() {
 
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat
-          label="Properties"
-          value={String(totalProperties)}
-          sub={watchCount > 0 ? `${rentalCount} rentals · ${watchCount} watch` : undefined}
-          href="/properties"
-        />
+        <Stat label="Properties" value={String(totalProperties)} href="/properties" />
         <Stat label="Units" value={String(totalUnits)} href="/properties" />
         <Stat label="Occupancy" value={`${occupancy}%`} accent={occupancy < 90} />
         <Stat label="Rent roll / mo" value={formatCurrency(rentRoll)} href="/leases" />
