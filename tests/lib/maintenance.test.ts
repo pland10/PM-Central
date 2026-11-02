@@ -75,6 +75,19 @@ describe("attentionReason", () => {
     expect(attentionReason(wo({ rvStatus: "Cancelled" }), NOW)?.label).toBe("Cancelled in Rentvine · open in LeadSimple");
   });
 
+  it("flags a work order On Hold in Rentvine but active in LeadSimple, instead of Overdue", () => {
+    // WO 100206: On Hold in Rentvine, still "Work Scheduled" in LeadSimple
+    // (should be Deferred there), and past its due date.
+    expect(attentionReason(wo({ rvStatus: "On Hold", dueAt: daysAgo(40) }), NOW)).toEqual({
+      kind: "rvOnHold",
+      label: "On Hold in Rentvine · open in LeadSimple",
+    });
+  });
+
+  it("does not flag a Rentvine On Hold work order that's already Deferred in LeadSimple", () => {
+    expect(attentionReason(wo({ rvStatus: "On Hold", stage: "Deferred", terminal: true }), NOW)).toBeNull();
+  });
+
   it("does not treat Rentvine Open or Pending Closure as closed", () => {
     expect(attentionReason(wo({ rvStatus: "Open" }), NOW)).toBeNull();
     expect(attentionReason(wo({ rvStatus: "Pending Closure" }), NOW)).toBeNull();
