@@ -1,0 +1,37 @@
+name: Migrate invoicing (customers, receipts, watched)
+
+# One-time copy of the standalone invoicing app's customers, inspector receipts
+# and watched properties into PM-Central's database (DATABASE_URL — production
+# Neon). Creates the tables first (prisma/sql/invoicing_customers.sql, additive
+# and idempotent), then upserts by id, so re-running is safe.
+#
+# Needs repository secrets INVOICING_SUPABASE_URL and
+# INVOICING_SUPABASE_SERVICE_KEY for the (restored) old invoicing project. The
+# log prints counts only.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: migrate-invoicing
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      INVOICING_SUPABASE_URL: ${{ secrets.INVOICING_SUPABASE_URL }}
+      INVOICING_SUPABASE_SERVICE_KEY: ${{ secrets.INVOICING_SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Create tables (additive)
+        run: npx prisma db execute --file prisma/sql/invoicing_customers.sql --schema prisma/schema.prisma
+      - name: Copy data
+        run: npx tsx scripts/migrate-invoicing-extras.ts

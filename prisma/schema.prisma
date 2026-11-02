@@ -396,6 +396,70 @@ model Invoice {
   @@index([status])
 }
 
+// Recurring billing: who is invoiced, for what, at what rate and how often.
+// Ported from the standalone invoicing app's `customers` table (same ids, so
+// Invoice.customerId on migrated invoices still points at the right customer).
+// billingParty: lms | pmi. frequency: monthly | quarterly | annual | none.
+// startDate is 'YYYY-MM-DD' — the first billing period.
+model InvoiceCustomer {
+  id                  String   @id @default(uuid())
+  billingParty        String   @default("pmi")
+  name                String
+  addr                String?
+  contact             String?
+  attn                String?
+  service             String?
+  rate                Float    @default(0)
+  frequency           String   @default("monthly")
+  startDate           String
+  isActive            Boolean  @default(true)
+  rentvinePortfolioId String?
+  rentvineContactId   String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
+// Payments OUT to Squatter Watch inspectors (proof an inspector was paid for
+// visits) — internal records, separate from invoices. Ported from the old
+// app's `receipts`. items = [{ property, at, amount }]. paidOn is 'YYYY-MM-DD'.
+model InspectorReceipt {
+  id           String    @id @default(uuid())
+  number       String    @unique
+  billingParty String    @default("pmi")
+  inspector    String    @default("")
+  paidOn       String
+  method       String?
+  reference    String?
+  notes        String?
+  items        Json?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([paidOn])
+  @@index([inspector])
+}
+
+// Addresses in the Squatter Watch programme that receipts can reference (the
+// old app's `watched_properties`). source: property | portfolio | manual.
+model WatchedProperty {
+  id                  String   @id @default(uuid())
+  address             String
+  label               String?
+  source              String   @default("manual")
+  rentvinePropertyId  String?  @unique
+  rentvinePortfolioId String?  @unique
+  isActive            Boolean  @default(true)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([isActive, address])
+}
+
 // Single-row (id = 1) invoice defaults, mirroring the old app_settings.settings
 // JSON: { billTo, terms, notes, taxRate, notesByParty }.
 model InvoiceSetting {
