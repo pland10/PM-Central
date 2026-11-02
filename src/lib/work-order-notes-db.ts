@@ -19,6 +19,8 @@ const DDL = [
      created_at   TIMESTAMPTZ DEFAULT now()
    )`,
   `CREATE INDEX IF NOT EXISTS work_order_notes_wo_idx ON work_order_notes (wo_id, created_at DESC)`,
+  // Added after the table shipped — self-heals existing prod rows on first use.
+  `ALTER TABLE work_order_notes ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ`,
 ];
 
 let table: Promise<void> | null = null;
@@ -40,6 +42,7 @@ type RawNote = {
   author_name: string | null;
   author_email: string | null;
   created_at: Date | null;
+  edited_at: Date | null;
   emailed_to: string | null;
 };
 const toNote = (r: RawNote): WorkOrderNote => ({
@@ -48,16 +51,43 @@ const toNote = (r: RawNote): WorkOrderNote => ({
   authorName: r.author_name ?? "",
   authorEmail: r.author_email ?? "",
   createdAt: r.created_at ? new Date(r.created_at).toISOString() : "",
+  editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
   emailedTo: r.emailed_to ?? null,
 });
 
 export async function listNotes(woId: string): Promise<WorkOrderNote[]> {
   await ensureNotesTable();
   const rows = await prisma.$queryRaw<RawNote[]>(Prisma.sql`
-    SELECT id, body, author_name, author_email, created_at, emailed_to
+    SELECT id, body, author_name, author_email, created_at, edited_at, emailed_to
     FROM work_order_notes WHERE wo_id = ${woId}
     ORDER BY created_at DESC`);
   return rows.map(toNote);
+}
+
+// The author's email for one note, for authorizing an edit/delete (null if the
+// note is gone).
+export async function noteAuthor(id: number): Promise<string | null> {
+  await ensureNotesTable();
+  const rows = await prisma.$queryRaw<{ author_email: string | null }[]>(Prisma.sql`
+    SELECT author_email FROM work_order_notes WHERE id = ${id}`);
+  return rows.length ? (rows[0].author_email ?? "") : null;
+}
+
+// Edit a note's body (authorization is the caller's job). Returns the updated
+// note, or null if it no longer exists.
+export async function updateNote(id: number, body: string): Promise<WorkOrderNote | null> {
+  await ensureNotesTable();
+  const rows = await prisma.$queryRaw<RawNote[]>(Prisma.sql`
+    UPDATE work_order_notes SET body = ${body}, edited_at = now()
+    WHERE id = ${id}
+    RETURNING id, body, author_name, author_email, created_at, edited_at, emailed_to`);
+  return rows.length ? toNote(rows[0]) : null;
+}
+
+export async function deleteNote(id: number): Promise<boolean> {
+  await ensureNotesTable();
+  const n = await prisma.$executeRaw(Prisma.sql`DELETE FROM work_order_notes WHERE id = ${id}`);
+  return n > 0;
 }
 
 export async function addNote(n: {
@@ -78,6 +108,7 @@ export async function addNote(n: {
     authorName: n.authorName,
     authorEmail: n.authorEmail,
     createdAt: new Date(row.created_at).toISOString(),
+    editedAt: null,
     emailedTo: null,
   };
 }
