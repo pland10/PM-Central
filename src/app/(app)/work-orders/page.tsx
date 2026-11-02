@@ -1,4 +1,5 @@
 import { listWorkOrders } from "@/lib/work-orders-dashboard";
+import { noteSummaries } from "@/lib/work-order-notes-db";
 import { WorkOrdersTable } from "./WorkOrdersTable";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export default async function WorkOrdersPage({
   searchParams: Promise<{ stage?: string }>;
 }) {
   const { stage } = await searchParams;
-  const rows = await listWorkOrders();
+  const [rows, notes] = await Promise.all([listWorkOrders(), noteSummaries()]);
 
   if (!rows) {
     return (
@@ -36,7 +37,7 @@ export default async function WorkOrdersPage({
         </p>
       </div>
 
-      <WorkOrdersTable rows={rows} stage={stage} />
+      <WorkOrdersTable rows={rows} stage={stage} notes={notes} />
     </div>
   );
 }
