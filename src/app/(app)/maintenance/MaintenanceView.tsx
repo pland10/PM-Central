@@ -546,6 +546,14 @@ export function MaintenanceView({
               [notesFor.id]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
             }))
           }
+          onChanged={(latest, count) =>
+            setNotes((prev) => {
+              const next = { ...prev };
+              if (!latest || count === 0) delete next[notesFor.id];
+              else next[notesFor.id] = { count, latest: latest.body, latestAt: latest.createdAt, latestBy: latest.authorName };
+              return next;
+            })
+          }
         />
       )}
     </div>

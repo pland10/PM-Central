@@ -246,6 +246,41 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
     return out;
   }
 
+  // Property-group names per property ID, from /properties/groups (id -> name)
+  // and each property's /properties/{id}/groups membership. The list endpoint's
+  // ?propertyGroupID= filter is ignored by Rentvine, hence one call per
+  // property. Best-effort: a property whose lookup fails is left out of the map
+  // (its tags are kept as-is); if the group list itself fails the map is empty.
+  async function groupsByProperty(propertyIds: number[]): Promise<Map<number, string[]>> {
+    const out = new Map<number, string[]>();
+    const names = new Map<string, string>();
+    try {
+      for (const row of await rvGetAll("/properties/groups", { attempts: 2 })) {
+        const g = unwrap(row, "propertyGroup");
+        const id = toStr(g.propertyGroupID);
+        if (id) names.set(id, toStr(g.name));
+      }
+    } catch {
+      return out;
+    }
+    let failed = 0;
+    for (const id of propertyIds) {
+      try {
+        const rows = await rvGetAll(`/properties/${id}/groups`, { attempts: 2 });
+        out.set(
+          id,
+          rows
+            .map((r) => names.get(toStr(unwrap(r, "groupProperty").propertyGroupID)))
+            .filter((n): n is string => !!n)
+        );
+      } catch {
+        failed++;
+      }
+    }
+    console.log(`[groups] ${names.size} groups; membership read for ${out.size} properties, ${failed} failed`);
+    return out;
+  }
+
   return {
     async extract(): Promise<RentvineExport> {
       if (!config.apiKey || !config.apiSecret) {
@@ -348,9 +383,16 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
         }
       }
 
-      // Work orders + property-group tags are synced separately (they need their
-      // own Rentvine endpoints) and the "sync" load mode preserves them, so they
-      // are left empty here rather than wiped.
+      // Property groups -> tags (e.g. Squatter Watch). Left undefined when a
+      // property's membership couldn't be read, so the loader keeps its tags.
+      const groups = await groupsByProperty(properties.map((p) => p.id));
+      for (const p of properties) {
+        const g = groups.get(p.id);
+        if (g) p.groups = g;
+      }
+
+      // Work orders are synced separately (their own Rentvine endpoints) and the
+      // "sync" load mode preserves them, so they are left empty here.
       return { account: config.account, properties, activeLeases, workOrders: [] };
     },
   };
