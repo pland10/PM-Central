@@ -59,12 +59,20 @@ describe("latestRunState", () => {
     expect((await latestRunState(workOrders, SINCE)).state).toBe("failure");
   });
 
-  it("picks the newest run started after the click", async () => {
+  it("follows the first run after the click, not a later click's run on the same workflow", async () => {
+    // Work orders clicked at 17:00, then Payments (same sync.yml) at 17:00:30.
+    // Work orders' own run finished; it must not wait on the Payments run.
     answer([
-      run({ id: 2, status: "in_progress", conclusion: null, created_at: "2026-11-01T17:00:30Z" }),
+      run({ id: 2, status: "queued", conclusion: null, created_at: "2026-11-01T17:00:30Z" }),
       run({ id: 1, created_at: "2026-11-01T17:00:05Z" }),
     ]);
-    expect((await latestRunState(workOrders, SINCE)).state).toBe("running");
+    expect((await latestRunState(workOrders, SINCE)).state).toBe("success");
+  });
+
+  it("does not adopt a run created well before the click", async () => {
+    // A run from 30s before the click is someone else's, not this click's.
+    answer([run({ created_at: "2026-11-01T16:59:30Z", status: "in_progress", conclusion: null })]);
+    expect(await latestRunState(workOrders, SINCE)).toEqual({ state: "pending" });
   });
 
   it("reports an error when GitHub refuses", async () => {
@@ -80,11 +88,17 @@ describe("activeRun", () => {
       run({ id: 2, status: "in_progress", conclusion: null, created_at: "2026-11-01T17:17:27Z" }),
       run({ id: 1, created_at: "2026-11-01T17:05:12Z" }),
     ]);
-    // The newest active run is the one to wait for; "pending"/"waiting" count as queued.
+    // The oldest active run finishes first, so follow it — the status then
+    // updates as each run lands instead of only after the last.
+    expect(await activeRun(workOrders)).toEqual({ state: "running", since: "2026-11-01T17:17:27Z" });
+  });
+
+  it("treats pending/waiting runs as queued", async () => {
+    answer([run({ status: "pending", conclusion: null, created_at: "2026-11-01T17:20:28Z" }), run({})]);
     expect(await activeRun(workOrders)).toEqual({ state: "queued", since: "2026-11-01T17:20:28Z" });
   });
 
-  it("says running when the newest active run has started", async () => {
+  it("says running when the active run has started", async () => {
     answer([run({ status: "in_progress", conclusion: null, created_at: "2026-11-01T17:17:27Z" }), run({})]);
     expect(await activeRun(workOrders)).toEqual({ state: "running", since: "2026-11-01T17:17:27Z" });
   });

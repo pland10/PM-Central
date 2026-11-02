@@ -51,6 +51,15 @@ describe("POST /api/admin/refresh", () => {
     );
   });
 
+  it("returns the server's dispatch time, so the button follows its own run", async () => {
+    const before = Date.now();
+    const body = await (await refresh({ source: "properties" })).json();
+
+    const since = Date.parse(body.since);
+    expect(since).toBeGreaterThanOrEqual(before);
+    expect(since).toBeLessThanOrEqual(Date.now());
+  });
+
   it("dispatches the Plaid sync in real-sync mode (not the no-op test default)", async () => {
     const res = await refresh({ source: "bank_transactions" });
 

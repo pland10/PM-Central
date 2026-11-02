@@ -46,6 +46,21 @@ describe("RefreshButton", () => {
     expect(statusUrl.searchParams.get("since")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("follows the run from the server's dispatch time, not the browser clock", async () => {
+    const serverSince = "2026-11-02T11:25:04.000Z";
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("active=1")) return ok(active);
+      if (String(url).startsWith("/api/admin/refresh/status")) return ok({ state: "success" });
+      return ok({ ok: true, since: serverSince });
+    });
+    render(<RefreshButton source="work_orders" pollMs={5} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /refresh/i }));
+
+    expect(await screen.findByText(/done/i)).toBeTruthy();
+    const follow = fetchMock.mock.calls.map((c) => String(c[0])).find((u) => u.includes("since="))!;
+    expect(new URL(follow, "https://x").searchParams.get("since")).toBe(serverSince);
+  });
+
   it("shows a failed run with a link to its log", async () => {
     states = [{ state: "failure", url: "https://github.com/x/runs/9" }];
     render(<RefreshButton source="work_orders" pollMs={5} />);

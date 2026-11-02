@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { todaysShowings } from "@/lib/showings";
 import { fetchSecurityDeposits, isRentvineConfigured } from "@/lib/security-deposits";
 import type { ExportSheet } from "@/lib/export-excel";
+import { expirationBuckets } from "@/lib/lease-expirations";
 
 export const dynamic = "force-dynamic";
 // The dashboard makes a live Rentvine report call (deposits); give it headroom
@@ -132,6 +133,8 @@ export default async function DashboardPage() {
   const expirationsSorted = [...expirations]
     .filter((e) => e.endMs - now <= EXPIRY_HORIZON_MS)
     .sort((a, b) => a.endMs - b.endMs);
+  // Counts over every dated active lease (not just the listed near-term ones).
+  const expiryCounts = expirationBuckets(expirations.map((e) => e.endMs), now);
   const topOwners = [...ownerAgg.values()].sort((a, b) => b.rentRoll - a.rentRoll).slice(0, 6);
   const vacantSorted = [...vacancies].sort((a, b) => a.address.localeCompare(b.address));
   const topDelinquencies = [...delinquencies].sort((a, b) => b.amount - a.amount);
@@ -156,6 +159,11 @@ export default async function DashboardPage() {
         ["Active leases", activeLeases],
         ["Open work orders", woSummary?.openTotal ?? 0],
         ["Delinquent leases", delinquentCount],
+        ["Leases expired (still active)", expiryCounts.expired],
+        ["Leases ending 0–30 days", expiryCounts.d0to30],
+        ["Leases ending 31–60 days", expiryCounts.d31to60],
+        ["Leases ending 61–90 days", expiryCounts.d61to90],
+        ["Leases ending 90+ days", expiryCounts.d90plus],
         ...(payments
           ? ([
               ["Payments pending", payments.pendingTotal],
@@ -238,12 +246,7 @@ export default async function DashboardPage() {
 
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat
-          label="Properties"
-          value={String(totalProperties)}
-          sub={watchCount > 0 ? `${rentalCount} rentals · ${watchCount} watch` : undefined}
-          href="/properties"
-        />
+        <Stat label="Properties" value={String(totalProperties)} href="/properties" />
         <Stat label="Units" value={String(totalUnits)} href="/properties" />
         <Stat label="Occupancy" value={`${occupancy}%`} accent={occupancy < 90} />
         <Stat label="Rent roll / mo" value={formatCurrency(rentRoll)} href="/leases" />
@@ -327,8 +330,17 @@ export default async function DashboardPage() {
 
           { id: "expirations", node: (
         <Panel title="Upcoming lease expirations" href="/leases" linkLabel="All leases" badge={expirationsSorted.length}>
+          {expirations.length > 0 && (
+            <div className="mb-3 grid grid-cols-3 gap-2 text-center sm:grid-cols-5">
+              <MiniStat label="Expired" value={String(expiryCounts.expired)} sub="leases" />
+              <MiniStat label="0–30" value={String(expiryCounts.d0to30)} sub="days" />
+              <MiniStat label="31–60" value={String(expiryCounts.d31to60)} sub="days" />
+              <MiniStat label="61–90" value={String(expiryCounts.d61to90)} sub="days" />
+              <MiniStat label="90+" value={String(expiryCounts.d90plus)} sub="days" />
+            </div>
+          )}
           {expirationsSorted.length === 0 ? (
-            <Empty>No dated leases.</Empty>
+            <Empty>{expirations.length === 0 ? "No dated leases." : "Nothing ending in the next 120 days."}</Empty>
           ) : (
             <ExpandableRows initial={5}>
               {expirationsSorted.map((e) => {
