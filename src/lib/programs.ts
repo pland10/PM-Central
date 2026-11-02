@@ -14,6 +14,14 @@ export function tagSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// A source group name -> tag slug. Rentvine's group is named "Squatterwatch
+// Properties", so any group whose slug contains "squatterwatch" maps to the
+// Squatter Watch tag; every other group keeps its own slug.
+export function groupTag(name: string): string {
+  const slug = tagSlug(name);
+  return slug.includes(SQUATTER_WATCH) ? SQUATTER_WATCH : slug;
+}
+
 // Parse the stored comma-separated tag string into slugs.
 export function parseTags(tags: string | null | undefined): string[] {
   return tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [];

@@ -112,10 +112,11 @@ export async function loadCanonical(
       tags: (p.tags ?? []).join(","),
       portfolioId,
     };
-    // In sync mode, don't overwrite existing tags when the source row carries
-    // none — group/program tags (e.g. squatterwatch) are synced separately.
+    // In sync mode, keep existing tags when the source didn't read them
+    // (tags undefined — e.g. the group lookup failed). An empty list means the
+    // source read them and the property is in no groups, so its tags clear.
     const propUpdate: Record<string, unknown> = { ...propData };
-    if (syncMode && (p.tags ?? []).length === 0) delete propUpdate.tags;
+    if (syncMode && p.tags === undefined) delete propUpdate.tags;
     const property = await prisma.property.upsert({
       where: { source_externalId: { source, externalId } },
       create: { source, externalId, ...propData },

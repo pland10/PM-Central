@@ -11,7 +11,9 @@ export interface RvProperty {
   type: string; // Rentvine's label, e.g. "Single Family Home"
   portfolioId?: number; // Rentvine portfolio (ownership entity) id
   owner?: string; // portfolio / owner display name
-  groups?: string[]; // Rentvine property groups, e.g. ["Squatter Watch"]
+  // Rentvine property group names, e.g. ["Squatterwatch Properties"].
+  // undefined = not read (lookup failed); [] = in no groups.
+  groups?: string[];
   status?: string; // "active" (default) | "inactive" — e.g. management agreement terminated
 }
 

@@ -101,6 +101,21 @@ describe("rentvineToCanonical", () => {
     expect(p.tags).toEqual(["squatterwatch"]);
   });
 
+  it("maps Rentvine's \"Squatterwatch Properties\" group to the squatterwatch tag", () => {
+    const [p] = rentvineToCanonical(
+      exportOf({ properties: [property({ groups: ["Squatterwatch Properties", "SureVestor Landlord Protection"] })] })
+    ).properties;
+    expect(p.tags).toEqual(["squatterwatch", "surevestorlandlordprotection"]);
+  });
+
+  it("leaves tags unknown when groups weren't read, and empty when the property is in none", () => {
+    const ds = rentvineToCanonical(
+      exportOf({ properties: [property({ id: 1 }), property({ id: 2, groups: [] })] })
+    );
+    expect(ds.properties[0].tags).toBeUndefined();
+    expect(ds.properties[1].tags).toEqual([]);
+  });
+
   it("sets the owner only when there is a portfolio id", () => {
     const ds = rentvineToCanonical(
       exportOf({
