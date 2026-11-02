@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS work_order_notes (
     author_name  TEXT,
     emailed_to   TEXT,                   -- set only when emailed
     emailed_at   TIMESTAMPTZ,
-    created_at   TIMESTAMPTZ DEFAULT now()
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    edited_at    TIMESTAMPTZ             -- set when a note is edited in place
 );
 CREATE INDEX IF NOT EXISTS work_order_notes_wo_idx ON work_order_notes (wo_id, created_at DESC);
+-- edited_at was added after the table first shipped; additive + idempotent.
+ALTER TABLE work_order_notes ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;

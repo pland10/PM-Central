@@ -267,6 +267,14 @@ export function WorkOrdersTable({
               [open.id]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
             }))
           }
+          onChanged={(latest, count) =>
+            setNotes((prev) => {
+              const next = { ...prev };
+              if (!latest || count === 0) delete next[open.id];
+              else next[open.id] = { count, latest: latest.body, latestAt: latest.createdAt, latestBy: latest.authorName };
+              return next;
+            })
+          }
         />
       )}
     </>

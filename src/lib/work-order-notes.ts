@@ -9,6 +9,7 @@ export type WorkOrderNote = {
   authorName: string;
   authorEmail: string;
   createdAt: string;
+  editedAt: string | null;
   emailedTo: string | null;
 };
 
