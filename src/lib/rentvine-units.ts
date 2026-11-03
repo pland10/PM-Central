@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { RvUnitLive } from "@/import/sources/rentvine/client";
+import { rentvinePropertyId } from "@/lib/rentvine-ids";
 
 // Rentvine's real units (id + name per property), mirrored into a raw
 // `rentvine_units` table by the daily core sync (scripts/sync-rentvine.ts).
@@ -54,10 +55,12 @@ export async function listActiveUnits(prisma: PrismaClient): Promise<UnitOption[
   }
 }
 
-// Does this unit belong to this property?
+// Does this unit belong to this property? `propertyId` may be the namespaced
+// Property.externalId or the bare Rentvine id (what rentvine_units stores).
 export async function unitBelongsToProperty(prisma: PrismaClient, unitId: string, propertyId: string): Promise<boolean> {
+  const rvId = rentvinePropertyId(propertyId);
   const rows = await prisma.$queryRaw<{ n: number }[]>(
-    Prisma.sql`SELECT COUNT(*)::int AS n FROM rentvine_units WHERE unit_id = ${unitId} AND property_external_id = ${propertyId}`
+    Prisma.sql`SELECT COUNT(*)::int AS n FROM rentvine_units WHERE unit_id = ${unitId} AND property_external_id = ${rvId}`
   );
   return (rows[0]?.n ?? 0) > 0;
 }
