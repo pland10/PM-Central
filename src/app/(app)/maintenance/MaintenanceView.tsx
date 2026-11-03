@@ -276,14 +276,6 @@ export function MaintenanceView({
       },
     },
     {
-      key: "rvStatus",
-      header: "Rentvine",
-      sortable: true,
-      sortValue: (r) => r.rvStatus,
-      filter: { type: "select", value: (r) => r.rvStatus },
-      render: (r) => (r.rvStatus ? <span className="text-slate-600">{r.rvStatus}</span> : <span className="text-slate-300">—</span>),
-    },
-    {
       key: "priority",
       header: "Priority",
       sortable: true,
