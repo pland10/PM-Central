@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TEMPLATE, bodyToHtml, formatBalance, normalizeTemplate, renderTemplate, senderFrom } from "@/lib/reminders";
+import { DEFAULT_TEMPLATE, bodyToHtml, formatBalance, normalizeTemplate, reminderAddress, renderTemplate, senderFrom } from "@/lib/reminders";
 
 const recipient = { tenant: "Jordan Lee", property: "12 Oak St, Hempstead, NY", amount: 1234.5 };
 
@@ -33,6 +33,13 @@ describe("normalizeTemplate", () => {
 
   it("caps very long input", () => {
     expect(normalizeTemplate({ subject: "x".repeat(400), body: "y".repeat(9000) }).subject.length).toBe(300);
+  });
+});
+
+describe("reminderAddress", () => {
+  it("puts 'notifications' on the configured From's domain", () => {
+    expect(reminderAddress("PMI Lighthouse <inspections@pmilighthouse.com>")).toBe("notifications@pmilighthouse.com");
+    expect(reminderAddress("inspections@pmilighthouse.app")).toBe("notifications@pmilighthouse.app");
   });
 });
 
