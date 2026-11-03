@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { rentvinePropertyId } from "@/lib/rentvine-ids";
 
 // Properties that an invoice can be linked to, keyed by their stable externalId
 // (what we store on the invoice). Server-side (Prisma) — used by the invoice
@@ -45,7 +46,8 @@ export function buildPropertyChoices(
   for (const p of props) {
     const label = (seen.get(p.label) ?? 0) > 1 ? `${p.label} (#${p.externalId})` : p.label;
     out.push({ label, propertyId: p.externalId, unitId: null });
-    const pu = unitsByProp.get(p.externalId) ?? [];
+    // Units carry the bare Rentvine property id; externalId is namespaced.
+    const pu = unitsByProp.get(rentvinePropertyId(p.externalId)) ?? [];
     // Units only matter where there's more than one.
     if (pu.length > 1) {
       for (const u of pu) out.push({ label: `${label} — ${u.name || `Unit #${u.unitId}`}`, propertyId: p.externalId, unitId: u.unitId });
