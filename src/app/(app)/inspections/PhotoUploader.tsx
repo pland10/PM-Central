@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { shrinkForUpload } from "@/lib/photo-shrink-client";
 import { useRouter } from "next/navigation";
 
 export function PhotoUploader({ inspectionId }: { inspectionId: number }) {
@@ -26,7 +27,7 @@ export function PhotoUploader({ inspectionId }: { inspectionId: number }) {
       const file = files[i];
       try {
         const fd = new FormData();
-        fd.append("photo", file);
+        fd.append("photo", await shrinkForUpload(file));
         const res = await fetch(`/api/inspections/${inspectionId}/photos`, {
           method: "POST",
           body: fd,

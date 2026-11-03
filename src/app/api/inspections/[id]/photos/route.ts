@@ -4,6 +4,7 @@ import { getInspectionsDb, INSPECTION_PHOTOS_BUCKET } from "@/lib/inspections/su
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 import { setPhotoLabel } from "@/lib/inspections/db";
+import { shrinkPhoto } from "@/lib/photo-shrink";
 
 // Upload a photo to the inspection-photos bucket (Supabase Storage) and record
 // it in the single DB (Prisma), or delete one. The row lives in Postgres; the
@@ -39,13 +40,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : ".jpg";
   if (!ALLOWED.includes(ext)) ext = ".jpg";
 
+  // Shrink before storing (the browser usually already has; this is the
+  // backstop). A shrunk photo is a JPEG; anything unreadable is kept as-is.
+  const photo = await shrinkPhoto(Buffer.from(await file.arrayBuffer()), file.type || "image/jpeg");
+  if (photo.shrunk) ext = ".jpg";
+
   const filename = `${crypto.randomUUID()}${ext}`;
   const path = `${inspectionId}/${filename}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
 
   const up = await db.storage
     .from(INSPECTION_PHOTOS_BUCKET)
-    .upload(path, buffer, { contentType: file.type || "image/jpeg" });
+    .upload(path, photo.buffer, { contentType: photo.contentType });
   if (up.error) return NextResponse.json({ error: up.error.message }, { status: 502 });
 
   const { data: pub } = db.storage.from(INSPECTION_PHOTOS_BUCKET).getPublicUrl(path);
