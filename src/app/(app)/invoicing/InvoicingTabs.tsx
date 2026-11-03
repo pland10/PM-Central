@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 // Tab bar shared by the Invoicing pages (ported from the standalone app's
-// Invoices · Billing · Customers views).
+// Invoices · Billing · Customers · Receipts · Properties views).
 const TABS = [
   { href: "/invoicing", label: "Invoices" },
   { href: "/invoicing/billing", label: "Billing" },
   { href: "/invoicing/customers", label: "Customers" },
+  { href: "/invoicing/receipts", label: "Receipts" },
+  { href: "/invoicing/properties", label: "Properties" },
 ];
 
 export function InvoicingTabs() {
@@ -16,7 +18,8 @@ export function InvoicingTabs() {
   return (
     <div className="mb-5 flex gap-1 border-b border-slate-200">
       {TABS.map((t) => {
-        const active = pathname === t.href;
+        // Sub-pages (e.g. a receipt) keep their tab lit; Invoices only on its own path.
+        const active = t.href === "/invoicing" ? pathname === t.href : pathname.startsWith(t.href);
         return (
           <Link
             key={t.href}

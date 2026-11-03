@@ -1,9 +1,9 @@
 "use client";
 
-export function PrintToolbar({ number }: { number: string }) {
+export function PrintToolbar({ number, kind = "Invoice" }: { number: string; kind?: string }) {
   return (
     <div className="no-print mx-auto mb-4 flex max-w-[8.5in] items-center justify-between">
-      <span className="text-sm text-slate-500">Invoice {number}</span>
+      <span className="text-sm text-slate-500">{kind} {number}</span>
       <div className="flex items-center gap-2">
         <button
           onClick={() => window.close()}
