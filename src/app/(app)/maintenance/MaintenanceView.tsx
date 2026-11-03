@@ -299,14 +299,6 @@ export function MaintenanceView({
       render: (r) => (r.vendor ? <span className="text-slate-600">{r.vendor}</span> : <span className="text-slate-300">—</span>),
     },
     {
-      key: "assignee",
-      header: "Assigned",
-      sortable: true,
-      sortValue: (r) => r.assignee.toLowerCase(),
-      filter: { type: "select", value: (r) => r.assignee },
-      render: (r) => (r.assignee ? <span className="text-slate-600">{r.assignee}</span> : <span className="text-slate-300">—</span>),
-    },
-    {
       key: "lastActivity",
       header: "Last activity",
       sortable: true,
