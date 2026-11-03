@@ -29,3 +29,25 @@ export function formatAddress(p: {
   const line1 = [p.street1, p.street2].filter(Boolean).join(", ");
   return `${line1}, ${p.city}, ${p.state} ${p.zip}`;
 }
+
+// Absolute timestamp in the business timezone (Eastern), zone spelled out so
+// it's unambiguous — e.g. "Oct 7, 2:04 PM EDT". A fixed TZ keeps the
+// server-rendered value stable (no client/server hydration mismatch).
+export function formatEasternTimestamp(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+  }).format(d);
+}
+
+// "Balances as of …" for the dashboard's Delinquencies panel, from the balance
+// sync's heartbeat (sync_status job 'balances'). null when it has never run.
+export function balancesAsOf(lastRunAt: Date | string | null | undefined): string | null {
+  if (!lastRunAt) return null;
+  const d = new Date(lastRunAt);
+  return Number.isNaN(d.getTime()) ? null : `Balances as of ${formatEasternTimestamp(d)}`;
+}
