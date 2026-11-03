@@ -344,6 +344,7 @@ export function MaintenanceView({
       options: [
         { value: "any", label: "Any reason" },
         { value: "rvClosed", label: "Closed in Rentvine, open in LeadSimple" },
+        { value: "rvOnHold", label: "On Hold in Rentvine, open in LeadSimple" },
         { value: "estimates", label: "Waiting on estimates" },
         { value: "overdue", label: "Overdue" },
         { value: "high", label: "High priority" },

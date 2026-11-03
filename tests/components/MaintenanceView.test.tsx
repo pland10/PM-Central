@@ -115,6 +115,15 @@ describe("MaintenanceView", () => {
     expect(within(boardTable()).getByText("Waiting on estimates 5 days")).toBeTruthy();
   });
 
+  it("can filter to work orders On Hold in Rentvine", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={[...rows, wo({ number: "107", issue: "Fridge shelves", rvStatus: "On Hold" })]} now={NOW} />);
+
+    await user.selectOptions(within(board()).getByRole("combobox", { name: /needs attention/i }), "rvOnHold");
+    expect(firstCells()).toEqual(["107"]);
+    expect(within(boardTable()).getByText("On Hold in Rentvine · open in LeadSimple")).toBeTruthy();
+  });
+
   it("defaults to open work orders and can show completed ones", async () => {
     const user = userEvent.setup();
     render(<MaintenanceView rows={rows} now={NOW} />);

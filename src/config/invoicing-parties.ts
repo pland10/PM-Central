@@ -12,6 +12,7 @@ export type BillingParty = {
   key: BillingPartyKey;
   label: string;
   prefix: string;
+  receiptPrefix: string; // inspector receipts (money out) keep their own sequence
   short: string;
   notes: string;
   logoSrc: string;
@@ -24,6 +25,7 @@ export const BILLING_PARTIES: Record<BillingPartyKey, BillingParty> = {
     key: "lms",
     label: "Lighthouse Maintenance Services",
     prefix: "LMS-",
+    receiptPrefix: "LMS-R-",
     short: "LMS",
     notes: "Make checks payable to Lighthouse Maintenance Services LLC.",
     logoSrc: "/invoicing/logo-lms.jpg",
@@ -39,6 +41,7 @@ export const BILLING_PARTIES: Record<BillingPartyKey, BillingParty> = {
     key: "pmi",
     label: "PMI Lighthouse",
     prefix: "PMI-",
+    receiptPrefix: "PMI-R-",
     short: "PMI Lighthouse",
     notes:
       "Make checks payable to PMI Lighthouse.\n\nOther payment options are Zelle or check. Please note the new Zelle account.\n\nZelle can be sent to:\n516-241-8075\n\nChecks can be sent to:\nPMI Lighthouse\n25 Melville Park Rd, Suite 229E\nMelville, NY 11747",

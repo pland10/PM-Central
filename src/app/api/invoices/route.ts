@@ -5,11 +5,11 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 import type { InvoiceSettings, InvoiceParty } from "@/lib/invoices";
 import { BILLING_PARTIES, DEFAULT_PARTY, partyOf, DEFAULT_BILL_TO } from "@/config/invoicing-parties";
+import { createNumberedInvoice } from "@/lib/invoice-number";
 
 // Create an invoice in PM-Central's single database (Prisma/Postgres). An
 // invoice is inserted immediately to CLAIM its number (as a draft), then edited.
-// Number = party prefix + (highest existing with that prefix + 1); the unique
-// constraint on `number` is the real guard, so on a collision we retry.
+// Numbering lives in createNumberedInvoice (shared with the billing run).
 export const dynamic = "force-dynamic";
 
 function todayISO(): string {
@@ -23,9 +23,6 @@ function addDays(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
-}
-function pad4(n: number): string {
-  return String(n).padStart(4, "0");
 }
 
 export async function POST(req: NextRequest) {
@@ -49,24 +46,6 @@ export async function POST(req: NextRequest) {
   const taxRate = Number(settings.taxRate) || 0;
   const notes = settings.notesByParty?.[partyKey]?.trim() || party.notes;
 
-  // Highest existing number for this prefix (INCLUDING soft-deleted rows).
-  const existing = await prisma.invoice.findMany({
-    where: { number: { startsWith: party.prefix } },
-    select: { number: true },
-  });
-  let max = 0;
-  const re = new RegExp(`^${party.prefix}(\\d+)$`);
-  for (const r of existing) {
-    const m = re.exec(r.number || "");
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-
-  // Optional floor for new invoice numbers (env INVOICE_NUMBER_START). Used on
-  // dev to start numbers at e.g. 4000 so dev invoices look distinct from prod;
-  // leave unset on prod to continue the normal sequence.
-  const startAt = Math.max(0, parseInt(process.env.INVOICE_NUMBER_START ?? "", 10) || 0);
-  const base = Math.max(max + 1, startAt);
-
   const date = todayISO();
   const baseData = {
     invoiceDate: date,
@@ -85,20 +64,12 @@ export async function POST(req: NextRequest) {
     periodKey: null,
   };
 
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const number = party.prefix + pad4(base + attempt);
-    try {
-      const created = await prisma.invoice.create({
-        data: { ...baseData, number },
-        select: { id: true },
-      });
-      return NextResponse.json({ id: created.id }, { status: 201 });
-    } catch (e) {
-      // P2002 = unique constraint violation on `number`; bump and retry.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-      const message = e instanceof Error ? e.message : "Create failed";
-      return NextResponse.json({ error: message }, { status: 502 });
-    }
+  try {
+    const created = await createNumberedInvoice(party.prefix, baseData);
+    if (created) return NextResponse.json({ id: created.id }, { status: 201 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Create failed";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
   return NextResponse.json({ error: "Could not allocate an invoice number. Try again." }, { status: 409 });
 }
