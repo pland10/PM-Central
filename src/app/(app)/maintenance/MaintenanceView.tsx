@@ -122,12 +122,14 @@ export function MaintenanceView({
   notes: initialNotes = {},
   staff = [],
   techs: initialTechs = {},
+  actions,
 }: {
   rows: WorkOrderRow[];
   now: number;
   notes?: Record<string, NoteSummary>; // PM-Central notes, by work order id
   staff?: StaffMember[]; // PM-Central users — who can be picked as the tech
   techs?: Record<string, StaffMember>; // in-house tech per work order id
+  actions?: React.ReactNode; // header buttons, e.g. "+ New work order"
 }) {
   const kpis = maintenanceKpis(rows, now);
   // Notes per work order (updated in place when one is added) and the work
@@ -357,7 +359,10 @@ export function MaintenanceView({
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Maintenance</h1>
             <p className="mt-1 text-sm text-slate-500">Work orders, exceptions and follow-ups — live from LeadSimple and Rentvine.</p>
           </div>
-          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Preview — replaces Work Orders when ready</span>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Preview — replaces Work Orders when ready</span>
+            {actions}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">

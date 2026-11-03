@@ -21,6 +21,16 @@ describe("buildPropertyChoices", () => {
     ]);
   });
 
+  it("matches units to real (namespaced) property ids", () => {
+    // Property.externalId is "<account>:property:<rentvine id>"; units carry the bare Rentvine id.
+    const real = [{ externalId: "pmilighthouse:property:48", label: "8204 138th Street · Jamaica" }];
+    expect(buildPropertyChoices(real, units).map((c) => [c.propertyId, c.unitId])).toEqual([
+      ["pmilighthouse:property:48", null],
+      ["pmilighthouse:property:48", "45"],
+      ["pmilighthouse:property:48", "46"],
+    ]);
+  });
+
   it("makes repeated labels unique", () => {
     const dupes = [
       { externalId: "1", label: "1 Main St · Town" },
