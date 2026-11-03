@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { shrinkForUpload } from "@/lib/photo-shrink-client";
 import { useRouter } from "next/navigation";
 import type { InspectionDetail, InspectionMeta, MoveInMeta, MoveInRoom } from "@/lib/inspections/types";
 import {
@@ -214,7 +215,7 @@ export function MoveInForm({ initial }: { initial?: InspectionDetail }) {
         setPhotoMsg(`Uploading photo ${i + 1} of ${photos.length}…`);
         try {
           const fd = new FormData();
-          fd.append("photo", photos[i].file);
+          fd.append("photo", await shrinkForUpload(photos[i].file));
           if (photos[i].label) fd.append("label", photos[i].label);
           const r = await fetch(`/api/inspections/${id}/photos`, { method: "POST", body: fd });
           if (!r.ok) failed++;
