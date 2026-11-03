@@ -7,7 +7,6 @@ import type { WorkOrderRow } from "@/lib/work-orders";
 // safe to import from client components.
 
 export const STALLED_DAYS = 3; // open with no activity for longer than this
-export const NEW_WAITING_DAYS = 1; // "New WO" stage for longer than this
 // In an estimate stage ("Estimate Requested", "Multiple Estimates") with no
 // activity for longer than this. Estimates are tracked by LeadSimple stage —
 // Rentvine holds almost none — and LeadSimple doesn't expose when a stage was
@@ -31,10 +30,10 @@ export function lastActivityAt(r: WorkOrderRow): string | null {
   return (a ?? -Infinity) >= (b ?? -Infinity) ? r.updatedAt : r.lastUpdateAt;
 }
 
-// Still in the "New WO" stage more than a day after it was created.
-function isNewWaiting(r: WorkOrderRow, now: number): boolean {
-  const created = ms(r.createdAt);
-  return !r.terminal && /^new wo$/i.test(r.stage.trim()) && created != null && created < now - NEW_WAITING_DAYS * DAY;
+// In the "New WO" stage — an untriaged work order needs action right away, so
+// it's flagged the moment it appears (no waiting period).
+function isNewWaiting(r: WorkOrderRow): boolean {
+  return !r.terminal && /^new wo$/i.test(r.stage.trim());
 }
 
 export type AttentionKind = "rvClosed" | "estimates" | "overdue" | "high" | "new" | "stalled";
@@ -60,7 +59,7 @@ export function attentionReason(r: WorkOrderRow, now: number): AttentionReason |
   const due = ms(r.dueAt);
   if (due != null && due < now) return { kind: "overdue", label: "Overdue" };
   if (r.priority === "High") return { kind: "high", label: "High priority" };
-  if (isNewWaiting(r, now)) return { kind: "new", label: "New WO needs action" };
+  if (isNewWaiting(r)) return { kind: "new", label: "New WO needs action" };
   if (last != null && last < now - STALLED_DAYS * DAY) {
     return { kind: "stalled", label: `Stalled ${Math.floor((now - last) / DAY)} days` };
   }
@@ -68,6 +67,16 @@ export function attentionReason(r: WorkOrderRow, now: number): AttentionReason |
 }
 
 export const isCancelled = (r: WorkOrderRow) => /cancel/i.test(r.stage);
+
+// Sort key for the merged Work Orders table: flagged work orders first (most
+// urgent reason first, matching the attention queue's order), then open-but-fine,
+// then completed, then cancelled.
+export function actionRank(r: WorkOrderRow, now: number): number {
+  const reason = attentionReason(r, now);
+  if (reason) return KIND_RANK[reason.kind];
+  if (!r.terminal) return 10;
+  return isCancelled(r) ? 21 : 20;
+}
 
 export type RowStatus = "completed" | "cancelled" | "attention" | "open";
 export function rowStatus(r: WorkOrderRow, now: number): RowStatus {
@@ -99,7 +108,7 @@ export function maintenanceKpis(rows: WorkOrderRow[], now: number): MaintenanceK
       const due = ms(r.dueAt);
       return due != null && due < now;
     }).length,
-    newWaiting: open.filter((r) => isNewWaiting(r, now)).length,
+    newWaiting: open.filter((r) => isNewWaiting(r)).length,
     completedThisWeek: rows.filter((r) => {
       const closed = ms(r.closedAt);
       return r.terminal && !isCancelled(r) && closed != null && closed >= now - COMPLETED_WINDOW_DAYS * DAY && closed <= now;
