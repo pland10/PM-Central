@@ -20,7 +20,8 @@ async function readAll(table: string): Promise<Record<string, unknown>[] | null>
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db.from(table).select("*").range(from, from + 999);
     if (error) {
-      console.warn(`  ${table}: could not read (${error.code ?? ""} ${error.message}) — skipped`);
+      // Trimmed: a wrong URL returns a whole HTML page as the "message".
+      console.warn(`  ${table}: could not read (${error.code ?? ""} ${String(error.message).slice(0, 160)}) — skipped`);
       return null;
     }
     out.push(...((data ?? []) as Record<string, unknown>[]));
