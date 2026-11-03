@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress, formatCurrency } from "@/lib/format";
+import { formatAddress, formatCurrency, balancesAsOf, formatEasternTimestamp } from "@/lib/format";
 
 describe("formatCurrency", () => {
   it("formats whole US dollars with separators", () => {
@@ -36,5 +36,17 @@ describe("formatAddress", () => {
   it("skips an empty or null street2", () => {
     expect(formatAddress({ ...base, street2: "" })).toBe("66 Francis Court, Elmont, NY 11003");
     expect(formatAddress({ ...base, street2: null })).toBe("66 Francis Court, Elmont, NY 11003");
+  });
+});
+
+describe("formatEasternTimestamp / balancesAsOf", () => {
+  it("shows a time in New York with the zone spelled out", () => {
+    expect(formatEasternTimestamp(new Date("2026-11-03T21:27:58Z"))).toBe("Nov 3, 4:27 PM EST");
+    expect(formatEasternTimestamp(new Date("2026-10-07T18:04:00Z"))).toBe("Oct 7, 2:04 PM EDT");
+  });
+
+  it("labels when balances were last synced, or null if never", () => {
+    expect(balancesAsOf(new Date("2026-11-03T21:27:58Z"))).toBe("Balances as of Nov 3, 4:27 PM EST");
+    expect(balancesAsOf(null)).toBeNull();
   });
 });

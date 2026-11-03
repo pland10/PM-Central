@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { getSyncStatusMap } from "@/lib/sync-status";
 import { DATA_SOURCES } from "@/config/data-sources";
 import { RefreshButton } from "./RefreshButton";
+import { formatEasternTimestamp } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -19,19 +20,6 @@ function timeAgo(d: Date | null): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// Absolute timestamp in the business timezone (Eastern), with the zone spelled
-// out so it's unambiguous — e.g. "Oct 7, 2:04 PM EDT". Fixed TZ keeps the
-// server-rendered value stable (no client/server hydration mismatch).
-function formatTimestamp(d: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-    timeZoneName: "short",
-  }).format(d);
-}
 
 export default async function AdminDataPage() {
   const user = await getCurrentUser();
@@ -90,7 +78,7 @@ export default async function AdminDataPage() {
                     <span className="text-slate-400">—</span>
                   ) : lastRun ? (
                     <div className="leading-tight">
-                      <div className="whitespace-nowrap text-slate-700">{formatTimestamp(lastRun)}</div>
+                      <div className="whitespace-nowrap text-slate-700">{formatEasternTimestamp(lastRun)}</div>
                       <div className="text-xs text-slate-400">{timeAgo(lastRun)}</div>
                     </div>
                   ) : (
