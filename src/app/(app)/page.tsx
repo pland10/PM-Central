@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { formatAddress, formatCurrency } from "@/lib/format";
+import { balancesAsOf, formatAddress, formatCurrency } from "@/lib/format";
 import { SQUATTER_WATCH } from "@/lib/programs";
 import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
 import { workOrderStageSummary, workOrderAlerts, attentionList } from "@/lib/work-orders-dashboard";
@@ -14,6 +14,7 @@ import { todaysShowings } from "@/lib/showings";
 import { fetchSecurityDeposits, isRentvineConfigured } from "@/lib/security-deposits";
 import type { ExportSheet } from "@/lib/export-excel";
 import { expirationBuckets } from "@/lib/lease-expirations";
+import { getSyncStatusMap } from "@/lib/sync-status";
 
 export const dynamic = "force-dynamic";
 // The dashboard makes a live Rentvine report call (deposits); give it headroom
@@ -30,7 +31,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, woAlerts, payments, me, todayShow, depositsLive, watchCount] = await Promise.all([
+  const [properties, woSummary, woAlerts, payments, me, todayShow, depositsLive, watchCount, syncStatus] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -56,7 +57,9 @@ export default async function DashboardPage() {
     prisma.property.count({
       where: { status: "active", tags: { contains: SQUATTER_WATCH } },
     }),
+    getSyncStatusMap(), // sync heartbeats — for "Balances as of …" on Delinquencies
   ]);
+  const balancesLabel = balancesAsOf(syncStatus.balances?.last_run_at);
 
   const now = Date.now();
   let totalUnits = 0;
@@ -303,6 +306,7 @@ export default async function DashboardPage() {
           href="/leases"
           linkLabel="All leases"
         >
+          {balancesLabel && <div className="-mt-1 mb-2 text-[11px] text-slate-400">{balancesLabel}</div>}
           {topDelinquencies.length === 0 ? (
             <Empty>No outstanding balances.</Empty>
           ) : (
