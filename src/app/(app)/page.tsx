@@ -6,6 +6,8 @@ import { paymentSummaryAsOf } from "@/lib/payments-dashboard";
 import { workOrderStageSummary, workOrderAlerts, attentionList } from "@/lib/work-orders-dashboard";
 import { PaymentsPane } from "./PaymentsPane";
 import { ExpandableRows } from "./ExpandableRows";
+import { SendReminders } from "./SendReminders";
+import { lastRemindedByLease } from "@/lib/reminders-db";
 import { DashboardExport } from "./DashboardExport";
 import { DraggablePanels } from "./DraggablePanels";
 import { DashboardEditProvider, RearrangeButton } from "./DashboardEdit";
@@ -31,7 +33,7 @@ function contactName(c: {
 }
 
 export default async function DashboardPage() {
-  const [properties, woSummary, woAlerts, payments, me, todayShow, depositsLive, watchCount, syncStatus] = await Promise.all([
+  const [properties, woSummary, woAlerts, payments, me, todayShow, depositsLive, reminded, watchCount, syncStatus] = await Promise.all([
     prisma.property.findMany({
       // Exclude Squatter Watch (home-watch, vacant by design) and inactive
       // properties (e.g. terminated agreements) so they don't distort occupancy.
@@ -54,6 +56,7 @@ export default async function DashboardPage() {
     isRentvineConfigured() ? fetchSecurityDeposits() : Promise.resolve(null),
     // Squatter Watch (home-watch) properties are excluded from the metrics
     // above, but still counted so the Properties tile can show the full total.
+    lastRemindedByLease(), // {} until any reminder is sent
     prisma.property.count({
       where: { status: "active", tags: { contains: SQUATTER_WATCH } },
     }),
@@ -72,7 +75,7 @@ export default async function DashboardPage() {
     key: string; propertyId: string; address: string; tenant: string; endMs: number; rent: number;
   }[] = [];
   const delinquencies: {
-    key: string; propertyId: string; address: string; tenant: string; amount: number;
+    key: string; propertyId: string; address: string; tenant: string; amount: number; email: string | null;
   }[] = [];
   const ownerAgg = new Map<string, { name: string; properties: number; rentRoll: number }>();
 
@@ -100,6 +103,7 @@ export default async function DashboardPage() {
         if (active.balanceDue > 0) {
           delinquencies.push({
             key: active.id, propertyId: p.id, address: formatAddress(p), tenant, amount: active.balanceDue,
+            email: active.tenants[0]?.contact?.email ?? null,
           });
         }
       } else {
@@ -311,6 +315,18 @@ export default async function DashboardPage() {
             <Empty>No outstanding balances.</Empty>
           ) : (
             <>
+              <div className="mb-3 flex justify-end">
+                <SendReminders
+                  delinquencies={topDelinquencies.map((d) => ({
+                    key: d.key,
+                    tenant: d.tenant,
+                    address: d.address,
+                    amount: d.amount,
+                    email: d.email,
+                    lastRemindedAt: reminded[d.key] ?? null,
+                  }))}
+                />
+              </div>
               <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                 <MiniStat label="Delinquent" value={String(delinquentCount)} sub="leases" />
                 <MiniStat label="Largest" value={formatCurrency(largestDelinquency)} />
