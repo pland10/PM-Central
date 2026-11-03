@@ -53,9 +53,10 @@ describe("attentionReason", () => {
     expect(attentionReason(wo({ priority: "High" }), NOW)?.kind).toBe("high");
   });
 
-  it("flags a New WO that has waited more than a day", () => {
+  it("flags a New WO as soon as it appears — no waiting period", () => {
     expect(attentionReason(wo({ stage: "New WO", createdAt: daysAgo(2) }), NOW)?.label).toBe("New WO needs action");
-    expect(attentionReason(wo({ stage: "New WO", createdAt: daysAgo(0.5) }), NOW)).toBeNull();
+    // Brand-new (created minutes ago) still flags immediately.
+    expect(attentionReason(wo({ stage: "New WO", createdAt: daysAgo(0.01) }), NOW)?.kind).toBe("new");
   });
 
   it("flags no activity for more than 3 days as stalled, with the day count", () => {

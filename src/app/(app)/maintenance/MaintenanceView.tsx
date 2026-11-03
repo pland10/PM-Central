@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import {
-  attentionQueue,
+  actionRank,
   attentionReason,
   lastActivityAt,
   maintenanceKpis,
@@ -12,7 +12,6 @@ import {
   rowStatus,
   STALLED_DAYS,
   type ActivityItem,
-  type AttentionKind,
   type RowStatus,
 } from "@/lib/maintenance";
 import { pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
@@ -30,11 +29,6 @@ const TZ = "America/New_York";
 function when(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-US", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function day(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric", year: "numeric" });
 }
 
 const STATUS_PILL: Record<RowStatus, string> = {
@@ -114,16 +108,6 @@ function Section({ title, meta, children, label }: { title: string; meta?: strin
     </section>
   );
 }
-
-const REASON_PILL: Record<AttentionKind, string> = {
-  rvClosed: "bg-sky-100 text-sky-700",
-  rvOnHold: "bg-sky-100 text-sky-700",
-  estimates: "bg-violet-100 text-violet-700",
-  overdue: "bg-red-100 text-red-700",
-  high: "bg-red-100 text-red-700",
-  new: "bg-amber-100 text-amber-700",
-  stalled: "bg-amber-100 text-amber-700",
-};
 
 const DOT: Record<ActivityItem["event"], string> = {
   completed: "bg-emerald-500",
@@ -218,7 +202,6 @@ export function MaintenanceView({
   });
   // Every flagged work order (not just the top few), in urgency order; `order`
   // keeps that order available as the default sort.
-  const queue = attentionQueue(rows, now, Infinity).map((q, order) => ({ ...q, order }));
   // Recent activity: the latest 6, expandable to everything in the last week.
   const RECENT_SHOWN = 6;
   const allRecent = recentActivity(rows, Infinity);
@@ -280,6 +263,19 @@ export function MaintenanceView({
       render: (r) => <span className="block max-w-[7.5rem] leading-snug text-slate-600">{r.stage}</span>,
     },
     {
+      key: "action",
+      header: "Required action",
+      sortable: true,
+      // Flagged work orders sort to the top (most urgent first), matching the
+      // old attention queue; open-but-fine, then completed/cancelled below.
+      sortValue: (r) => actionRank(r, now),
+      exportValue: (r) => requiredAction(r, now).label,
+      render: (r) => {
+        const a = requiredAction(r, now);
+        return <Pill className={STATUS_PILL[a.status]}>{a.label}</Pill>;
+      },
+    },
+    {
       key: "rvStatus",
       header: "Rentvine",
       sortable: true,
@@ -319,17 +315,6 @@ export function MaintenanceView({
       render: (r) => (r.assignee ? <span className="text-slate-600">{r.assignee}</span> : <span className="text-slate-300">—</span>),
     },
     {
-      key: "action",
-      header: "Required action",
-      sortable: true,
-      sortValue: (r) => requiredAction(r, now).label,
-      exportValue: (r) => requiredAction(r, now).label,
-      render: (r) => {
-        const a = requiredAction(r, now);
-        return <Pill className={STATUS_PILL[a.status]}>{a.label}</Pill>;
-      },
-    },
-    {
       key: "lastActivity",
       header: "Last activity",
       sortable: true,
@@ -341,103 +326,35 @@ export function MaintenanceView({
     notesColumn((r: WorkOrderRow) => r),
   ];
 
-  type Flagged = (typeof queue)[number];
-  const attentionColumns: Column<Flagged>[] = [
-    {
-      key: "number",
-      header: "WO #",
-      sortable: true,
-      sortValue: (q) => Number(q.row.number) || 0,
-      filter: { type: "text", value: (q) => q.row.number },
-      render: (q) => <WoNumber r={q.row} />,
-    },
-    {
-      key: "issue",
-      header: "Work order",
-      sortable: true,
-      sortValue: (q) => q.row.issue.toLowerCase(),
-      filter: { type: "text", value: (q) => q.row.issue },
-      render: (q) => <span className="block min-w-[11rem] max-w-[22rem] leading-snug text-slate-800">{q.row.issue}</span>,
-    },
-    {
-      key: "stage",
-      header: "Stage",
-      sortable: true,
-      sortValue: (q) => pipelineRank(q.row.stage),
-      filter: { type: "select", value: (q) => q.row.stage },
-      render: (q) => <span className="block max-w-[7.5rem] leading-snug text-slate-600">{q.row.stage}</span>,
-    },
-    {
-      key: "action",
-      header: "Required action",
-      sortable: true,
-      sortValue: (q) => q.order,
-      exportValue: (q) => q.reason.label,
-      render: (q) => <Pill className={REASON_PILL[q.reason.kind]}>{q.reason.label}</Pill>,
-    },
-    {
-      key: "property",
-      header: "Property",
-      sortable: true,
-      sortValue: (q) => q.row.property.toLowerCase(),
-      filter: { type: "text", value: (q) => q.row.property },
-      render: (q) => <Property r={q.row} />,
-    },
-    {
-      key: "vendor",
-      header: "Vendor",
-      sortable: true,
-      sortValue: (q) => q.row.vendor.toLowerCase(),
-      filter: { type: "select", value: (q) => q.row.vendor },
-      render: (q) => (q.row.vendor ? <span className="text-slate-600">{q.row.vendor}</span> : <span className="text-slate-300">—</span>),
-    },
-    {
-      key: "due",
-      header: "Due",
-      sortable: true,
-      sortValue: (q) => q.row.dueAt ?? "",
-      exportValue: (q) => day(q.row.dueAt),
-      render: (q) => <span className="whitespace-nowrap text-xs text-slate-600">{day(q.row.dueAt)}</span>,
-    },
-    {
-      key: "lastActivity",
-      header: "Last activity",
-      sortable: true,
-      sortValue: (q) => lastActivityAt(q.row) ?? "",
-      exportValue: (q) => when(lastActivityAt(q.row)),
-      render: (q) => <span className="whitespace-nowrap text-xs text-slate-500">{when(lastActivityAt(q.row))}</span>,
-    },
-    techColumn((q: Flagged) => q.row),
-    notesColumn((q: Flagged) => q.row),
-  ];
-  const reasonFacet: Facet<Flagged>[] = [
-    {
-      key: "reason",
-      label: "Reason",
-      options: [
-        { value: "rvClosed", label: "Closed in Rentvine, open in LeadSimple" },
-        { value: "rvOnHold", label: "On Hold in Rentvine, open in LeadSimple" },
-        { value: "estimates", label: "Waiting on estimates" },
-        { value: "overdue", label: "Overdue" },
-        { value: "high", label: "High priority" },
-        { value: "new", label: "New WO waiting" },
-        { value: "stalled", label: "Stalled" },
-      ],
-      match: (q, v) => q.reason.kind === v,
-    },
-  ];
-
   const facets: Facet<WorkOrderRow>[] = [
     {
       key: "status",
       label: "Status",
       options: [
         { value: "active", label: "Open (all)" },
-        { value: "attention", label: "Needs attention" },
         { value: "completed", label: "Completed" },
         { value: "cancelled", label: "Cancelled" },
       ],
       match: (r, v) => (v === "active" ? !r.terminal : rowStatus(r, now) === v),
+    },
+    {
+      // Narrow to just the work orders that need action, or one specific reason.
+      key: "reason",
+      label: "Needs attention",
+      options: [
+        { value: "any", label: "Any reason" },
+        { value: "rvClosed", label: "Closed in Rentvine, open in LeadSimple" },
+        { value: "rvOnHold", label: "On Hold in Rentvine, open in LeadSimple" },
+        { value: "estimates", label: "Waiting on estimates" },
+        { value: "overdue", label: "Overdue" },
+        { value: "high", label: "High priority" },
+        { value: "new", label: "New WO" },
+        { value: "stalled", label: "Stalled" },
+      ],
+      match: (r, v) => {
+        const reason = attentionReason(r, now);
+        return v === "any" ? reason !== null : reason?.kind === v;
+      },
     },
   ];
 
@@ -469,7 +386,7 @@ export function MaintenanceView({
             icon="!"
             tone="blue"
           />
-          <Kpi label="New WOs waiting" value={String(kpis.newWaiting)} sub="In New WO over a day" icon="✚" tone="purple" />
+          <Kpi label="New WOs waiting" value={String(kpis.newWaiting)} sub="In the New WO stage" icon="✚" tone="purple" />
           <Kpi label="Completed this week" value={String(kpis.completedThisWeek)} sub="Closed in the last 7 days" icon="✓" tone="green" />
         </div>
       </section>
@@ -478,24 +395,21 @@ export function MaintenanceView({
         <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{techError}</p>
       )}
       <div className="mt-4 grid grid-cols-1 gap-4">
-        <Section title="Work Orders Requiring Attention" meta={`${queue.length} work order${queue.length === 1 ? "" : "s"}`}>
-          {queue.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-slate-400">No work orders currently require attention.</div>
-          ) : (
-            <div className="p-3">
-              <DataTable
-                rows={queue}
-                columns={attentionColumns}
-                rowKey={(q) => q.row.id}
-                dense
-                search={(q) => `${q.row.number} ${q.row.issue} ${q.row.property} ${q.row.vendor} ${q.reason.label}`}
-                searchPlaceholder="Search attention list…"
-                exportName="Maintenance - Attention"
-                facets={reasonFacet}
-                initialSort={{ key: "action", dir: "asc" }}
-              />
-            </div>
-          )}
+        <Section title="Work Orders" meta={`${rows.length} synced`}>
+          <div className="p-3">
+            <DataTable
+              rows={rows}
+              columns={columns}
+              rowKey={(r) => r.id}
+              dense
+              search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.stage}`}
+              searchPlaceholder="Search work order, property, vendor…"
+              exportName="Maintenance"
+              facets={facets}
+              initialFacets={{ status: "active" }}
+              initialSort={{ key: "action", dir: "asc" }}
+            />
+          </div>
         </Section>
 
         <Section title="Recent Activity" meta={allRecent.length ? `${week.length} in the last 7 days` : "No activity"}>
@@ -523,25 +437,6 @@ export function MaintenanceView({
               {showAllRecent ? "Show less" : `Show all ${week.length} from the last 7 days →`}
             </button>
           )}
-        </Section>
-      </div>
-
-      <div className="mt-4">
-        <Section title="All Work Orders" label="All work orders" meta={`${rows.length} synced`}>
-          <div className="p-3">
-            <DataTable
-              rows={rows}
-              columns={columns}
-              rowKey={(r) => r.id}
-              dense
-              search={(r) => `${r.number} ${r.issue} ${r.property} ${r.vendor} ${r.assignee} ${r.stage}`}
-              searchPlaceholder="Search work order, property, vendor…"
-              exportName="Maintenance"
-              facets={facets}
-              initialFacets={{ status: "active" }}
-              initialSort={{ key: "lastActivity", dir: "desc" }}
-            />
-          </div>
         </Section>
       </div>
       {notesFor && (
