@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
-import { bodyToHtml, renderTemplate, senderFrom } from "@/lib/reminders";
+import { bodyToHtml, reminderAddress, renderTemplate, senderFrom } from "@/lib/reminders";
 import { fetchRecipients, getReminderTemplate, recordReminders } from "@/lib/reminders-db";
 
 // Send rent reminders to the selected delinquent leases, as the logged-in user
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "None of the selected leases can be reminded (no balance or no email)." }, { status: 400 });
     }
 
-    const from = senderFrom(user.name || user.email || "", process.env.RESEND_FROM || DEFAULT_FROM);
+    const address = process.env.RESEND_REMINDERS_FROM || reminderAddress(process.env.RESEND_FROM || DEFAULT_FROM);
+    const from = senderFrom(user.name || user.email || "", address);
     const replyTo = user.email ?? undefined;
 
     const sent: typeof recipients = [];

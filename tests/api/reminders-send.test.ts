@@ -41,7 +41,7 @@ describe("POST /api/reminders/send", () => {
     expect(mail.to).toBe("jordan@example.com");
     expect(mail.subject).toBe("Balance of $1,200.00");
     expect(mail.html).toContain("Dear Jordan Lee, you owe $1,200.00 on 12 Oak St.");
-    expect(mail.from).toBe("John Ray <inspections@pmilighthouse.app>"); // sent as the user
+    expect(mail.from).toBe("John Ray <notifications@pmilighthouse.app>"); // the user's name on the notifications mailbox
     expect(mail.replyTo).toBe("john@pmi.com"); // replies come back to them
     expect(recordReminders).toHaveBeenCalledWith([{ leaseId: "l1", tenant: "Jordan Lee", email: "jordan@example.com", amount: 1200 }], "john@pmi.com");
   });

@@ -309,24 +309,26 @@ export default async function DashboardPage() {
           title="Delinquencies"
           href="/leases"
           linkLabel="All leases"
+          action={
+            topDelinquencies.length > 0 ? (
+              <SendReminders
+                delinquencies={topDelinquencies.map((d) => ({
+                  key: d.key,
+                  tenant: d.tenant,
+                  address: d.address,
+                  amount: d.amount,
+                  email: d.email,
+                  lastRemindedAt: reminded[d.key] ?? null,
+                }))}
+              />
+            ) : undefined
+          }
         >
           {balancesLabel && <div className="-mt-1 mb-2 text-[11px] text-slate-400">{balancesLabel}</div>}
           {topDelinquencies.length === 0 ? (
             <Empty>No outstanding balances.</Empty>
           ) : (
             <>
-              <div className="mb-3 flex justify-end">
-                <SendReminders
-                  delinquencies={topDelinquencies.map((d) => ({
-                    key: d.key,
-                    tenant: d.tenant,
-                    address: d.address,
-                    amount: d.amount,
-                    email: d.email,
-                    lastRemindedAt: reminded[d.key] ?? null,
-                  }))}
-                />
-              </div>
               <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                 <MiniStat label="Delinquent" value={String(delinquentCount)} sub="leases" />
                 <MiniStat label="Largest" value={formatCurrency(largestDelinquency)} />
@@ -480,12 +482,12 @@ function Stat({ label, value, href, accent, sub }: { label: string; value: strin
   return href ? <Link href={href}>{body}</Link> : body;
 }
 
-function Panel({ title, href, linkLabel, badge, amount, children }: {
-  title: string; href?: string; linkLabel?: string; badge?: number; amount?: number; children: React.ReactNode;
+function Panel({ title, href, linkLabel, badge, amount, action, children }: {
+  title: string; href?: string; linkLabel?: string; badge?: number; amount?: number; action?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="flex items-center text-sm font-semibold uppercase tracking-wide text-slate-500">
           {title}
           {badge != null && (
@@ -497,9 +499,12 @@ function Panel({ title, href, linkLabel, badge, amount, children }: {
             </span>
           )}
         </h2>
-        {href && linkLabel && (
-          <Link href={href} className="text-xs font-medium text-brand-600 hover:underline">{linkLabel} →</Link>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {action}
+          {href && linkLabel && (
+            <Link href={href} className="text-xs font-medium text-brand-600 hover:underline">{linkLabel} →</Link>
+          )}
+        </div>
       </div>
       <div>{children}</div>
     </section>

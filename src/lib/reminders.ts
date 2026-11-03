@@ -54,6 +54,17 @@ export function normalizeTemplate(input: { subject?: unknown; body?: unknown }):
   };
 }
 
+// Reminders go out from a dedicated "notifications" mailbox on the same
+// verified domain as the app's configured From — so the address never silently
+// moves to an unverified domain, whatever RESEND_FROM is set to.
+export function reminderAddress(configuredFrom: string, localPart = "notifications"): string {
+  const m = configuredFrom.match(/<([^>]+)>/);
+  const addr = (m ? m[1] : configuredFrom).trim();
+  const at = addr.lastIndexOf("@");
+  const domain = at >= 0 ? addr.slice(at + 1) : "pmilighthouse.com";
+  return `${localPart}@${domain}`;
+}
+
 // The From header for a reminder: the sender's name on the verified Resend
 // domain (Resend can only send from a verified domain), so replies — routed by
 // Reply-To to the sender's own address — reach them, while the email reads as
