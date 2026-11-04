@@ -13,6 +13,7 @@ const config: RentvineAccountConfig = {
   subdomain: "pmilighthouse",
   apiKey: "key",
   apiSecret: "secret",
+  rentRollReportId: "10",
 };
 
 const onePage = (rows: unknown[]) => jsonResponse(rows, { headers: { "Pagination-Total-Pages": "1" } });
@@ -41,8 +42,10 @@ function stubAccount({
   tenantContacts = {} as Record<string, unknown[]>,
   groupList = null as unknown[] | null, // null → /properties/groups 404s
   memberships = {} as Record<string, unknown[]>, // propertyID → groupProperty rows; missing → 500
+  rentRoll = null as { leaseID: string; expectedMonthlyRentAmount: string }[] | null, // null → report 404s
 } = {}) {
   return stubFetch([
+    [/\/reports\/rent-roll/, rentRoll ? jsonResponse({ rows: rentRoll.map((d) => ({ rowTypeID: 3, data: d })) }) : jsonResponse({}, { status: 404 })],
     [/\/properties\/groups$/, groupList ? onePage(groupList) : jsonResponse({}, { status: 404 })],
     [
       /\/properties\/(\d+)\/groups$/,
@@ -80,6 +83,7 @@ describe("accountConfigFromEnv", () => {
       subdomain: "pmilighthouse",
       apiKey: "account-key",
       apiSecret: "generic-secret",
+      rentRollReportId: "10",
     });
   });
 });
@@ -157,6 +161,20 @@ describe("liveRentvineSource.extract", () => {
 
     expect(out.activeLeases.map((l) => l.leaseId)).toEqual([27]);
     expect(out.activeLeases[0]).toMatchObject({ prop: 12, rent: 2500, depositBalance: 2500 });
+  });
+
+  it("takes current rent from the Rent Roll report, falling back to the unit rent when the report has none (the 5 Ring Ln case)", async () => {
+    // The unit's listing rent lags ($2500 here) after a renewal; the Rent Roll
+    // report carries the real $4100. Lease 27 isn't in the report → unit rent.
+    stubAccount({
+      leases: [leaseRow("6"), leaseRow("27")],
+      rentRoll: [{ leaseID: "6", expectedMonthlyRentAmount: "$4,100.00" }],
+    });
+
+    const out = await liveRentvineSource(config).extract();
+    const rentById = Object.fromEntries(out.activeLeases.map((l) => [l.leaseId, l.rent]));
+    expect(rentById[6]).toBe(4100); // report rent beats the stale unit rent
+    expect(rentById[27]).toBe(2500); // not in report → unit rent, unchanged
   });
 
   it("enriches the primary tenant's contact details, keeping the name when lookup fails", async () => {
