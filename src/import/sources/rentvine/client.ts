@@ -18,6 +18,9 @@ export interface RentvineAccountConfig {
   subdomain: string; // e.g. "pmilighthouse" -> https://pmilighthouse.rentvine.com
   apiKey: string;
   apiSecret: string;
+  // Saved "Rent Roll" report id — the source of each lease's current rent
+  // (expectedMonthlyRentAmount). Default 10 for PMI Lighthouse.
+  rentRollReportId: string;
 }
 
 export function accountConfigFromEnv(account: string): RentvineAccountConfig {
@@ -29,6 +32,7 @@ export function accountConfigFromEnv(account: string): RentvineAccountConfig {
     subdomain: get("SUBDOMAIN") || account,
     apiKey: get("API_KEY"),
     apiSecret: get("API_SECRET"),
+    rentRollReportId: get("RENT_ROLL_REPORT_ID") || "10",
   };
 }
 
@@ -53,6 +57,12 @@ function toNum(v: unknown): number | undefined {
 
 function toStr(v: unknown): string {
   return v == null ? "" : String(v);
+}
+
+// Report amounts can arrive as "$4,100.00" or "4100.00"; strip to a number.
+function money(v: unknown): number {
+  const n = parseFloat(String(v ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
 }
 
 function toDateStr(v: unknown): string {
@@ -201,6 +211,33 @@ export async function fetchRentvineUnits(config: RentvineAccountConfig): Promise
 export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
   const { rvGet, rvGetAll, unwrap } = rvHttp(config);
 
+  // Current monthly rent per lease, from the saved "Rent Roll" report
+  // (expectedMonthlyRentAmount) — the authoritative current rent, unlike the
+  // unit's listing rent which lags after a renewal. Best-effort: on any failure
+  // (report missing/renamed, bad id) the map is empty and each lease falls back
+  // to the unit rent. The report is report-type 63, same shape as the balance
+  // report: rows `{ data: { leaseID, expectedMonthlyRentAmount, … } }`.
+  async function loadRentByLease(): Promise<Map<number, number>> {
+    const out = new Map<number, number>();
+    if (!config.rentRollReportId) return out;
+    try {
+      const { json } = await rvGet(
+        `/reports/rent-roll?exportTypeID=1&orientation=2&showHeader=true&reportID=${config.rentRollReportId}`,
+        { attempts: 1 }
+      );
+      const rows = Array.isArray(json) ? json : ((json as { rows?: unknown[] })?.rows ?? []);
+      for (const row of rows as Record<string, unknown>[]) {
+        const d = (row.data ?? row) as Record<string, unknown>;
+        const leaseId = toNum(d.leaseID ?? d.leaseId);
+        const rent = money(d.expectedMonthlyRentAmount);
+        if (leaseId != null && rent > 0) out.set(leaseId, rent);
+      }
+    } catch {
+      // report unavailable — leases fall back to the unit's rent
+    }
+    return out;
+  }
+
   async function loadPropertyTypeNames(): Promise<Record<string, string>> {
     for (const path of ["/property-types", "/propertyTypes"]) {
       try {
@@ -291,11 +328,12 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
         );
       }
 
-      const [propRows, pfRows, leaseRows, typeNames] = await Promise.all([
+      const [propRows, pfRows, leaseRows, typeNames, rentByLease] = await Promise.all([
         rvGetAll("/properties"),
         rvGetAll("/portfolios"),
         rvGetAll("/leases"),
         loadPropertyTypeNames(),
+        loadRentByLease(),
       ]);
 
       // portfolioID -> owner (portfolio) name, for the owning entity.
@@ -324,21 +362,27 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
         };
       });
 
-      // Active leases only. Rent + deposit come off the embedded unit; dates and
-      // the primary tenant name are on the lease itself.
+      // Active leases only. Rent is the lease's CURRENT monthly rent from the
+      // Rent Roll report (expectedMonthlyRentAmount) — neither the lease object
+      // nor the embedded unit carries it, and the unit's `rent` is a listing
+      // figure that lags after a renewal (e.g. 5 Ring Ln kept the unit's stale
+      // $3900 while the lease was $4100). The unit rent is only a fallback when
+      // the report has no figure for the lease. Deposit comes off the unit; dates
+      // and the primary tenant name are on the lease itself.
       const activeLeases: RvLease[] = [];
       for (const row of leaseRows) {
         const l = unwrap(row, "lease");
         if (toStr(l.primaryLeaseStatusID) !== ACTIVE_PRIMARY_STATUS) continue;
         const unit = unwrap(row, "unit");
+        const leaseId = toNum(l.leaseID);
         const tenants = Array.isArray(l.tenants) ? (l.tenants as unknown[]) : [];
         activeLeases.push({
           prop: Number(l.propertyID),
-          leaseId: toNum(l.leaseID),
+          leaseId,
           tenant: toStr(tenants[0]),
           start: toStr(l.startDate),
           end: toStr(l.endDate),
-          rent: toNum(unit.rent) ?? toNum(l.rentAmount) ?? toNum(l.baseRentAmount),
+          rent: (leaseId != null ? rentByLease.get(leaseId) : undefined) ?? toNum(unit.rent),
           depositBalance: toNum(unit.deposit),
         });
       }
