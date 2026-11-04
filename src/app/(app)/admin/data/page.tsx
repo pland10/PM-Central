@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { getSyncStatusMap } from "@/lib/sync-status";
 import { DATA_SOURCES } from "@/config/data-sources";
 import { RefreshButton } from "./RefreshButton";
+import { ShrinkPhotosButton } from "./ShrinkPhotosButton";
 import { formatEasternTimestamp } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +99,8 @@ export default async function AdminDataPage() {
         After clicking Refresh, the sync runs in the background (usually 1–2 minutes). The button
         shows its progress, and the time updates when it&apos;s done.
       </p>
+
+      <ShrinkPhotosButton />
     </div>
   );
 }
