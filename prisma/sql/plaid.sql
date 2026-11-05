@@ -72,3 +72,6 @@ ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_at TIMESTAMPTZ
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT;              -- who saved it (email / 'operator')
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS property_external_id TEXT;      -- linked property (properties."externalId")
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS unit_external_id TEXT;          -- linked unit (rentvine_units.unit_id), null = whole property
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false; -- filed away (recorded in both QB + Rentvine), hidden from the active list
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;        -- when it was archived
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_by TEXT;               -- who archived it

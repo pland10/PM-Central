@@ -34,6 +34,40 @@ export async function PATCH(
   }
 
   const body = await req.json().catch(() => ({}));
+
+  // Archive / unarchive is its own action, not a normal annotation edit. A row
+  // can be archived only once it's recorded in BOTH QuickBooks and Rentvine;
+  // unarchiving (undoing a mistake) is always allowed.
+  if (typeof (body as { archived?: unknown }).archived === "boolean") {
+    const archived = (body as { archived: boolean }).archived;
+    try {
+      await ensurePlaidAnnotationColumns(prisma);
+      if (archived) {
+        const n = await prisma.$executeRaw(Prisma.sql`
+          UPDATE plaid_transactions
+          SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
+          WHERE transaction_id = ${transactionId} AND pending = false
+            AND recorded_quickbooks = true AND recorded_rentvine = true`);
+        if (n === 0) {
+          return NextResponse.json(
+            { error: "Only a transaction recorded in both QuickBooks and Rentvine can be archived." },
+            { status: 409 }
+          );
+        }
+      } else {
+        const n = await prisma.$executeRaw(Prisma.sql`
+          UPDATE plaid_transactions
+          SET archived = false, archived_at = NULL, archived_by = NULL
+          WHERE transaction_id = ${transactionId}`);
+        if (n === 0) return NextResponse.json({ error: "Transaction not found." }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, archived });
+    } catch (e) {
+      console.error(`[plaid] archive change failed for ${transactionId}:`, e);
+      return NextResponse.json({ error: "Could not save." }, { status: 500 });
+    }
+  }
+
   const patch = sanitizeAnnotationPatch(body);
 
   // A typed category is checked against the shared list: look-alikes save under
