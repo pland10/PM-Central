@@ -24,7 +24,7 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 | `/leases/{id}/renewals` | **ignores `{id}` — returns the whole renewals collection.** Rows `{ renewal: { leaseID, startDate, endDate, previousStartDate, previousEndDate, leaseRenewalStatusID } }`. Fetch once, index by `leaseID`. |
 | `/maintenance/work-orders` | wraps `workOrder`; `priorityID` 1/2/3 = Low/Medium/High |
 | `/reports/<route>?exportTypeID=1&json=<urlencoded {displayColumns, orderBys, filters}>` | `{ rows: [{rowTypeID, data}] }` — `3` = data row, `4` = totals |
-| `/reports/rent-roll?exportTypeID=1&…&reportID=<id>` | saved report (balances, default id 27) |
+| `/reports/rent-roll?exportTypeID=1&…&reportID=<id>` | saved report (report-type 63), rows `{ rowTypeID, data }` (3 = data, 4 = totals); `data` has `leaseID`, `expectedMonthlyRentAmount`, `balanceDue`, `depositBalance`, dates. **id 27** = Outstanding Balance (balances sync reads `balanceDue`); **id 10** = Rent Roll (core sync reads `expectedMonthlyRentAmount` for current rent). Amounts may be `"$4,100.00"`-formatted — strip `[$,]`. Find ids via `list_saved_reports`. |
 | `/accounting/receipts` | **tenant receipts only**, oldest first. Rows `{ receipt, payment, charge }`; `payment` has `transactionID, achStatusID, settlementID, portfolioID, leaseID, contactID, amount, datePosted, isVoided, returnTransactionID`. Ignores `transactionTypeID`. Used by leadsimple-search `settlement_sync.py`. |
 | `/accounting/transactions?transactionTypeID=5` | **owner receipts** (owner contributions), newest first, rows wrap `transaction` (same fields as `payment` above; `leaseID`/`propertyID` null). The filter works here (`transactionTypeIDs=` is ignored). Type ids match the MCP's `list_transactions` list. |
 | `/accounting/transactions/{id}` | one transaction, wraps `transaction` |
@@ -57,6 +57,14 @@ LeadSimple stage — "Estimate Requested" / "Multiple Estimates" — instead).
 - After a renewal, a lease's own `endDate` can stay at the **prior** term's end —
   even before its `startDate`. The renewal record's `endDate` is authoritative;
   the core sync corrects it and logs `[renewal] lease <id>: end A -> B`.
+- **Current monthly rent is NOT on the lease or unit object.** The `/leases` row
+  has no rent field at all, and the embedded `unit.rent` is a *listing* figure
+  that lags after a renewal (5 Ring Ln / lease 6: unit stuck at $3900 while the
+  real rent was $4100). The live rent is the Rent Roll report's
+  `expectedMonthlyRentAmount` (= the recurring Rent charge). The core sync reads
+  it via `loadRentByLease()` (report id `RENTVINE_RENT_ROLL_REPORT_ID`, default
+  10), keyed by `leaseID`, and only falls back to `unit.rent`. Confirmed by
+  probing lease 6's raw fields — don't trust `unit.rent` for rent.
 - Reports split deposits into manager-held (`heldSecurityDepositBalance`) vs
   owner-held; the report total adds both and overstates PMI's trust liability.
 - Work order **assignee ≠ vendor**. The *assignee* is the internal staff member
