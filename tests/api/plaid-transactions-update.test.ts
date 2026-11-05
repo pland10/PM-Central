@@ -147,4 +147,31 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     const update = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /UPDATE plaid_transactions/.test(s))!;
     expect(update).toMatch(/pending = false/);
   });
+
+  describe("archive / unarchive", () => {
+    it("archives a row, guarded on it being recorded in both QuickBooks and Rentvine", async () => {
+      const res = await patch({ archived: true });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, archived: true });
+      const sql = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /archived = true/.test(s))!;
+      expect(sql).toMatch(/recorded_quickbooks = true AND recorded_rentvine = true/);
+      expect(sql).toMatch(/pending = false/);
+    });
+
+    it("409s when the row isn't recorded in both (the guard matched no row)", async () => {
+      executeRaw.mockResolvedValueOnce(0);
+      const res = await patch({ archived: true });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/both QuickBooks and Rentvine/i);
+    });
+
+    it("unarchives, clearing the archive stamps, with no eligibility guard", async () => {
+      const res = await patch({ archived: false });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, archived: false });
+      const sql = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /archived = false/.test(s))!;
+      expect(sql).toMatch(/archived_at = NULL/);
+      expect(sql).not.toMatch(/recorded_quickbooks = true/);
+    });
+  });
 });

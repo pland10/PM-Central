@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionsTable } from "@/app/(app)/accounting/transactions/TransactionsTable";
@@ -22,6 +22,7 @@ const rows: TxnRow[] = [
     notes: "",
     propertyId: null,
     unitId: null,
+    archived: false,
   },
   {
     transactionId: "t2",
@@ -39,6 +40,7 @@ const rows: TxnRow[] = [
     notes: "",
     propertyId: null,
     unitId: null,
+    archived: false,
   },
 ];
 
@@ -319,6 +321,37 @@ describe("TransactionsTable", () => {
       await user.click(screen.getByRole("button", { name: /^select$/i }));
       expect(screen.getByLabelText("select-p1")).toBeDisabled();
       expect(screen.getByLabelText("select-t1")).not.toBeDisabled();
+    });
+  });
+
+  describe("archive", () => {
+    const both: TxnRow = { ...rows[0], transactionId: "t3", recordedQuickbooks: true, recordedRentvine: true };
+
+    it("offers Archive only on a row recorded in both QuickBooks and Rentvine", () => {
+      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+      expect(screen.getByLabelText("archive-t3")).toBeInTheDocument();
+      expect(screen.queryByLabelText("archive-t1")).toBeNull(); // t1 isn't recorded in both
+    });
+
+    it("archives via PATCH and drops the row from the active view", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+      await user.click(screen.getByLabelText("archive-t3"));
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("/api/plaid/transactions/t3");
+      expect(JSON.parse(init.body)).toEqual({ archived: true });
+      await waitFor(() => expect(screen.queryByLabelText("archive-t3")).toBeNull());
+    });
+
+    it("shows archived rows with Unarchive under the Archived filter", async () => {
+      const user = userEvent.setup();
+      const archived: TxnRow = { ...both, transactionId: "t4", archived: true };
+      render(<TransactionsTable initialRows={[rows[0], archived]} accounts={["American Express"]} />);
+      expect(screen.queryByLabelText("unarchive-t4")).toBeNull(); // hidden in the default Active view
+
+      await user.selectOptions(screen.getByRole("combobox", { name: /status/i }), "archived");
+      await user.click(screen.getByLabelText("unarchive-t4"));
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ archived: false });
     });
   });
 });
