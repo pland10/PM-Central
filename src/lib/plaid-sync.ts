@@ -36,6 +36,11 @@ const ANNOTATION_DDL = [
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS annotated_by TEXT`,
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS property_external_id TEXT`, // → properties.externalId
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS unit_external_id TEXT`, // → rentvine_units.unit_id
+  // Archive: a row recorded in both QuickBooks and Rentvine can be filed away
+  // (hidden from the active list, kept for review, unarchivable).
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_by TEXT`,
 ];
 
 // Lazy ensure-guard (db-change skill, Pattern B): run the additive ALTERs once
@@ -118,6 +123,7 @@ export async function syncOneItem(
         AND (category_override IS NULL OR category_override = '')
         AND recorded_quickbooks = false
         AND recorded_rentvine = false
+        AND archived = false
         AND (notes IS NULL OR notes = '')`);
   }
   await prisma.$executeRaw(

@@ -70,6 +70,33 @@ export function TransactionsTable({
     }
   }, []);
 
+  // Archive / unarchive one row (a row recorded in both QuickBooks and Rentvine
+  // can be filed away; unarchiving undoes a mistake). Optimistic like `save`.
+  const archive = useCallback(async (id: string, archived: boolean) => {
+    let prevRow: TxnRow | undefined;
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.transactionId !== id) return r;
+        prevRow = r;
+        return { ...r, archived };
+      })
+    );
+    try {
+      const res = await fetch(`/api/plaid/transactions/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "");
+      setError("");
+    } catch (e) {
+      if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
+      const reason = e instanceof Error && e.message ? `${e.message} ` : "";
+      setError(`${reason}Couldn't ${archived ? "archive" : "unarchive"} — reverted it.`);
+    }
+  }, []);
+
   // Multi-select for bulk "reimbursable" edits. `shown` tracks the rows the
   // DataTable is currently displaying (after search/filters) for "select all".
   const [selecting, setSelecting] = useState(false);
@@ -114,12 +141,14 @@ export function TransactionsTable({
   const summary = useMemo(
     () =>
       summarizeTransactions(
-        rows.map((r) => ({
-          amount: r.amount,
-          reimbursable: r.reimbursable,
-          recordedQuickbooks: r.recordedQuickbooks,
-          recordedRentvine: r.recordedRentvine,
-        }))
+        rows
+          .filter((r) => !r.archived) // the tiles describe the active working set
+          .map((r) => ({
+            amount: r.amount,
+            reimbursable: r.reimbursable,
+            recordedQuickbooks: r.recordedQuickbooks,
+            recordedRentvine: r.recordedRentvine,
+          }))
       ),
     [rows]
   );
@@ -355,8 +384,35 @@ export function TransactionsTable({
           />
         ),
       },
+      {
+        key: "archive",
+        header: "",
+        exportable: false,
+        render: (r) =>
+          r.archived ? (
+            <button
+              type="button"
+              aria-label={`unarchive-${r.transactionId}`}
+              onClick={() => archive(r.transactionId, false)}
+              className="whitespace-nowrap text-xs font-medium text-slate-500 hover:text-brand-600"
+            >
+              Unarchive
+            </button>
+          ) : r.recordedQuickbooks && r.recordedRentvine && !r.pending ? (
+            <button
+              type="button"
+              aria-label={`archive-${r.transactionId}`}
+              onClick={() => archive(r.transactionId, true)}
+              className="whitespace-nowrap text-xs font-medium text-slate-500 hover:text-red-600"
+            >
+              Archive
+            </button>
+          ) : (
+            <span className="text-slate-300" title="Record it in both QuickBooks and Rentvine to archive">—</span>
+          ),
+      },
     ],
-    [save, accounts, propertyLabel, propertyLookup]
+    [save, archive, accounts, propertyLabel, propertyLookup]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -387,6 +443,15 @@ export function TransactionsTable({
 
   const facets = useMemo<Facet<TxnRow>[]>(
     () => [
+      {
+        key: "status",
+        label: "Status",
+        options: [
+          { value: "active", label: "Active" },
+          { value: "archived", label: "Archived" },
+        ],
+        match: (r, v) => (v === "archived" ? r.archived : !r.archived),
+      },
       {
         key: "reimbursable",
         label: "Reimbursable",
@@ -537,6 +602,7 @@ export function TransactionsTable({
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${r.notes}`}
         searchPlaceholder="Search merchant, notes…"
         facets={facets}
+        initialFacets={{ status: "active" }}
         initialSort={{ key: "postedDate", dir: "desc" }}
         exportName="Transactions"
       />
