@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { DATA_SOURCES, getDataSource, type DataSource } from "@/config/data-sources";
 import { dispatchSources } from "@/lib/dispatch";
+import { cronAuthorized } from "@/lib/cron-auth";
 
 // External-scheduler entry point. A reliable managed scheduler (e.g. Upstash
 // QStash or cron-job.org) calls this on a schedule instead of relying on
@@ -18,19 +18,9 @@ import { dispatchSources } from "@/lib/dispatch";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // not configured => locked down
-  const auth = req.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const provided = bearer || req.nextUrl.searchParams.get("key") || "";
-  const a = Buffer.from(provided);
-  const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 async function handle(req: NextRequest) {
-  if (!authorized(req)) {
+  if (!cronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
