@@ -8,7 +8,9 @@ import { DATA_SOURCES } from "@/config/data-sources";
 // schedule silently does nothing.
 type Cron = { path: string; schedule: string };
 const vercel = JSON.parse(readFileSync(join(__dirname, "..", "vercel.json"), "utf8")) as { crons?: Cron[] };
-const crons = vercel.crons ?? [];
+const allCrons = vercel.crons ?? [];
+// The sync-dispatch crons (the text-alerts cron is checked separately below).
+const crons = allCrons.filter((c) => c.path.startsWith("/api/cron/sync"));
 
 const tierOf = (c: Cron) => new URL(c.path, "https://x").searchParams.get("tier");
 
@@ -27,11 +29,16 @@ describe("vercel.json crons", () => {
   });
 
   it("gives every cron a distinct path", () => {
-    expect(new Set(crons.map((c) => c.path)).size).toBe(crons.length);
+    expect(new Set(allCrons.map((c) => c.path)).size).toBe(allCrons.length);
   });
 
   it("uses valid 5-field schedules", () => {
-    for (const c of crons) expect(c.schedule.trim().split(/\s+/)).toHaveLength(5);
+    for (const c of allCrons) expect(c.schedule.trim().split(/\s+/)).toHaveLength(5);
+  });
+
+  it("checks for outbound-text alerts every 5 minutes", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "*/5 * * * *" });
+    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$)/.test(c.path))).toBe(true);
   });
 
   it("runs the hourly tier every daytime hour (7am–7pm ET is 11–23 UTC)", () => {
