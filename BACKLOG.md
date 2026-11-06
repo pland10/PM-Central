@@ -3,6 +3,20 @@
 Ideas captured for later. Not scheduled yet; details to be nailed down when we
 pick one up.
 
+## One-time auto-archive of old bank transactions (through 2026-09-28)
+On the Accounting → Bank Transactions tab, archive everything from the beginning
+through **Sept 28, 2026** in one pass, to clear out the historical backlog.
+
+- Likely a one-time admin action (button or script) over
+  `plaid_transactions` with `posted_date <= 2026-09-28`.
+- Open question to settle before building: does it archive **only** rows already
+  recorded in both QuickBooks and Rentvine (same guard as the per-row and
+  "Archive all recorded" actions), or **everything** through that date
+  regardless of recorded status? The current archive paths all require
+  both-recorded; a blanket date archive would need its own code path.
+- Reversible either way — archived rows stay reviewable under the Archived
+  filter and can be unarchived.
+
 ## Inspection summary emails
 When an inspection is completed, send a summary to **info@pmilighthouse.com**.
 

@@ -97,6 +97,42 @@ export function TransactionsTable({
     }
   }, []);
 
+  // Rows that can be filed away: recorded in both QuickBooks and Rentvine,
+  // posted, not already archived. Powers the "Archive all recorded" button.
+  const eligibleToArchive = useMemo(
+    () => rows.filter((r) => r.recordedQuickbooks && r.recordedRentvine && !r.pending && !r.archived),
+    [rows]
+  );
+
+  // Archive every eligible row at once. The server sweeps the whole table (so it
+  // also catches rows beyond the loaded cap); we optimistically file the loaded
+  // ones and roll back together if the request fails.
+  const archiveAllRecorded = useCallback(async () => {
+    const eligible = rows.filter((r) => r.recordedQuickbooks && r.recordedRentvine && !r.pending && !r.archived);
+    if (eligible.length === 0) return;
+    if (
+      !window.confirm(
+        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"} recorded in both QuickBooks and Rentvine?`
+      )
+    )
+      return;
+    const ids = new Set(eligible.map((r) => r.transactionId));
+    const before = new Map(eligible.map((r) => [r.transactionId, r]));
+    setRows((prev) => prev.map((r) => (ids.has(r.transactionId) ? { ...r, archived: true } : r)));
+    try {
+      const res = await fetch("/api/plaid/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archiveAllRecorded: true }),
+      });
+      if (!res.ok) throw new Error();
+      setError("");
+    } catch {
+      setRows((prev) => prev.map((r) => before.get(r.transactionId) ?? r));
+      setError("Couldn't archive all recorded — reverted it. Please try again.");
+    }
+  }, [rows]);
+
   // Multi-select for bulk "reimbursable" edits. `shown` tracks the rows the
   // DataTable is currently displaying (after search/filters) for "select all".
   const [selecting, setSelecting] = useState(false);
@@ -539,9 +575,16 @@ export function TransactionsTable({
 
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         {!selecting ? (
-          <button type="button" onClick={() => setSelecting(true)} className={BTN}>
-            Select
-          </button>
+          <>
+            <button type="button" onClick={() => setSelecting(true)} className={BTN}>
+              Select
+            </button>
+            {eligibleToArchive.length > 0 && (
+              <button type="button" onClick={archiveAllRecorded} className={BTN}>
+                Archive all recorded ({eligibleToArchive.length.toLocaleString()})
+              </button>
+            )}
+          </>
         ) : (
           <>
             {selected.size > 0 && <span className="font-medium text-slate-700">{selected.size} selected</span>}

@@ -354,4 +354,39 @@ describe("TransactionsTable", () => {
       expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ archived: false });
     });
   });
+
+  describe("archive all recorded", () => {
+    const both: TxnRow = { ...rows[0], transactionId: "t3", recordedQuickbooks: true, recordedRentvine: true };
+
+    it("shows the button with a count only when eligible rows exist", () => {
+      // rows[0]/rows[1] aren't recorded in both — no button
+      const { unmount } = render(<TransactionsTable initialRows={rows} accounts={["American Express"]} />);
+      expect(screen.queryByRole("button", { name: /archive all recorded/i })).toBeNull();
+      unmount();
+
+      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+      expect(screen.getByRole("button", { name: /archive all recorded \(1\)/i })).toBeInTheDocument();
+    });
+
+    it("archives all eligible rows in one bulk request and drops them from the active view", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+
+      await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("/api/plaid/transactions");
+      expect(JSON.parse(init.body)).toEqual({ archiveAllRecorded: true });
+      // the one eligible row leaves the (default Active) view
+      await waitFor(() => expect(screen.queryByLabelText("archive-t3")).toBeNull());
+    });
+
+    it("does nothing when the user cancels the confirm", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+      await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
 });
