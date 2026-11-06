@@ -202,8 +202,6 @@ export function MaintenanceView({
     exportValue: (x) => notes[row(x).id]?.latest ?? "",
     render: (x) => <NotesCell summary={notes[row(x).id]} onOpen={() => setNotesFor(row(x))} />,
   });
-  // Every flagged work order (not just the top few), in urgency order; `order`
-  // keeps that order available as the default sort.
   // Recent activity: the latest 6, expandable to everything in the last week.
   const RECENT_SHOWN = 6;
   const allRecent = recentActivity(rows, Infinity);
@@ -396,7 +394,12 @@ export function MaintenanceView({
               exportName="Maintenance"
               facets={facets}
               initialFacets={{ status: "active" }}
-              initialSort={{ key: "action", dir: "asc" }}
+              initialSort={{ key: "number", dir: "desc" }}
+              // 10 columns overrun a desktop viewport; let the table scroll
+              // sideways instead of clipping the right-hand columns. (A pinned
+              // header needs overflow-x-clip, which does the clipping, so we
+              // trade the sticky header for reachable columns here.)
+              stickyHeader={false}
             />
           </div>
         </Section>
