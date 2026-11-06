@@ -75,4 +75,37 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
     expect((await patch({ ids: ["t1"], reimbursable: "yes" })).status).toBe(404);
     expect(updates()).toHaveLength(0);
   });
+
+  describe("archive all recorded", () => {
+    it("archives every posted row recorded in both QuickBooks and Rentvine in one update, stamping who/when", async () => {
+      const res = await patch({ archiveAllRecorded: true });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, archived: 2 });
+
+      expect(updates()).toHaveLength(1);
+      const q = updates()[0][0] as { sql: string; values: unknown[] };
+      const sql = sqlOf(q);
+      expect(sql).toMatch(/archived = true/);
+      expect(sql).toMatch(/archived_at = now\(\)/);
+      expect(sql).toMatch(/archived_by =/);
+      expect(sql).toMatch(/recorded_quickbooks = true AND recorded_rentvine = true/);
+      expect(sql).toMatch(/pending = false/);
+      expect(sql).toMatch(/archived = false/); // skip rows already archived
+      expect(q.values).toEqual(["admin@pmi.com"]);
+    });
+
+    it("needs neither ids nor a reimbursable value", async () => {
+      // the archive action short-circuits before the ids/reimbursable check
+      expect((await patch({ archiveAllRecorded: true })).status).toBe(200);
+      expect(updates()).toHaveLength(1);
+    });
+
+    it("404s for a user who can't access accounting", async () => {
+      vi.mocked(getCurrentUser).mockResolvedValue({ id: "u2", email: "nobody@x.com", role: "user" } as never);
+      expect((await patch({ archiveAllRecorded: true })).status).toBe(404);
+      vi.mocked(isFeatureEnabled).mockReturnValue(false);
+      expect((await patch({ archiveAllRecorded: true })).status).toBe(404);
+      expect(updates()).toHaveLength(0);
+    });
+  });
 });
