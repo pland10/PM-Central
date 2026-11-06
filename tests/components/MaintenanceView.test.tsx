@@ -61,12 +61,12 @@ describe("MaintenanceView", () => {
     expect(within(tile(/completed this week/i)).getByText("1")).toBeTruthy();
   });
 
-  it("lists all open work orders with the ones needing attention on top, reason shown", () => {
+  it("lists open work orders newest WO # first by default, with attention reasons shown", () => {
     render(<MaintenanceView rows={rows} now={NOW} />);
 
-    // Flagged first (High before Stalled), then the open-but-fine one; the
-    // completed one is hidden by the default Open filter.
-    expect(firstCells()).toEqual(["102", "101", "103"]);
+    // Default sort is WO # descending; the completed one is hidden by the
+    // default Open filter. Attention reasons still surface via the pills.
+    expect(firstCells()).toEqual(["103", "102", "101"]);
     expect(within(boardTable()).getByText("High priority")).toBeTruthy();
     expect(within(boardTable()).getByText("Stalled 6 days")).toBeTruthy();
   });
