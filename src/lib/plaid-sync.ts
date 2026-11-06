@@ -64,6 +64,28 @@ export async function ensurePlaidTables(prisma: PrismaClient): Promise<void> {
   await ensurePlaidAnnotationColumns(prisma);
 }
 
+// Go-live: PM-Central took over bank-transaction work for transactions dated
+// 2026-09-29 onward. Everything before was already handled outside the app, so
+// it's archived (hidden) automatically — whether or not it's checked off in
+// QuickBooks / Rentvine — including older-dated rows a later sync brings in.
+// Override with ACCOUNTING_GO_LIVE_DATE (YYYY-MM-DD).
+const DEFAULT_GO_LIVE = "2026-09-29";
+export function goLiveDate(): string {
+  const v = (process.env.ACCOUNTING_GO_LIVE_DATE || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : DEFAULT_GO_LIVE;
+}
+
+// Archive every not-yet-archived transaction dated before go-live. Stamped
+// "before go-live (<date>)" so they're told apart from rows archived by hand.
+// Never touches rows already archived. Returns how many it archived.
+export async function archiveBeforeGoLive(prisma: PrismaClient): Promise<number> {
+  const cutoff = goLiveDate();
+  return prisma.$executeRaw(Prisma.sql`
+    UPDATE plaid_transactions
+    SET archived = true, archived_at = now(), archived_by = ${`before go-live (${cutoff})`}
+    WHERE archived = false AND posted_date < ${cutoff}::date`);
+}
+
 async function accountNames(accessToken: string): Promise<Record<string, string>> {
   try {
     const { accounts } = await plaidPost<{
@@ -126,6 +148,9 @@ export async function syncOneItem(
         AND archived = false
         AND (notes IS NULL OR notes = '')`);
   }
+  // Anything dated before go-live (including older rows this sync just added)
+  // is filed away.
+  await archiveBeforeGoLive(prisma);
   await prisma.$executeRaw(
     Prisma.sql`UPDATE plaid_items SET cursor = ${result.cursor}, last_synced_at = now() WHERE item_id = ${item.itemId}`
   );
