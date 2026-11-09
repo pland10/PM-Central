@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { rentvinePropertyId } from "@/lib/rentvine-ids";
-import { isPreventiveTitle } from "@/lib/preventive";
+import { matchesPreventive } from "@/lib/preventive";
+import { listPreventivePatternsSafe } from "@/lib/preventive-patterns-db";
 import { prisma } from "@/lib/prisma";
 import { isTerminal, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
 
@@ -264,7 +265,7 @@ async function latestWoUpdates(): Promise<Map<string, { text: string; at: string
 // there yet (so the page can degrade gracefully instead of erroring).
 export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
   try {
-    const [rows, rv, updates] = await Promise.all([
+    const [rows, rv, updates, preventivePatterns] = await Promise.all([
       // due_at is read through to_jsonb so this works before the sync adds the
       // column (it's then just null) — no deploy-order dependency.
       prisma.$queryRaw<ListRow[]>(Prisma.sql`
@@ -275,7 +276,9 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         FROM work_orders w`),
       rentvineEnrichment(),
       latestWoUpdates(),
+      listPreventivePatternsSafe(), // admin-managed keyword rules (best-effort)
     ]);
+    const preventiveKeywords = preventivePatterns.map((p) => p.pattern);
 
     return rows.map((r) => {
       const stage = r.stage ?? "—";
@@ -301,7 +304,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         closedAt: iso(r.closed_at),
         dueAt: iso(r.due_at),
         rvStatus: r.rv_status ?? "",
-        preventive: !!enrich?.recurring || isPreventiveTitle(r.title || r.name),
+        preventive: !!enrich?.recurring || matchesPreventive(r.title || r.name, preventiveKeywords),
       };
     });
   } catch {
