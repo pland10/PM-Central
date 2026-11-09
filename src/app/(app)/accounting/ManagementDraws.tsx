@@ -286,7 +286,13 @@ export function ManagementDraws({
             <button type="button" onClick={lockIn} disabled={saving || selectedRows.length === 0} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
               {saving ? "Locking…" : "Lock in batch"}
             </button>
-            <button type="button" onClick={cancel} className="ml-auto text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+            <button
+              type="button"
+              onClick={cancel}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-400 hover:text-slate-800"
+            >
+              Cancel
+            </button>
           </>
         )}
       </div>
