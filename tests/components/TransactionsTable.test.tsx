@@ -326,11 +326,16 @@ describe("TransactionsTable", () => {
 
   describe("archive", () => {
     const both: TxnRow = { ...rows[0], transactionId: "t3", recordedQuickbooks: true, recordedRentvine: true };
+    // QuickBooks only + marked not reimbursable — eligible under the new rule.
+    const qbOnlyNR: TxnRow = { ...rows[0], transactionId: "t5", recordedQuickbooks: true, recordedRentvine: false, reimbursable: "no" };
 
-    it("offers Archive only on a row recorded in both QuickBooks and Rentvine", () => {
-      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
-      expect(screen.getByLabelText("archive-t3")).toBeInTheDocument();
-      expect(screen.queryByLabelText("archive-t1")).toBeNull(); // t1 isn't recorded in both
+    it("offers Archive on a both-recorded row and a QuickBooks-only not-reimbursable row, not otherwise", () => {
+      // rows[1] (t2) is QuickBooks-only but reimbursable "yes" → not eligible yet.
+      render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
+      expect(screen.getByLabelText("archive-t3")).toBeInTheDocument(); // in both
+      expect(screen.getByLabelText("archive-t5")).toBeInTheDocument(); // QuickBooks only + not reimbursable
+      expect(screen.queryByLabelText("archive-t2")).toBeNull(); // QuickBooks only but reimbursable → not yet
+      expect(screen.queryByLabelText("archive-t1")).toBeNull(); // not in QuickBooks
     });
 
     it("archives via PATCH and drops the row from the active view", async () => {
@@ -357,28 +362,36 @@ describe("TransactionsTable", () => {
 
   describe("archive all recorded", () => {
     const both: TxnRow = { ...rows[0], transactionId: "t3", recordedQuickbooks: true, recordedRentvine: true };
+    const qbOnlyNR: TxnRow = { ...rows[0], transactionId: "t5", recordedQuickbooks: true, recordedRentvine: false, reimbursable: "no" };
 
     it("shows the button with a count only when eligible rows exist", () => {
-      // rows[0]/rows[1] aren't recorded in both — no button
-      const { unmount } = render(<TransactionsTable initialRows={rows} accounts={["American Express"]} />);
+      // t1 (not in QuickBooks) and t2 (QuickBooks only but reimbursable) aren't eligible — no button
+      const { unmount } = render(<TransactionsTable initialRows={[rows[0], rows[1]]} accounts={["American Express"]} />);
       expect(screen.queryByRole("button", { name: /archive all recorded/i })).toBeNull();
       unmount();
 
-      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
-      expect(screen.getByRole("button", { name: /archive all recorded \(1\)/i })).toBeInTheDocument();
+      // t5 (QuickBooks only + not reimbursable) + t3 (both) are eligible → count 2
+      render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
+      expect(screen.getByRole("button", { name: /archive all recorded \(2\)/i })).toBeInTheDocument();
     });
 
-    it("archives all eligible rows in one bulk request and drops them from the active view", async () => {
+    it("confirms with a both-vs-QuickBooks-only breakdown, then archives in one bulk request", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
-      render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
 
       await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      // t3 is in both; t5 is QuickBooks only + not reimbursable
+      const msg = confirm.mock.calls[0][0] as string;
+      expect(msg).toMatch(/1 in both QuickBooks and Rentvine/);
+      expect(msg).toMatch(/1 in QuickBooks only \(not reimbursable\)/);
+
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe("/api/plaid/transactions");
       expect(JSON.parse(init.body)).toEqual({ archiveAllRecorded: true });
-      // the one eligible row leaves the (default Active) view
+      // both eligible rows leave the (default Active) view
       await waitFor(() => expect(screen.queryByLabelText("archive-t3")).toBeNull());
+      expect(screen.queryByLabelText("archive-t5")).toBeNull();
     });
 
     it("does nothing when the user cancels the confirm", async () => {

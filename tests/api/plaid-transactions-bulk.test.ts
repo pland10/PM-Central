@@ -77,7 +77,7 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
   });
 
   describe("archive all recorded", () => {
-    it("archives every posted row recorded in both QuickBooks and Rentvine in one update, stamping who/when", async () => {
+    it("archives every posted row eligible to archive in one update, stamping who/when", async () => {
       const res = await patch({ archiveAllRecorded: true });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true, archived: 2 });
@@ -88,7 +88,8 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
       expect(sql).toMatch(/archived = true/);
       expect(sql).toMatch(/archived_at = now\(\)/);
       expect(sql).toMatch(/archived_by =/);
-      expect(sql).toMatch(/recorded_quickbooks = true AND recorded_rentvine = true/);
+      expect(sql).toMatch(/recorded_quickbooks = true/);
+      expect(sql).toMatch(/recorded_rentvine = true OR reimbursable = 'no'/); // QB + (RV or not reimbursable)
       expect(sql).toMatch(/pending = false/);
       expect(sql).toMatch(/archived = false/); // skip rows already archived
       expect(q.values).toEqual(["admin@pmi.com"]);
