@@ -90,6 +90,7 @@ export function DataTable<T>({
   onFilteredChange,
   wide = false,
   dense = false,
+  scrollBox = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -116,6 +117,10 @@ export function DataTable<T>({
   wide?: boolean;
   // Tighter cell padding, for tables with many columns.
   dense?: boolean;
+  // For tables wider than the page: scroll inside their own box (capped to the
+  // screen height) so the header stays pinned AND the sideways scrollbar is
+  // always within reach. Costs a second scrollbar, so it's opt-in.
+  scrollBox?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
@@ -379,8 +384,15 @@ export function DataTable<T>({
         // doesn't create a scroll container, so `sticky` still works; below lg,
         // wide tables scroll sideways instead (header just isn't pinned there).
         className={`rounded-lg border border-slate-200 bg-white ${
-          wide ? "w-max min-w-full" : `overflow-x-auto ${stickyHeader ? "lg:overflow-x-clip" : ""}`
+          scrollBox
+            ? "overflow-auto"
+            : wide
+              ? "w-max min-w-full"
+              : `overflow-x-auto ${stickyHeader ? "lg:overflow-x-clip" : ""}`
         }`}
+        // Scroll-box mode: as tall as the screen allows below any pinned page
+        // header, so the box's bottom scrollbar is on screen.
+        style={scrollBox ? { maxHeight: "calc(100vh - var(--sticky-offset, 0px) - 2rem)" } : undefined}
       >
         <table className="w-full text-sm">
           <thead>
@@ -400,11 +412,14 @@ export function DataTable<T>({
                       // Keep the header visible while the rows scroll. The cell
                       // needs its own background + border since the <tr>'s don't
                       // paint over sticky scrolling content.
-                      stickyHeader ? "sticky z-10 bg-slate-50 border-b border-slate-200" : "",
+                      stickyHeader || scrollBox ? "sticky z-10 bg-slate-50 border-b border-slate-200" : "",
                     ].join(" ")}
                     // Below any pinned page header (a page sets --sticky-offset
-                    // to its height); 0 otherwise.
-                    style={stickyHeader ? { top: "var(--sticky-offset, 0px)" } : undefined}
+                    // to its height); 0 otherwise. In scroll-box mode it pins to
+                    // the top of its own box.
+                    style={
+                      scrollBox ? { top: "0px" } : stickyHeader ? { top: "var(--sticky-offset, 0px)" } : undefined
+                    }
                   >
                     <span className={`inline-flex items-center gap-1 ${c.align === "right" ? "flex-row-reverse" : ""}`}>
                       <span
