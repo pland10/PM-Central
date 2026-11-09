@@ -97,22 +97,28 @@ export function TransactionsTable({
     }
   }, []);
 
-  // Rows that can be filed away: recorded in both QuickBooks and Rentvine,
-  // posted, not already archived. Powers the "Archive all recorded" button.
+  // Rows that can be filed away: recorded in QuickBooks (Rentvine optional —
+  // some items never go to Rentvine), posted, not already archived. Powers the
+  // "Archive all recorded" button.
   const eligibleToArchive = useMemo(
-    () => rows.filter((r) => r.recordedQuickbooks && r.recordedRentvine && !r.pending && !r.archived),
+    () => rows.filter((r) => r.recordedQuickbooks && !r.pending && !r.archived),
     [rows]
   );
 
   // Archive every eligible row at once. The server sweeps the whole table (so it
   // also catches rows beyond the loaded cap); we optimistically file the loaded
-  // ones and roll back together if the request fails.
+  // ones and roll back together if the request fails. The confirm breaks the
+  // count down by both-recorded vs. QuickBooks-only so it's clear what's going.
   const archiveAllRecorded = useCallback(async () => {
-    const eligible = rows.filter((r) => r.recordedQuickbooks && r.recordedRentvine && !r.pending && !r.archived);
+    const eligible = rows.filter((r) => r.recordedQuickbooks && !r.pending && !r.archived);
     if (eligible.length === 0) return;
+    const both = eligible.filter((r) => r.recordedRentvine).length;
+    const qbOnly = eligible.length - both;
     if (
       !window.confirm(
-        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"} recorded in both QuickBooks and Rentvine?`
+        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"} recorded in QuickBooks?\n\n` +
+          `• ${both} in both QuickBooks and Rentvine\n` +
+          `• ${qbOnly} in QuickBooks only`
       )
     )
       return;
@@ -434,7 +440,7 @@ export function TransactionsTable({
             >
               Unarchive
             </button>
-          ) : r.recordedQuickbooks && r.recordedRentvine && !r.pending ? (
+          ) : r.recordedQuickbooks && !r.pending ? (
             <button
               type="button"
               aria-label={`archive-${r.transactionId}`}
@@ -444,7 +450,7 @@ export function TransactionsTable({
               Archive
             </button>
           ) : (
-            <span className="text-slate-300" title="Record it in both QuickBooks and Rentvine to archive">—</span>
+            <span className="text-slate-300" title="Record it in QuickBooks to archive">—</span>
           ),
       },
     ],

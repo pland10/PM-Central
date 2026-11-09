@@ -36,8 +36,9 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
 
   // Archive / unarchive is its own action, not a normal annotation edit. A row
-  // can be archived only once it's recorded in BOTH QuickBooks and Rentvine;
-  // unarchiving (undoing a mistake) is always allowed.
+  // can be archived once it's recorded in QuickBooks — Rentvine is optional,
+  // since some items (e.g. owner-side expenses) never go to Rentvine.
+  // Unarchiving (undoing a mistake) is always allowed.
   if (typeof (body as { archived?: unknown }).archived === "boolean") {
     const archived = (body as { archived: boolean }).archived;
     try {
@@ -47,10 +48,10 @@ export async function PATCH(
           UPDATE plaid_transactions
           SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
           WHERE transaction_id = ${transactionId} AND pending = false
-            AND recorded_quickbooks = true AND recorded_rentvine = true`);
+            AND recorded_quickbooks = true`);
         if (n === 0) {
           return NextResponse.json(
-            { error: "Only a transaction recorded in both QuickBooks and Rentvine can be archived." },
+            { error: "Only a transaction recorded in QuickBooks can be archived." },
             { status: 409 }
           );
         }

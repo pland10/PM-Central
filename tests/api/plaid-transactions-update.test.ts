@@ -149,20 +149,21 @@ describe("PATCH /api/plaid/transactions/:id", () => {
   });
 
   describe("archive / unarchive", () => {
-    it("archives a row, guarded on it being recorded in both QuickBooks and Rentvine", async () => {
+    it("archives a row, guarded on it being recorded in QuickBooks (Rentvine optional)", async () => {
       const res = await patch({ archived: true });
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ ok: true, archived: true });
       const sql = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /archived = true/.test(s))!;
-      expect(sql).toMatch(/recorded_quickbooks = true AND recorded_rentvine = true/);
+      expect(sql).toMatch(/recorded_quickbooks = true/);
+      expect(sql).not.toMatch(/recorded_rentvine/); // Rentvine is no longer required
       expect(sql).toMatch(/pending = false/);
     });
 
-    it("409s when the row isn't recorded in both (the guard matched no row)", async () => {
+    it("409s when the row isn't recorded in QuickBooks (the guard matched no row)", async () => {
       executeRaw.mockResolvedValueOnce(0);
       const res = await patch({ archived: true });
       expect(res.status).toBe(409);
-      expect((await res.json()).error).toMatch(/both QuickBooks and Rentvine/i);
+      expect((await res.json()).error).toMatch(/recorded in QuickBooks/i);
     });
 
     it("unarchives, clearing the archive stamps, with no eligibility guard", async () => {
