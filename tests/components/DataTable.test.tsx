@@ -195,6 +195,18 @@ describe("DataTable", () => {
     expect(box.className).not.toMatch(/overflow-x/);
   });
 
+  it("in scroll-box mode, scrolls the table in its own box so the header stays pinned while wide columns stay reachable", () => {
+    render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} scrollBox />);
+    const table = screen.getByRole("table");
+    const box = table.parentElement!;
+    expect(box.className).toMatch(/(^|\s)overflow-auto(\s|$)/); // both axes: sideways scroll + pinned header
+    expect(box.style.maxHeight).toMatch(/100vh/); // tall enough to fill the screen, not the page
+    for (const th of table.querySelectorAll("th")) {
+      expect(th.className).toMatch(/\bsticky\b/);
+      expect(th.style.top).toBe("0px"); // pinned to the top of its own box
+    }
+  });
+
   it("uses tighter cell padding when dense", () => {
     render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} dense />);
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);

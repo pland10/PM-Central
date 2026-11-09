@@ -343,7 +343,7 @@ export function MaintenanceView({
   ];
 
   return (
-    <div ref={pageRef} className="mx-auto max-w-7xl">
+    <div ref={pageRef}>
       {/* Pinned on lg+ (title + KPIs); the negative margins let it cover the
           page padding so rows don't show around it while scrolling. */}
       <section
@@ -395,11 +395,10 @@ export function MaintenanceView({
               facets={facets}
               initialFacets={{ status: "active" }}
               initialSort={{ key: "number", dir: "desc" }}
-              // 10 columns overrun a desktop viewport; let the table scroll
-              // sideways instead of clipping the right-hand columns. (A pinned
-              // header needs overflow-x-clip, which does the clipping, so we
-              // trade the sticky header for reachable columns here.)
-              stickyHeader={false}
+              // 10 columns can overrun a desktop viewport: scroll in its own
+              // box so the header stays pinned and the right-hand columns
+              // (Notes) stay reachable with the sideways scrollbar on screen.
+              scrollBox
             />
           </div>
         </Section>
