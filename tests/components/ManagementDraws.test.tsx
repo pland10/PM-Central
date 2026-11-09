@@ -36,7 +36,7 @@ afterEach(() => {
 
 function setup() {
   const user = userEvent.setup();
-  render(<ManagementDraws initialRows={rows} batches={batches} asOf="Oct 30, 2026" />);
+  render(<ManagementDraws initialRows={rows} batches={batches} asOf="Oct 30, 2026" rentvineAccount="pmilighthouse" />);
   return { user };
 }
 
@@ -51,6 +51,20 @@ describe("ManagementDraws", () => {
     expect(within(drawsTable()).getByText("Mgmt fees")).toBeInTheDocument(); // row a (open)
     expect(within(drawsTable()).queryByText("old")).toBeNull(); // row c is batched, not in draws
     expect(screen.getByLabelText("batch-3")).toBeInTheDocument(); // shown under Batches
+  });
+
+  it("links each open draw to its payment in Rentvine by payout id", () => {
+    setup();
+    const link = within(drawsTable()).getByLabelText("open-in-rentvine-a") as HTMLAnchorElement;
+    expect(link).toHaveAttribute("href", "https://pmilighthouse.rentvine.com/accounting/payables/payouts/a");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("links each batched payment to its Rentvine payment too", async () => {
+    const { user } = setup();
+    await user.click(screen.getByLabelText("batch-3")); // expand the batch
+    const link = screen.getByLabelText("open-in-rentvine-c") as HTMLAnchorElement;
+    expect(link).toHaveAttribute("href", "https://pmilighthouse.rentvine.com/accounting/payables/payouts/c");
   });
 
   it("select-all header checkbox selects and deselects every open row", async () => {
@@ -88,7 +102,7 @@ describe("ManagementDraws", () => {
       { id: 7, createdAt: "2026-08-20T00:00:00Z", createdBy: "", note: "", count: 1, total: 100, confirmed: false, confirmedAt: null, items: [{ payoutId: "a", payee: "PMI Lighthouse", bankAccount: "Residential Trust", memo: "fees", postedDate: "2026-08-10", amount: 100 }] },
     ];
     const user = userEvent.setup();
-    render(<ManagementDraws initialRows={[rows[1]]} batches={pending} asOf="" />); // one open row so "Pay" could be enabled
+    render(<ManagementDraws initialRows={[rows[1]]} batches={pending} asOf="" rentvineAccount="pmilighthouse" />); // one open row so "Pay" could be enabled
 
     // Locked: can't start a new batch; told the screen is locked.
     expect(screen.getByRole("button", { name: /pay the management company/i })).toBeDisabled();

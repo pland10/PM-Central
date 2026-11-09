@@ -54,5 +54,11 @@ async function RentvineTransactions() {
   ]);
   const rows = mergeBatched(draws.rows, batched);
 
-  return <ManagementDraws initialRows={rows} batches={batches} asOf={draws.asOf} />;
+  // Rentvine web subdomain, for the per-row "Open in Rentvine" deep links
+  // (same resolution the work-order create route uses).
+  const rentvineAccount = (process.env.RENTVINE_SUBDOMAIN || process.env.RENTVINE_ACCOUNT || "pmilighthouse").trim();
+
+  return (
+    <ManagementDraws initialRows={rows} batches={batches} asOf={draws.asOf} rentvineAccount={rentvineAccount} />
+  );
 }

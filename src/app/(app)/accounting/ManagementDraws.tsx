@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrencyCents } from "@/lib/format";
+import { rentvinePayoutUrl } from "@/lib/externalLinks";
 import {
   summarizeByAccount,
   type BatchWithItems,
@@ -31,10 +32,12 @@ export function ManagementDraws({
   initialRows,
   batches: initialBatches,
   asOf,
+  rentvineAccount,
 }: {
   initialRows: ManagementDrawRow[];
   batches: BatchWithItems[];
   asOf: string;
+  rentvineAccount: string; // Rentvine subdomain, for per-row deep links
 }) {
   const [rows, setRows] = useState<ManagementDrawRow[]>(initialRows);
   const [batches, setBatches] = useState<BatchWithItems[]>(initialBatches);
@@ -322,6 +325,7 @@ export function ManagementDraws({
                 <th className="px-3 py-2 font-medium">Account</th>
                 <th className="px-3 py-2 font-medium">Memo</th>
                 <th className="px-3 py-2 text-right font-medium">Amount</th>
+                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -337,6 +341,9 @@ export function ManagementDraws({
                   <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.bankAccount || "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{r.memo || "—"}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatCurrencyCents(r.amount)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <RentvineLink payoutId={r.payoutId} account={rentvineAccount} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -375,6 +382,7 @@ export function ManagementDraws({
                             <th className="py-1 pr-3 font-medium">Account</th>
                             <th className="py-1 pr-3 font-medium">Memo</th>
                             <th className="py-1 pr-3 text-right font-medium">Amount</th>
+                            <th className="py-1 pr-3" />
                             <th className="py-1" />
                           </tr>
                         </thead>
@@ -386,6 +394,9 @@ export function ManagementDraws({
                               <td className="whitespace-nowrap py-1 pr-3 text-slate-600">{it.bankAccount || "—"}</td>
                               <td className="py-1 pr-3 text-slate-600">{it.memo || "—"}</td>
                               <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-slate-800">{formatCurrencyCents(it.amount)}</td>
+                              <td className="whitespace-nowrap py-1 pr-3 text-right">
+                                <RentvineLink payoutId={it.payoutId} account={rentvineAccount} />
+                              </td>
                               <td className="py-1 text-right">
                                 <button
                                   type="button"
@@ -400,7 +411,7 @@ export function ManagementDraws({
                           ))}
                           {b.items.length === 0 && (
                             <tr>
-                              <td colSpan={6} className="py-2 text-center text-xs text-slate-400">No payments in this batch.</td>
+                              <td colSpan={7} className="py-2 text-center text-xs text-slate-400">No payments in this batch.</td>
                             </tr>
                           )}
                         </tbody>
@@ -414,6 +425,24 @@ export function ManagementDraws({
         </div>
       )}
     </div>
+  );
+}
+
+// Opens the exact payment in Rentvine (new tab) using the payout id we already
+// store. Renders nothing if we can't build a URL (missing id/account).
+function RentvineLink({ payoutId, account }: { payoutId: string; account: string }) {
+  const url = rentvinePayoutUrl(payoutId, account);
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`open-in-rentvine-${payoutId}`}
+      className="whitespace-nowrap text-xs font-medium text-brand-600 hover:underline"
+    >
+      Rentvine ↗
+    </a>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { externalLink } from "@/lib/externalLinks";
+import { externalLink, rentvinePayoutUrl } from "@/lib/externalLinks";
 
 describe("externalLink", () => {
   it.each([
@@ -23,5 +23,22 @@ describe("externalLink", () => {
     expect(externalLink("rentvine", "pmilighthouse:property")).toBeNull();
     expect(externalLink("leadsimple", "pmilighthouse:property:1")).toBeNull();
     expect(externalLink("rentvine", null)).toBeNull();
+  });
+});
+
+describe("rentvinePayoutUrl", () => {
+  it("builds the payout (payment) URL from the payout id and account", () => {
+    expect(rentvinePayoutUrl("1656", "pmilighthouse")).toBe(
+      "https://pmilighthouse.rentvine.com/accounting/payables/payouts/1656"
+    );
+    expect(rentvinePayoutUrl("42", "othercompany")).toBe(
+      "https://othercompany.rentvine.com/accounting/payables/payouts/42"
+    );
+  });
+
+  it("returns null when the id or account is missing", () => {
+    expect(rentvinePayoutUrl("", "pmilighthouse")).toBeNull();
+    expect(rentvinePayoutUrl("1656", "")).toBeNull();
+    expect(rentvinePayoutUrl("  ", "pmilighthouse")).toBeNull();
   });
 });
