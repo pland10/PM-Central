@@ -77,6 +77,21 @@ describe("ManagementDraws", () => {
     expect((screen.getByLabelText("select-a") as HTMLInputElement).checked).toBe(false);
   });
 
+  it("Cancel backs out of the Pay flow and clears the selection", async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: /pay the management company/i }));
+    await user.click(screen.getByLabelText("select-a"));
+    expect(screen.getByRole("button", { name: /lock in batch/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+    // Back to the start: the Pay button returns and the batch controls are gone.
+    expect(screen.getByRole("button", { name: /pay the management company/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /lock in batch/i })).toBeNull();
+    // Re-opening starts with nothing selected.
+    await user.click(screen.getByRole("button", { name: /pay the management company/i }));
+    expect((screen.getByLabelText("select-a") as HTMLInputElement).checked).toBe(false);
+  });
+
   it("locks a batch with a note and shows the per-account move instruction", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: /pay the management company/i }));
