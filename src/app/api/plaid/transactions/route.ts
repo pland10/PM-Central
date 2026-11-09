@@ -34,16 +34,39 @@ export async function PATCH(req: NextRequest) {
   if (body && (body as { archiveAllRecorded?: unknown }).archiveAllRecorded === true) {
     try {
       await ensurePlaidAnnotationColumns(prisma);
-      const archived = await prisma.$executeRaw(Prisma.sql`
+      // RETURNING the ids so the page can offer Undo for exactly this batch.
+      const rows = await prisma.$queryRaw<{ transaction_id: string }[]>(Prisma.sql`
         UPDATE plaid_transactions
         SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
         WHERE archived = false AND pending = false
           AND recorded_quickbooks = true
-          AND (recorded_rentvine = true OR reimbursable = 'no')`);
-      return NextResponse.json({ ok: true, archived });
+          AND (recorded_rentvine = true OR reimbursable = 'no')
+        RETURNING transaction_id`);
+      const ids = rows.map((r) => r.transaction_id);
+      return NextResponse.json({ ok: true, archived: ids.length, ids });
     } catch (e) {
       console.error(`[plaid] bulk archive-all-recorded failed:`, e);
       return NextResponse.json({ error: "Could not archive." }, { status: 500 });
+    }
+  }
+
+  // Undo of a bulk archive: put back exactly the rows that batch archived.
+  if (body && Array.isArray((body as { unarchiveIds?: unknown }).unarchiveIds)) {
+    const raw = (body as { unarchiveIds: unknown[] }).unarchiveIds;
+    const ids = [...new Set(raw.filter((x): x is string => typeof x === "string" && x !== ""))];
+    if (ids.length === 0 || raw.length > MAX_IDS) {
+      return NextResponse.json({ error: `Send between 1 and ${MAX_IDS} transactions.` }, { status: 400 });
+    }
+    try {
+      await ensurePlaidAnnotationColumns(prisma);
+      const unarchived = await prisma.$executeRaw(Prisma.sql`
+        UPDATE plaid_transactions
+        SET archived = false, archived_at = NULL, archived_by = NULL
+        WHERE transaction_id = ANY(${ids}) AND archived = true`);
+      return NextResponse.json({ ok: true, unarchived });
+    } catch (e) {
+      console.error(`[plaid] bulk unarchive failed for ${ids.length} rows:`, e);
+      return NextResponse.json({ error: "Could not undo." }, { status: 500 });
     }
   }
 
