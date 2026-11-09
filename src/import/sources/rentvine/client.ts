@@ -140,8 +140,9 @@ const PRIORITY_NAMES: Record<string, string> = { "1": "Low", "2": "Medium", "3":
 // LeadSimple parses into work_orders.wo_number), which is the cross-source join.
 export interface RvWorkOrderLive {
   number: string;
-  propertyExternalId: string; // String(propertyID); matches Property.externalId
+  propertyExternalId: string; // bare String(propertyID); Property.externalId is namespaced — compare via rentvinePropertyId()
   priority: string; // Low | Medium | High | ""
+  recurring: boolean; // created by a Rentvine recurring work order (preventive)
 }
 
 // Fetch all work orders for an account from the Rentvine Manager API. Separate
@@ -167,6 +168,7 @@ export async function fetchRentvineWorkOrders(
       number,
       propertyExternalId: toStr(w.propertyID),
       priority: PRIORITY_NAMES[toStr(w.priorityID)] ?? "",
+      recurring: !!toStr(w.recurringWorkOrderID) && toStr(w.recurringWorkOrderID) !== "0",
     });
   }
   return out;
@@ -174,7 +176,7 @@ export async function fetchRentvineWorkOrders(
 
 export interface RvUnitLive {
   unitId: string; // String(unitID)
-  propertyExternalId: string; // String(propertyID); matches Property.externalId
+  propertyExternalId: string; // bare String(propertyID); Property.externalId is namespaced — compare via rentvinePropertyId()
   name: string; // e.g. "Unit 1", "2F"
   active: boolean; // isActive and not deactivated
 }

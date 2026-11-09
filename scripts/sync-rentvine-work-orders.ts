@@ -23,8 +23,11 @@ const DDL = Prisma.sql`
     wo_number            TEXT PRIMARY KEY,
     property_external_id TEXT,
     priority             TEXT,
+    recurring            BOOLEAN NOT NULL DEFAULT false,
     synced_at            TIMESTAMPTZ DEFAULT now()
   )`;
+// Added later; additive so existing tables pick it up.
+const ADD_RECURRING = Prisma.sql`ALTER TABLE rv_work_orders ADD COLUMN IF NOT EXISTS recurring BOOLEAN NOT NULL DEFAULT false`;
 
 async function main() {
   const account = process.argv[2] ?? process.env.RENTVINE_ACCOUNT ?? "pmilighthouse";
@@ -42,19 +45,21 @@ async function main() {
   const prisma = new PrismaClient();
   try {
     await prisma.$executeRaw(DDL);
+    await prisma.$executeRaw(ADD_RECURRING);
 
     const values = Prisma.join(
-      wos.map((w) => Prisma.sql`(${w.number}, ${w.propertyExternalId || null}, ${w.priority || null}, now())`)
+      wos.map((w) => Prisma.sql`(${w.number}, ${w.propertyExternalId || null}, ${w.priority || null}, ${w.recurring}, now())`)
     );
     const numbers = Prisma.join(wos.map((w) => w.number));
 
     await prisma.$transaction([
       prisma.$executeRaw(Prisma.sql`
-        INSERT INTO rv_work_orders (wo_number, property_external_id, priority, synced_at)
+        INSERT INTO rv_work_orders (wo_number, property_external_id, priority, recurring, synced_at)
         VALUES ${values}
         ON CONFLICT (wo_number) DO UPDATE
           SET property_external_id = EXCLUDED.property_external_id,
               priority             = EXCLUDED.priority,
+              recurring            = EXCLUDED.recurring,
               synced_at            = now()`),
       // Drop work orders that no longer exist in Rentvine.
       prisma.$executeRaw(Prisma.sql`DELETE FROM rv_work_orders WHERE wo_number NOT IN (${numbers})`),

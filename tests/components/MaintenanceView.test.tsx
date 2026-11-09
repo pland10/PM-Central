@@ -124,6 +124,19 @@ describe("MaintenanceView", () => {
     expect(within(boardTable()).getByText("On Hold in Rentvine · open in LeadSimple")).toBeTruthy();
   });
 
+  it("tags preventive work and can filter Preventive vs Reactive", async () => {
+    const user = userEvent.setup();
+    render(<MaintenanceView rows={[...rows, wo({ number: "108", issue: "HVAC Tuneup", preventive: true })]} now={NOW} />);
+
+    const row = within(boardTable()).getByText("108").closest("tr")!;
+    expect(within(row).getByText("Preventive")).toBeTruthy();
+
+    await user.selectOptions(within(board()).getByRole("combobox", { name: /type/i }), "preventive");
+    expect(firstCells()).toEqual(["108"]);
+    await user.selectOptions(within(board()).getByRole("combobox", { name: /type/i }), "reactive");
+    expect(firstCells()).not.toContain("108");
+  });
+
   it("defaults to open work orders and can show completed ones", async () => {
     const user = userEvent.setup();
     render(<MaintenanceView rows={rows} now={NOW} />);

@@ -1,4 +1,6 @@
 import { Prisma } from "@prisma/client";
+import { rentvinePropertyId } from "@/lib/rentvine-ids";
+import { isPreventiveTitle } from "@/lib/preventive";
 import { prisma } from "@/lib/prisma";
 import { isTerminal, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
 
@@ -188,24 +190,31 @@ export async function workOrderAlerts(windowHours = 72): Promise<WorkOrderAlerts
 // Property record. Best-effort — the rv_work_orders table may not exist yet
 // (before the first Rentvine WO sync), so this never fails the main listing.
 async function rentvineEnrichment(): Promise<
-  Map<string, { priority: string; propertyId: string | null }>
+  Map<string, { priority: string; propertyId: string | null; recurring: boolean }>
 > {
-  const out = new Map<string, { priority: string; propertyId: string | null }>();
+  const out = new Map<string, { priority: string; propertyId: string | null; recurring: boolean }>();
   try {
     const [rvRows, props] = await Promise.all([
-      prisma.$queryRaw<{ wo_number: string; property_external_id: string | null; priority: string | null }[]>(
-        Prisma.sql`SELECT wo_number, property_external_id, priority FROM rv_work_orders`
+      // recurring via to_jsonb so this works before the sync adds the column.
+      prisma.$queryRaw<
+        { wo_number: string; property_external_id: string | null; priority: string | null; recurring: string | null }[]
+      >(
+        Prisma.sql`SELECT wo_number, property_external_id, priority, to_jsonb(r) ->> 'recurring' AS recurring
+                   FROM rv_work_orders r`
       ),
       prisma.property.findMany({
         where: { source: "rentvine" },
         select: { id: true, externalId: true },
       }),
     ]);
-    const propByExt = new Map(props.map((p) => [p.externalId ?? "", p.id]));
+    // rv_work_orders holds Rentvine's bare property id; Property.externalId is
+    // namespaced ("<account>:property:<id>"), so match on the Rentvine id.
+    const propByRvId = new Map(props.map((p) => [rentvinePropertyId(p.externalId), p.id]));
     for (const r of rvRows) {
       out.set(r.wo_number, {
         priority: r.priority ?? "",
-        propertyId: r.property_external_id ? propByExt.get(r.property_external_id) ?? null : null,
+        propertyId: r.property_external_id ? propByRvId.get(rentvinePropertyId(r.property_external_id)) ?? null : null,
+        recurring: r.recurring === "true",
       });
     }
   } catch {
@@ -292,6 +301,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         closedAt: iso(r.closed_at),
         dueAt: iso(r.due_at),
         rvStatus: r.rv_status ?? "",
+        preventive: !!enrich?.recurring || isPreventiveTitle(r.title || r.name),
       };
     });
   } catch {
