@@ -28,3 +28,13 @@ export function externalLink(source: string, externalId: string | null): Externa
   // Future: source === "leadsimple" -> build LeadSimple URLs here.
   return null;
 }
+
+// Deep link to a Rentvine payout (a payment / disbursement) by its payout id.
+// The Check Register report's `payoutID` is this id; the web app opens it at
+// /accounting/payables/payouts/<id>. `account` is the Rentvine subdomain.
+export function rentvinePayoutUrl(payoutId: string, account: string): string | null {
+  const id = (payoutId ?? "").trim();
+  const acct = (account ?? "").trim();
+  if (!id || !acct) return null;
+  return `https://${acct}.rentvine.com/accounting/payables/payouts/${id}`;
+}
