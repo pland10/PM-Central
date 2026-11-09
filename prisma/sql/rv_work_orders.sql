@@ -17,5 +17,8 @@ CREATE TABLE IF NOT EXISTS rv_work_orders (
   wo_number            TEXT PRIMARY KEY,   -- Rentvine workOrderNumber (join key)
   property_external_id TEXT,               -- Rentvine propertyID → Property.externalId
   priority             TEXT,               -- Low | Medium | High
+  recurring            BOOLEAN NOT NULL DEFAULT false, -- from a Rentvine recurring WO (preventive)
   synced_at            TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE rv_work_orders ADD COLUMN IF NOT EXISTS recurring BOOLEAN NOT NULL DEFAULT false;

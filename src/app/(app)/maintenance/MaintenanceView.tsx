@@ -244,7 +244,16 @@ export function MaintenanceView({
       sortable: true,
       sortValue: (r) => r.issue.toLowerCase(),
       filter: { type: "text", value: (r) => r.issue },
-      render: (r) => <span className="block min-w-[11rem] max-w-[22rem] leading-snug text-slate-800">{r.issue}</span>,
+      render: (r) => (
+        <span className="block min-w-[11rem] max-w-[22rem] leading-snug text-slate-800">
+          {r.issue}
+          {r.preventive && (
+            <span className="ml-1.5 inline-block rounded-full bg-teal-50 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-teal-700 ring-1 ring-teal-200">
+              Preventive
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "property",
@@ -339,6 +348,17 @@ export function MaintenanceView({
         const reason = attentionReason(r, now);
         return v === "any" ? reason !== null : reason?.kind === v;
       },
+    },
+    {
+      // Preventive = routine/scheduled (tune-ups, winterization); everything
+      // else is a reactive repair. See src/lib/preventive.ts.
+      key: "type",
+      label: "Type",
+      options: [
+        { value: "preventive", label: "Preventive" },
+        { value: "reactive", label: "Reactive" },
+      ],
+      match: (r, v) => (v === "preventive" ? !!r.preventive : !r.preventive),
     },
   ];
 

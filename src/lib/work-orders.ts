@@ -67,6 +67,9 @@ export type WorkOrderRow = {
   // Rentvine's own status for the WO (Open, Completed, Cancelled, Pending
   // Closure, …), or "" when it isn't matched in Rentvine.
   rvStatus: string;
+  // Preventive (routine/scheduled) work — a Rentvine recurring WO or a title
+  // rule (src/lib/preventive.ts). Kept off the attention list unless overdue.
+  preventive?: boolean;
 };
 
 // Sort rank for priority (High first); unknown/none sorts last.
