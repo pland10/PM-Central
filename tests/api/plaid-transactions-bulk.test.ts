@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn() },
+  prisma: { $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn(), $queryRaw: vi.fn() },
 }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
@@ -14,7 +14,9 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { PATCH } from "@/app/api/plaid/transactions/route";
 
 const executeRaw = vi.mocked(prisma.$executeRaw);
-const updates = () => executeRaw.mock.calls.filter((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])));
+const queryRaw = vi.mocked(prisma.$queryRaw);
+const updates = () =>
+  [...executeRaw.mock.calls, ...queryRaw.mock.calls].filter((c) => /UPDATE plaid_transactions/.test(sqlOf(c[0])));
 
 function patch(body: unknown) {
   return PATCH(
@@ -28,6 +30,7 @@ function patch(body: unknown) {
 
 beforeEach(() => {
   executeRaw.mockResolvedValue(2);
+  queryRaw.mockResolvedValue([{ transaction_id: "a" }, { transaction_id: "b" }] as never);
   vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
   vi.mocked(isFeatureEnabled).mockReturnValue(true);
   vi.mocked(getCurrentUser).mockResolvedValue({ id: "u1", email: "admin@pmi.com", role: "admin" } as never);
@@ -80,7 +83,8 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
     it("archives every posted row eligible to archive in one update, stamping who/when", async () => {
       const res = await patch({ archiveAllRecorded: true });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true, archived: 2 });
+      // returns which rows it archived, so the page can offer Undo for exactly that batch
+      expect(await res.json()).toEqual({ ok: true, archived: 2, ids: ["a", "b"] });
 
       expect(updates()).toHaveLength(1);
       const q = updates()[0][0] as { sql: string; values: unknown[] };
@@ -93,6 +97,7 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
       expect(sql).toMatch(/pending = false/);
       expect(sql).toMatch(/archived = false/); // skip rows already archived
       expect(q.values).toEqual(["admin@pmi.com"]);
+      expect(sql).toMatch(/RETURNING transaction_id/);
     });
 
     it("needs neither ids nor a reimbursable value", async () => {
@@ -106,6 +111,26 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
       expect((await patch({ archiveAllRecorded: true })).status).toBe(404);
       vi.mocked(isFeatureEnabled).mockReturnValue(false);
       expect((await patch({ archiveAllRecorded: true })).status).toBe(404);
+      expect(updates()).toHaveLength(0);
+    });
+  });
+
+  describe("undo (unarchive a batch)", () => {
+    it("puts back exactly the given rows, clearing the archive stamps", async () => {
+      const res = await patch({ unarchiveIds: ["a", "b", "a"] });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, unarchived: 2 });
+      const q = updates()[0][0] as { sql: string; values: unknown[] };
+      expect(sqlOf(q)).toMatch(/SET archived = false, archived_at = NULL, archived_by = NULL/);
+      expect(sqlOf(q)).toMatch(/WHERE transaction_id = ANY/);
+      expect(q.values).toEqual([["a", "b"]]);
+    });
+
+    it("rejects an empty or oversized batch, and 404s without accounting access", async () => {
+      expect((await patch({ unarchiveIds: [] })).status).toBe(400);
+      expect((await patch({ unarchiveIds: Array.from({ length: 5001 }, (_, i) => `t${i}`) })).status).toBe(400);
+      vi.mocked(getCurrentUser).mockResolvedValue({ id: "u2", email: "nobody@x.com", role: "user" } as never);
+      expect((await patch({ unarchiveIds: ["a"] })).status).toBe(404);
       expect(updates()).toHaveLength(0);
     });
   });

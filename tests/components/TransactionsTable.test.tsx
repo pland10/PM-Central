@@ -375,30 +375,65 @@ describe("TransactionsTable", () => {
       expect(screen.getByRole("button", { name: /archive all recorded \(2\)/i })).toBeInTheDocument();
     });
 
-    it("confirms with a both-vs-QuickBooks-only breakdown, then archives in one bulk request", async () => {
+    const archiveOk = (ids: string[]) => ({ ok: true, json: async () => ({ ok: true, archived: ids.length, ids }) });
+
+    it("opens a modal (not a browser dialog) with the breakdown, totals and a preview", async () => {
       const user = userEvent.setup();
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const confirm = vi.spyOn(window, "confirm");
       render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
 
       await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
-      // t3 is in both; t5 is QuickBooks only + not reimbursable
-      const msg = confirm.mock.calls[0][0] as string;
-      expect(msg).toMatch(/1 in both QuickBooks and Rentvine/);
-      expect(msg).toMatch(/1 in QuickBooks only \(not reimbursable\)/);
+      expect(confirm).not.toHaveBeenCalled();
+      const dialog = screen.getByRole("dialog", { name: /archive 2 transactions/i });
+      expect(within(dialog).getByText(/1 in both QuickBooks and Rentvine/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/1 in QuickBooks only \(not reimbursable\)/)).toBeInTheDocument();
+      expect(within(dialog).getAllByText("$100.00").length).toBeGreaterThan(0); // group totals + preview amounts
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
 
+    it("archives from the modal in one bulk request, then offers Undo for that batch", async () => {
+      const user = userEvent.setup();
+      fetchMock.mockResolvedValueOnce(archiveOk(["t3", "t5"]));
+      render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
+
+      await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Archive 2" }));
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe("/api/plaid/transactions");
       expect(JSON.parse(init.body)).toEqual({ archiveAllRecorded: true });
-      // both eligible rows leave the (default Active) view
       await waitFor(() => expect(screen.queryByLabelText("archive-t3")).toBeNull());
-      expect(screen.queryByLabelText("archive-t5")).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
+
+      // Undo puts back exactly the batch the server archived
+      expect(screen.getByText(/Archived 2 transactions/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ unarchiveIds: ["t3", "t5"] });
+      await waitFor(() => expect(screen.getByLabelText("archive-t3")).toBeInTheDocument());
     });
 
-    it("does nothing when the user cancels the confirm", async () => {
+    it("Review first narrows the table to exactly the batch, which can be archived from there", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
+      fetchMock.mockResolvedValueOnce(archiveOk(["t3", "t5"]));
+      render(<TransactionsTable initialRows={[rows[0], rows[1], qbOnlyNR, both]} accounts={["American Express"]} />);
+
+      await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      await user.click(screen.getByRole("button", { name: "Review first" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByText(/Showing 2 ready to archive/)).toBeInTheDocument();
+      expect(screen.queryByText("Lowe's")).toBeNull(); // t2 isn't in the batch
+      expect(screen.getByLabelText("archive-t3")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Archive these (2)" }));
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ archiveAllRecorded: true });
+      await waitFor(() => expect(screen.queryByText(/Showing 2 ready to archive/)).toBeNull());
+    });
+
+    it("does nothing when the modal is cancelled", async () => {
+      const user = userEvent.setup();
       render(<TransactionsTable initialRows={[rows[0], both]} accounts={["American Express"]} />);
       await user.click(screen.getByRole("button", { name: /archive all recorded/i }));
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });

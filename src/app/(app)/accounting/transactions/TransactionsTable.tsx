@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
+import { Modal } from "@/components/Modal";
 import { formatCurrencyCents } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
 import type { PropertyChoice } from "@/lib/property-options";
@@ -111,23 +112,25 @@ export function TransactionsTable({
     [rows]
   );
 
-  // Archive every eligible row at once. The server sweeps the whole table (so it
-  // also catches rows beyond the loaded cap); we optimistically file the loaded
-  // ones and roll back together if the request fails. The confirm breaks the
-  // count down by both-recorded vs. QuickBooks-only so it's clear what's going.
+  // Archive every eligible row at once — confirmed in a modal (with a
+  // breakdown, totals and a short preview), or after "Review first", which
+  // narrows the table to exactly that batch. The server sweeps the whole table
+  // (so it also catches rows beyond the loaded cap) and returns the ids it
+  // archived, which powers Undo for ~10 seconds afterwards.
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [undo, setUndo] = useState<{ ids: string[]; count: number } | null>(null);
+
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(null), 10_000);
+    return () => clearTimeout(t);
+  }, [undo]);
+
   const archiveAllRecorded = useCallback(async () => {
     const eligible = rows.filter((r) => archivable(r) && !r.pending && !r.archived);
+    setConfirmArchive(false);
     if (eligible.length === 0) return;
-    const both = eligible.filter((r) => r.recordedRentvine).length;
-    const qbOnly = eligible.length - both; // in QuickBooks only, marked not reimbursable
-    if (
-      !window.confirm(
-        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"}?\n\n` +
-          `• ${both} in both QuickBooks and Rentvine\n` +
-          `• ${qbOnly} in QuickBooks only (not reimbursable)`
-      )
-    )
-      return;
     const ids = new Set(eligible.map((r) => r.transactionId));
     const before = new Map(eligible.map((r) => [r.transactionId, r]));
     setRows((prev) => prev.map((r) => (ids.has(r.transactionId) ? { ...r, archived: true } : r)));
@@ -138,12 +141,35 @@ export function TransactionsTable({
         body: JSON.stringify({ archiveAllRecorded: true }),
       });
       if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      const done: string[] = Array.isArray(data?.ids) ? data.ids : [...ids];
       setError("");
+      setReviewing(false);
+      setUndo({ ids: done, count: typeof data?.archived === "number" ? data.archived : done.length });
     } catch {
       setRows((prev) => prev.map((r) => before.get(r.transactionId) ?? r));
       setError("Couldn't archive all recorded — reverted it. Please try again.");
     }
   }, [rows]);
+
+  const undoArchive = useCallback(async () => {
+    if (!undo) return;
+    const ids = new Set(undo.ids);
+    setUndo(null);
+    setRows((prev) => prev.map((r) => (ids.has(r.transactionId) ? { ...r, archived: false } : r)));
+    try {
+      const res = await fetch("/api/plaid/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unarchiveIds: [...ids] }),
+      });
+      if (!res.ok) throw new Error();
+      setError("");
+    } catch {
+      setRows((prev) => prev.map((r) => (ids.has(r.transactionId) ? { ...r, archived: true } : r)));
+      setError("Couldn't undo the archive. Use the Archived filter to unarchive rows one by one.");
+    }
+  }, [undo]);
 
   // Multi-select for bulk "reimbursable" edits. `shown` tracks the rows the
   // DataTable is currently displaying (after search/filters) for "select all".
@@ -596,8 +622,8 @@ export function TransactionsTable({
             <button type="button" onClick={() => setSelecting(true)} className={BTN}>
               Select
             </button>
-            {eligibleToArchive.length > 0 && (
-              <button type="button" onClick={archiveAllRecorded} className={BTN}>
+            {eligibleToArchive.length > 0 && !reviewing && (
+              <button type="button" onClick={() => setConfirmArchive(true)} className={BTN}>
                 Archive all recorded ({eligibleToArchive.length.toLocaleString()})
               </button>
             )}
@@ -652,8 +678,57 @@ export function TransactionsTable({
         ))}
       </datalist>
 
+      {reviewing && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span>
+            Showing {eligibleToArchive.length.toLocaleString()} ready to archive. Uncheck QuickBooks on any that
+            shouldn&apos;t go and it drops out.
+          </span>
+          <span className="ml-auto flex gap-2">
+            {eligibleToArchive.length > 0 && (
+              <button
+                type="button"
+                onClick={archiveAllRecorded}
+                className="rounded-md bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+              >
+                Archive these ({eligibleToArchive.length.toLocaleString()})
+              </button>
+            )}
+            <button type="button" onClick={() => setReviewing(false)} className={BTN}>
+              Back to all
+            </button>
+          </span>
+        </div>
+      )}
+
+      {undo && (
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-800 px-3 py-2 text-sm text-white">
+          <span>
+            Archived {undo.count.toLocaleString()} transaction{undo.count === 1 ? "" : "s"}.
+          </span>
+          <button type="button" onClick={undoArchive} className="font-semibold text-amber-300 hover:underline">
+            Undo
+          </button>
+          <button type="button" aria-label="Dismiss" onClick={() => setUndo(null)} className="ml-auto text-slate-300 hover:text-white">
+            ×
+          </button>
+        </div>
+      )}
+
+      {confirmArchive && (
+        <ArchiveConfirm
+          eligible={eligibleToArchive}
+          onCancel={() => setConfirmArchive(false)}
+          onReview={() => {
+            setConfirmArchive(false);
+            setReviewing(true);
+          }}
+          onArchive={archiveAllRecorded}
+        />
+      )}
+
       <DataTable<TxnRow>
-        rows={rows}
+        rows={reviewing ? eligibleToArchive : rows}
         columns={shownColumns}
         onFilteredChange={setShown}
         wide
@@ -709,5 +784,75 @@ function SummaryTile({
       <span className={`mt-1 block text-xl font-semibold ${TONES[tone]}`}>{value}</span>
       {hint && <span className="mt-0.5 block text-[11px] text-slate-400">{hint}</span>}
     </div>
+  );
+}
+
+// The "Archive all recorded" confirmation: what's going (by group, with
+// totals) and a short preview. Long lists are reviewed in the table itself via
+// "Review first", not crammed into the modal.
+const PREVIEW = 5;
+function ArchiveConfirm({
+  eligible,
+  onCancel,
+  onReview,
+  onArchive,
+}: {
+  eligible: TxnRow[];
+  onCancel: () => void;
+  onReview: () => void;
+  onArchive: () => void;
+}) {
+  const both = eligible.filter((r) => r.recordedRentvine);
+  const qbOnly = eligible.filter((r) => !r.recordedRentvine);
+  const total = (xs: TxnRow[]) => xs.reduce((s, r) => s + r.amount, 0);
+  const n = eligible.length;
+  const preview = [...eligible].sort((a, b) => (b.postedDate ?? "").localeCompare(a.postedDate ?? "")).slice(0, PREVIEW);
+  return (
+    <Modal
+      title={`Archive ${n.toLocaleString()} transaction${n === 1 ? "" : "s"}?`}
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" onClick={onCancel} className={BTN}>
+            Cancel
+          </button>
+          <button type="button" onClick={onReview} className={BTN}>
+            Review first
+          </button>
+          <button
+            type="button"
+            data-autofocus
+            onClick={onArchive}
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Archive {n.toLocaleString()}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-slate-500">They&apos;ll be hidden from the working list. You can unarchive any of them later.</p>
+      <ul className="mb-4 space-y-1">
+        <li className="flex justify-between">
+          <span>{both.length.toLocaleString()} in both QuickBooks and Rentvine</span>
+          <span className="tabular-nums">{formatCurrencyCents(total(both))}</span>
+        </li>
+        <li className="flex justify-between">
+          <span>{qbOnly.length.toLocaleString()} in QuickBooks only (not reimbursable)</span>
+          <span className="tabular-nums">{formatCurrencyCents(total(qbOnly))}</span>
+        </li>
+      </ul>
+      <div className="rounded-md border border-slate-200">
+        {preview.map((r) => (
+          <div key={r.transactionId} className="flex gap-3 border-b border-slate-100 px-3 py-1.5 text-xs last:border-b-0">
+            <span className="w-20 shrink-0 text-slate-500">{r.postedDate}</span>
+            <span className="min-w-0 flex-1 truncate">{r.merchantName || r.name}</span>
+            <span className="tabular-nums">{formatCurrencyCents(r.amount)}</span>
+          </div>
+        ))}
+        {n > PREVIEW && (
+          <div className="px-3 py-1.5 text-xs text-slate-500">…and {(n - PREVIEW).toLocaleString()} more</div>
+        )}
+      </div>
+    </Modal>
   );
 }
