@@ -15,6 +15,12 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 // (Plaid's own category column was dropped as unhelpful; the `category` field is
 // still synced and kept in the DB for possible later use.)
 
+// Archive eligibility (mirrors the API guard): a row can be filed away once it's
+// in QuickBooks AND either also in Rentvine or marked not reimbursable — the
+// not-reimbursable items are the ones that never go to Rentvine. (Pending /
+// already-archived are handled separately by each caller.)
+const archivable = (r: TxnRow) => r.recordedQuickbooks && (r.recordedRentvine || r.reimbursable === "no");
+
 export function TransactionsTable({
   initialRows,
   accounts,
@@ -97,11 +103,11 @@ export function TransactionsTable({
     }
   }, []);
 
-  // Rows that can be filed away: recorded in QuickBooks (Rentvine optional —
-  // some items never go to Rentvine), posted, not already archived. Powers the
-  // "Archive all recorded" button.
+  // Rows that can be filed away: in QuickBooks and either also in Rentvine or
+  // marked not reimbursable (the items that never go to Rentvine), posted, not
+  // already archived. Powers the "Archive all recorded" button.
   const eligibleToArchive = useMemo(
-    () => rows.filter((r) => r.recordedQuickbooks && !r.pending && !r.archived),
+    () => rows.filter((r) => archivable(r) && !r.pending && !r.archived),
     [rows]
   );
 
@@ -110,15 +116,15 @@ export function TransactionsTable({
   // ones and roll back together if the request fails. The confirm breaks the
   // count down by both-recorded vs. QuickBooks-only so it's clear what's going.
   const archiveAllRecorded = useCallback(async () => {
-    const eligible = rows.filter((r) => r.recordedQuickbooks && !r.pending && !r.archived);
+    const eligible = rows.filter((r) => archivable(r) && !r.pending && !r.archived);
     if (eligible.length === 0) return;
     const both = eligible.filter((r) => r.recordedRentvine).length;
-    const qbOnly = eligible.length - both;
+    const qbOnly = eligible.length - both; // in QuickBooks only, marked not reimbursable
     if (
       !window.confirm(
-        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"} recorded in QuickBooks?\n\n` +
+        `Archive ${eligible.length} transaction${eligible.length === 1 ? "" : "s"}?\n\n` +
           `• ${both} in both QuickBooks and Rentvine\n` +
-          `• ${qbOnly} in QuickBooks only`
+          `• ${qbOnly} in QuickBooks only (not reimbursable)`
       )
     )
       return;
@@ -440,7 +446,7 @@ export function TransactionsTable({
             >
               Unarchive
             </button>
-          ) : r.recordedQuickbooks && !r.pending ? (
+          ) : !r.pending && archivable(r) ? (
             <button
               type="button"
               aria-label={`archive-${r.transactionId}`}
@@ -450,7 +456,12 @@ export function TransactionsTable({
               Archive
             </button>
           ) : (
-            <span className="text-slate-300" title="Record it in QuickBooks to archive">—</span>
+            <span
+              className="text-slate-300"
+              title="To archive: record it in QuickBooks and Rentvine, or in QuickBooks and mark it not reimbursable"
+            >
+              —
+            </span>
           ),
       },
     ],

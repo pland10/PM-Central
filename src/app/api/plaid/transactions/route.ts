@@ -25,8 +25,9 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
 
-  // "Archive all recorded": file away every posted transaction that's recorded
-  // in QuickBooks (Rentvine optional — some items never go to Rentvine), in one
+  // "Archive all recorded": file away every posted transaction recorded in
+  // QuickBooks AND either also in Rentvine or marked not reimbursable (the
+  // not-reimbursable items are the ones that never go to Rentvine), in one
   // update (same eligibility as the single-row archive). Already-archived rows
   // are skipped so their original archived_at/by stamps are preserved. No id
   // list — it's a sweep.
@@ -37,7 +38,8 @@ export async function PATCH(req: NextRequest) {
         UPDATE plaid_transactions
         SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
         WHERE archived = false AND pending = false
-          AND recorded_quickbooks = true`);
+          AND recorded_quickbooks = true
+          AND (recorded_rentvine = true OR reimbursable = 'no')`);
       return NextResponse.json({ ok: true, archived });
     } catch (e) {
       console.error(`[plaid] bulk archive-all-recorded failed:`, e);
