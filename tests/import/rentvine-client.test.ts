@@ -287,9 +287,25 @@ describe("fetchRentvineWorkOrders", () => {
     ]);
 
     expect(await fetchRentvineWorkOrders(config)).toEqual([
-      { number: "301", propertyExternalId: "12", priority: "High" },
-      { number: "302", propertyExternalId: "12", priority: "Low" },
-      { number: "303", propertyExternalId: "13", priority: "" },
+      { number: "301", propertyExternalId: "12", priority: "High", recurring: false },
+      { number: "302", propertyExternalId: "12", priority: "Low", recurring: false },
+      { number: "303", propertyExternalId: "13", priority: "", recurring: false },
+    ]);
+  });
+
+  it("flags work orders created by a Rentvine recurring work order", async () => {
+    stubFetch([
+      [
+        /\/maintenance\/work-orders$/,
+        onePage([
+          { workOrder: { workOrderNumber: "401", propertyID: "12", priorityID: "2", recurringWorkOrderID: "7" } },
+          { workOrder: { workOrderNumber: "402", propertyID: "12", priorityID: "2", recurringWorkOrderID: null } },
+        ]),
+      ],
+    ]);
+    expect((await fetchRentvineWorkOrders(config)).map((w) => [w.number, w.recurring])).toEqual([
+      ["401", true],
+      ["402", false],
     ]);
   });
 

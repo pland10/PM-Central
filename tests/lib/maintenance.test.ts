@@ -89,6 +89,15 @@ describe("attentionReason", () => {
     expect(attentionReason(wo({ rvStatus: "On Hold", stage: "Deferred", terminal: true }), NOW)).toBeNull();
   });
 
+  it("keeps preventive work (tune-ups, winterization) off the attention list unless it's overdue", () => {
+    // New, quiet for weeks — would be flagged if it were a repair
+    const tuneUp = wo({ issue: "HVAC Tuneup", preventive: true, stage: "New WO", createdAt: daysAgo(20), updatedAt: daysAgo(20) });
+    expect(attentionReason(tuneUp, NOW)).toBeNull();
+    expect(attentionReason({ ...tuneUp, dueAt: daysAgo(2) }, NOW)).toEqual({ kind: "overdue", label: "Overdue" });
+    // A Rentvine mismatch is a data problem — still flagged
+    expect(attentionReason({ ...tuneUp, rvStatus: "Completed" }, NOW)?.kind).toBe("rvClosed");
+  });
+
   it("does not treat Rentvine Open or Pending Closure as closed", () => {
     expect(attentionReason(wo({ rvStatus: "Open" }), NOW)).toBeNull();
     expect(attentionReason(wo({ rvStatus: "Pending Closure" }), NOW)).toBeNull();
@@ -148,6 +157,11 @@ describe("maintenanceKpis", () => {
       completedThisWeek: 1,
       hasDueDates: true,
     });
+  });
+
+  it("leaves preventive work out of Stalled and New WOs waiting (still Open, still Overdue)", () => {
+    const tuneUp = { preventive: true, stage: "New WO", createdAt: daysAgo(20), updatedAt: daysAgo(20), dueAt: daysAgo(1) };
+    expect(maintenanceKpis([wo({ id: "p", ...tuneUp })], NOW)).toMatchObject({ open: 1, stalled: 0, newWaiting: 0, overdue: 1 });
   });
 
   it("says when no work order has a due date, so the tile can show — instead of 0", () => {

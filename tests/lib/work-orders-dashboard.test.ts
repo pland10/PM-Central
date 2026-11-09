@@ -347,4 +347,34 @@ describe("listWorkOrders", () => {
     );
     expect(await listWorkOrders()).toBeNull();
   });
+
+  it("links the property from Rentvine's bare property id, and marks preventive work", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [
+          /FROM rv_work_orders/,
+          [
+            { wo_number: "100", property_external_id: "12", priority: "Medium", recurring: null },
+            { wo_number: "101", property_external_id: "12", priority: "Medium", recurring: "true" },
+          ],
+        ],
+        [/FROM activities/, []],
+        [
+          /FROM work_orders/,
+          [
+            woRow({ source_id: "a", wo_number: "100", title: "HVAC Tuneup" }),
+            woRow({ source_id: "b", wo_number: "101", title: "Gutter cleaning" }), // from a Rentvine recurring WO
+            woRow({ source_id: "c", wo_number: "102", title: "Boiler not turning on" }),
+          ],
+        ],
+      ]) as never
+    );
+
+    const rows = await listWorkOrders();
+    expect(rows!.map((r) => [r.number, r.propertyId, r.preventive])).toEqual([
+      ["100", "prop-a", true],
+      ["101", "prop-a", true],
+      ["102", null, false],
+    ]);
+  });
 });

@@ -58,6 +58,12 @@ export function attentionReason(r: WorkOrderRow, now: number): AttentionReason |
   if (/^on ?hold$/i.test(r.rvStatus.trim())) {
     return { kind: "rvOnHold", label: "On Hold in Rentvine · open in LeadSimple" };
   }
+  // Preventive work (tune-ups, winterization) is routine — it only needs
+  // someone once it's overdue. The Rentvine mismatches above still flag it.
+  if (r.preventive) {
+    const due = ms(r.dueAt);
+    return due != null && due < now ? { kind: "overdue", label: "Overdue" } : null;
+  }
   const last = ms(lastActivityAt(r));
   if (/estimate/i.test(r.stage) && last != null && last < now - ESTIMATE_WAIT_DAYS * DAY) {
     return { kind: "estimates", label: `Waiting on estimates ${Math.floor((now - last) / DAY)} days` };
@@ -106,7 +112,10 @@ export function maintenanceKpis(rows: WorkOrderRow[], now: number): MaintenanceK
     open: open.length,
     // Counted independently of the "most urgent" reason, so an overdue WO
     // that's also quiet still counts as stalled.
+    // Stalled / New-waiting leave out preventive work (routine, and kept off
+    // the attention list); Open and Overdue still count it.
     stalled: open.filter((r) => {
+      if (r.preventive) return false;
       const last = ms(lastActivityAt(r));
       return last != null && last < staleBefore;
     }).length,
@@ -114,7 +123,7 @@ export function maintenanceKpis(rows: WorkOrderRow[], now: number): MaintenanceK
       const due = ms(r.dueAt);
       return due != null && due < now;
     }).length,
-    newWaiting: open.filter((r) => isNewWaiting(r)).length,
+    newWaiting: open.filter((r) => !r.preventive && isNewWaiting(r)).length,
     completedThisWeek: rows.filter((r) => {
       const closed = ms(r.closedAt);
       return r.terminal && !isCancelled(r) && closed != null && closed >= now - COMPLETED_WINDOW_DAYS * DAY && closed <= now;
