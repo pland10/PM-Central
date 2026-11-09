@@ -15,3 +15,34 @@ export function isPreventiveTitle(title: string | null | undefined): boolean {
   const t = title ?? "";
   return PREVENTIVE_PATTERNS.some((re) => re.test(t));
 }
+
+// An admin-managed keyword rule (Admin → Preventive maintenance), stored in
+// preventive_patterns. Pure helpers here; storage is preventive-patterns-db.ts.
+export type PreventivePattern = {
+  id: number;
+  pattern: string; // keyword, matched anywhere in the title (case-insensitive)
+  note: string; // optional note on why the rule exists
+  createdBy: string;
+  createdAt: string | null;
+};
+
+const PATTERN_MAX = 100;
+
+// Trim / collapse whitespace; null if empty. (Plain keyword — no wildcards; it
+// matches anywhere in the title.)
+export function normalizePreventivePattern(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const p = input.replace(/\s+/g, " ").trim().slice(0, PATTERN_MAX);
+  return p || null;
+}
+
+// Preventive if a built-in rule matches OR the title contains any admin keyword
+// (case-insensitive). `patterns` are the admin-managed keywords.
+export function matchesPreventive(title: string | null | undefined, patterns: string[]): boolean {
+  if (isPreventiveTitle(title)) return true;
+  const t = (title ?? "").toLowerCase();
+  return patterns.some((p) => {
+    const needle = (p ?? "").trim().toLowerCase();
+    return needle.length > 0 && t.includes(needle);
+  });
+}
