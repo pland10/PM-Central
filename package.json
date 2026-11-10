@@ -2,7 +2,7 @@
   "name": "pm-central",
   "version": "1.0.0",
   "private": true,
-  "description": "PM-Central — a property management hub. Foundation: a list of properties, backed by a database, designed to pull from multiple sources.",
+  "description": "PM Central — property management app. Foundation: a list of properties, backed by a database, designed to pull from multiple sources.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

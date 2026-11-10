@@ -21,7 +21,7 @@ export interface Brand {
 export const BRAND: Brand = {
   name: "PMI Lighthouse",
   shortName: "PMI",
-  tagline: "Property Management Hub",
+  tagline: "PM Central",
   logoSrc: "/logo.png", // black + orange wordmark (login / light surfaces)
   logoSrcDark: "/logo-dark.png", // white + orange wordmark (sidebar / dark surfaces)
   colors: {
