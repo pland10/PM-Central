@@ -1,7 +1,7 @@
 # PM-Central — notes for Claude
 
 ## What this is
-A property management hub, built as a real app (Next.js + Prisma). The
+PM Central: a property management app, built as a real app (Next.js + Prisma). The
 foundation is a list of properties. Goal is a Rentvine-style tool that pulls
 data from many sources and could be sold as a product.
 
