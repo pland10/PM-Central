@@ -1,6 +1,6 @@
 # PM-Central
 
-A property management hub. The foundation is a **list of properties**, backed by
+PM Central: a property management app. The foundation is a **list of properties**, backed by
 a real database, designed to pull data from many places (Rentvine, manual entry,
 other feeds) and grow into a full Rentvine-style tool over time.
 
