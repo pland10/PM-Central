@@ -165,22 +165,17 @@ describe("MaintenanceView", () => {
     expect(within(summary).getByRole("group", { name: /^open/i })).toBeTruthy();
   });
 
-  it("shows the latest 6 activities and expands to everything from the last 7 days", async () => {
-    const user = userEvent.setup();
-    const recentRows = [
-      ...Array.from({ length: 9 }, (_, i) => wo({ number: String(300 + i), updatedAt: daysAgo(i * 0.5) })),
-      wo({ number: "399", updatedAt: daysAgo(20) }), // outside the 7-day window
-    ];
-    render(<MaintenanceView rows={recentRows} now={NOW} />);
+  it("shows how many open work orders are reactive vs preventive on the Open tile", () => {
+    render(<MaintenanceView rows={[...rows, wo({ number: "108", issue: "HVAC Tuneup", preventive: true })]} now={NOW} />);
+    const open = screen.getByRole("group", { name: /^open/i });
+    const reactive = rows.filter((r) => !r.terminal).length;
+    expect(within(open).getByText(`${reactive} reactive · 1 preventive`)).toBeTruthy();
+  });
 
-    const recent = screen.getByRole("region", { name: /recent activity/i });
-    expect(within(recent).getAllByRole("listitem")).toHaveLength(6);
-
-    await user.click(within(recent).getByRole("button", { name: /show all 9/i }));
-    expect(within(recent).getAllByRole("listitem")).toHaveLength(9);
-
-    await user.click(within(recent).getByRole("button", { name: /show less/i }));
-    expect(within(recent).getAllByRole("listitem")).toHaveLength(6);
+  it("has no Recent Activity box (removed — not useful)", () => {
+    render(<MaintenanceView rows={rows} now={NOW} />);
+    expect(screen.queryByRole("region", { name: /recent activity/i })).toBeNull();
+    expect(screen.queryByText(/recent activity/i)).toBeNull();
   });
 
   it("shows notes on the table and opens the notes panel", async () => {

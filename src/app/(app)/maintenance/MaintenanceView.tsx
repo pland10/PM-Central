@@ -8,10 +8,8 @@ import {
   attentionReason,
   lastActivityAt,
   maintenanceKpis,
-  recentActivity,
   rowStatus,
   STALLED_DAYS,
-  type ActivityItem,
   type RowStatus,
 } from "@/lib/maintenance";
 import { pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
@@ -20,8 +18,8 @@ import type { StaffMember } from "@/lib/work-order-notes";
 import { NotesCell } from "../work-orders/NotesCell";
 import { WorkOrderNotes } from "../work-orders/WorkOrderNotes";
 
-// The new Maintenance screen (FEATURE_MAINTENANCE): KPI tiles, the attention
-// queue and recent activity up top, the full work-order list below. Layout
+// The new Maintenance screen (FEATURE_MAINTENANCE): KPI tiles up top, the
+// full work-order list below. Layout
 // follows the team's portal prototype; every number comes from synced data.
 
 const TZ = "America/New_York";
@@ -109,13 +107,6 @@ function Section({ title, meta, children, label }: { title: string; meta?: strin
   );
 }
 
-const DOT: Record<ActivityItem["event"], string> = {
-  completed: "bg-emerald-500",
-  cancelled: "bg-slate-400",
-  created: "bg-blue-500",
-  updated: "bg-amber-500",
-};
-
 export function MaintenanceView({
   rows,
   now,
@@ -202,13 +193,6 @@ export function MaintenanceView({
     exportValue: (x) => notes[row(x).id]?.latest ?? "",
     render: (x) => <NotesCell summary={notes[row(x).id]} onOpen={() => setNotesFor(row(x))} />,
   });
-  // Recent activity: the latest 6, expandable to everything in the last week.
-  const RECENT_SHOWN = 6;
-  const allRecent = recentActivity(rows, Infinity);
-  const week = allRecent.filter((a) => Date.parse(a.at) >= now - 7 * 86_400_000);
-  const [showAllRecent, setShowAllRecent] = useState(false);
-  const recent = showAllRecent ? week : allRecent.slice(0, RECENT_SHOWN);
-
   // The title + KPI tiles stay pinned on wide screens; tell the tables below
   // how tall that is so their own sticky headers pin just under it.
   const pageRef = useRef<HTMLDivElement>(null);
@@ -384,7 +368,13 @@ export function MaintenanceView({
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-          <Kpi label="Open" value={String(kpis.open)} sub="Not closed in LeadSimple" icon="▤" tone="red" />
+          <Kpi
+            label="Open"
+            value={String(kpis.open)}
+            sub={`${kpis.openReactive} reactive · ${kpis.openPreventive} preventive`}
+            icon="▤"
+            tone="red"
+          />
           <Kpi label="Stalled" value={String(kpis.stalled)} sub={`No activity > ${STALLED_DAYS} days`} icon="◷" tone="amber" />
           <Kpi
             label="Overdue"
@@ -421,33 +411,6 @@ export function MaintenanceView({
               scrollBox
             />
           </div>
-        </Section>
-
-        <Section title="Recent Activity" meta={allRecent.length ? `${week.length} in the last 7 days` : "No activity"}>
-          <ul className="grid grid-cols-1 gap-x-8 px-4 pb-2 xl:grid-cols-2">
-            {recent.map((a) => (
-              <li key={a.row.id} className="grid grid-cols-[10px_1fr_auto] items-center gap-2.5 border-b border-slate-100 py-2.5 text-xs last:border-0">
-                <span className={`h-2.5 w-2.5 rounded-full ${DOT[a.event]}`} aria-hidden="true" />
-                <div className="min-w-0">
-                  <div className="font-semibold text-slate-800">
-                    WO #{a.row.number} {a.event}
-                  </div>
-                  <div className="truncate text-slate-500" title={a.detail}>
-                    {a.detail}
-                  </div>
-                </div>
-                <span className="whitespace-nowrap text-[11px] text-slate-400">{when(a.at)}</span>
-              </li>
-            ))}
-          </ul>
-          {week.length > RECENT_SHOWN && (
-            <button
-              onClick={() => setShowAllRecent((v) => !v)}
-              className="mb-3 w-full text-center text-xs font-medium text-brand-600 hover:underline"
-            >
-              {showAllRecent ? "Show less" : `Show all ${week.length} from the last 7 days →`}
-            </button>
-          )}
         </Section>
       </div>
       {notesFor && (
