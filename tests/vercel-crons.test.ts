@@ -41,8 +41,28 @@ describe("vercel.json crons", () => {
     expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$)/.test(c.path))).toBe(true);
   });
 
-  it("runs the hourly tier every daytime hour (7am–7pm ET is 11–23 UTC)", () => {
-    const hourly = crons.filter((c) => tierOf(c) === "hourly").map((c) => c.schedule);
-    expect(hourly.some((s) => s.split(/\s+/)[1] === "11-23")).toBe(true);
+  // GitHub Actions minutes: each run of the leadsimple-search sync + backfill
+  // (private repo, billed) costs ~12 min, so the "hourly" tier runs every 2h by
+  // day and once overnight — 8 runs/day — to stay near the free allowance.
+  const hoursOf = (field: string): number[] => {
+    const out: number[] = [];
+    for (const part of field.split(",")) {
+      const [range, step] = part.split("/");
+      const [a, b] = range === "*" ? [0, 23] : range.split("-").map(Number);
+      for (let h = a; h <= (b ?? a); h += Number(step ?? 1)) out.push(h);
+    }
+    return out;
+  };
+  const hourlyHours = () =>
+    crons.filter((c) => tierOf(c) === "hourly").flatMap((c) => hoursOf(c.schedule.split(/\s+/)[1]));
+
+  it("runs the sync tier every 2 hours by day (7am–7pm ET is 11–23 UTC)", () => {
+    const hours = hourlyHours();
+    expect(hours).toEqual(expect.arrayContaining([11, 13, 15, 17, 19, 21, 23]));
+    expect(hours).not.toContain(12);
+  });
+
+  it("runs the sync tier at most 8 times a day (Actions minutes budget)", () => {
+    expect(new Set(hourlyHours()).size).toBeLessThanOrEqual(8);
   });
 });
