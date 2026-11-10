@@ -32,7 +32,7 @@ export function SidebarFooter({ tagline, version }: { tagline: string; version: 
       </button>
       <div className="px-3 text-xs leading-snug text-slate-500">
         <div>{tagline}</div>
-        <div className="text-[11px] text-slate-600">{version}</div>
+        <div className="mt-0.5 text-sm font-medium text-white">{version}</div>
       </div>
     </div>
   );
