@@ -60,3 +60,18 @@ describe("SearchClient type filter", () => {
     for (const label of TYPE_LABELS) expect(pressed(label)).toBe("true");
   });
 });
+
+describe("SearchClient freshness", () => {
+  it("shows the last-refreshed time from the status endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        const url = new URL(input, "http://localhost");
+        if (url.pathname === "/api/search/status") return jsonResponse({ updatedAt: "2026-11-10T14:05:00Z", stuck: false });
+        return jsonResponse({ rows: [], count: 0 });
+      })
+    );
+    render(<SearchClient />);
+    expect(await screen.findByText(/Last refreshed Nov 10, 9:05 AM EST/)).toBeTruthy();
+  });
+});

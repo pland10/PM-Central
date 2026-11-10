@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FreshnessBadge } from "@/components/FreshnessBadge";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -62,15 +63,6 @@ function fmtDateTime(iso: string | null) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function timeAgo(iso: string) {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function fmtSize(bytes: number | null | undefined): string {
@@ -235,7 +227,6 @@ export function TeamCommsClient() {
   }, []);
 
   const totalPages = count != null ? Math.max(1, Math.ceil(count / pageSize)) : null;
-  const freshColor = fresh.stuck ? "text-red-600" : "text-emerald-600";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -251,11 +242,7 @@ export function TeamCommsClient() {
           <Link href="/team-comms/capture" className="text-xs font-medium text-brand-600 hover:underline">
             ⚙ Capture settings
           </Link>
-          {fresh.updatedAt && (
-            <div className={`text-xs font-medium ${freshColor}`} title={fresh.detail || ""}>
-              ● {fresh.stuck ? fresh.detail || "sync stuck" : `Updated ${timeAgo(fresh.updatedAt)}`}
-            </div>
-          )}
+          <FreshnessBadge updatedAt={fresh.updatedAt} stuck={fresh.stuck} detail={fresh.detail} />
         </div>
       </div>
 

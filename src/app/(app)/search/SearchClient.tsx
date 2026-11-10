@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FreshnessBadge } from "@/components/FreshnessBadge";
 
 type ActivityRow = {
   id: string;
@@ -44,15 +45,6 @@ const PAGE_SIZES = [20, 40, 60, 100];
 function fmtDate(iso: string | null) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function timeAgo(iso: string) {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 // Autocomplete input for the "scope by" fields. Commits a value only when the
@@ -253,7 +245,6 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
   }
 
   const totalPages = count != null ? Math.max(1, Math.ceil(count / pageSize)) : null;
-  const freshColor = fresh.stuck ? "text-red-600" : "text-emerald-600";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -264,11 +255,7 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
             Full-text search across your communication history — emails, texts, calls, notes, chats, tasks and payments.
           </p>
         </div>
-        {fresh.updatedAt && (
-          <div className={`shrink-0 text-xs font-medium ${freshColor}`} title={fresh.detail || ""}>
-            ● {fresh.stuck ? fresh.detail || "sync stuck" : `Updated ${timeAgo(fresh.updatedAt)}`}
-          </div>
-        )}
+        <FreshnessBadge updatedAt={fresh.updatedAt} stuck={fresh.stuck} detail={fresh.detail} />
       </div>
 
       {/* Scope by */}
