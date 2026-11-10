@@ -1,7 +1,7 @@
 import type { WorkOrderRow } from "@/lib/work-orders";
 
 // Maintenance view (the new work-order screen, behind FEATURE_MAINTENANCE):
-// which work orders need attention, the KPI tiles, and recent activity — all
+// which work orders need attention and the KPI tiles — all
 // derived from the synced rows (LeadSimple stages + dates, Rentvine priority and
 // latest update). Pure functions with `now` injected, so they're testable and
 // safe to import from client components.
@@ -98,6 +98,8 @@ export function rowStatus(r: WorkOrderRow, now: number): RowStatus {
 
 export type MaintenanceKpis = {
   open: number;
+  openReactive: number; // open = openReactive + openPreventive
+  openPreventive: number;
   stalled: number;
   overdue: number;
   newWaiting: number;
@@ -108,8 +110,11 @@ export type MaintenanceKpis = {
 export function maintenanceKpis(rows: WorkOrderRow[], now: number): MaintenanceKpis {
   const open = rows.filter((r) => !r.terminal);
   const staleBefore = now - STALLED_DAYS * DAY;
+  const openPreventive = open.filter((r) => r.preventive).length;
   return {
     open: open.length,
+    openReactive: open.length - openPreventive,
+    openPreventive,
     // Counted independently of the "most urgent" reason, so an overdue WO
     // that's also quiet still counts as stalled.
     // Stalled / New-waiting leave out preventive work (routine, and kept off
@@ -146,31 +151,4 @@ export function attentionQueue(rows: WorkOrderRow[], now: number, limit = 8): Qu
       return (ms(lastActivityAt(a.row)) ?? 0) - (ms(lastActivityAt(b.row)) ?? 0);
     })
     .slice(0, limit);
-}
-
-export type ActivityItem = {
-  row: WorkOrderRow;
-  event: "completed" | "cancelled" | "created" | "updated";
-  at: string;
-  detail: string; // latest Rentvine update note, else the stage
-};
-
-export function recentActivity(rows: WorkOrderRow[], limit = 5): ActivityItem[] {
-  return rows
-    .map((row) => ({ row, at: lastActivityAt(row) }))
-    .filter((x): x is { row: WorkOrderRow; at: string } => x.at !== null)
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-    .slice(0, limit)
-    .map(({ row, at }) => {
-      const created = ms(row.createdAt);
-      const event: ActivityItem["event"] = row.terminal
-        ? isCancelled(row)
-          ? "cancelled"
-          : "completed"
-        : created != null && Math.abs(Date.parse(at) - created) < 2 * 60_000
-          ? "created"
-          : "updated";
-      const fromRentvine = row.lastUpdateAt === at && row.lastUpdate;
-      return { row, event, at, detail: fromRentvine ? row.lastUpdate : row.stage };
-    });
 }

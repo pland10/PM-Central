@@ -4,7 +4,6 @@ import {
   attentionReason,
   lastActivityAt,
   maintenanceKpis,
-  recentActivity,
   rowStatus,
 } from "@/lib/maintenance";
 import type { WorkOrderRow } from "@/lib/work-orders";
@@ -151,6 +150,8 @@ describe("maintenanceKpis", () => {
 
     expect(maintenanceKpis(rows, NOW)).toEqual({
       open: 4,
+      openReactive: 4,
+      openPreventive: 0,
       stalled: 2,
       overdue: 1,
       newWaiting: 1,
@@ -162,6 +163,16 @@ describe("maintenanceKpis", () => {
   it("leaves preventive work out of Stalled and New WOs waiting (still Open, still Overdue)", () => {
     const tuneUp = { preventive: true, stage: "New WO", createdAt: daysAgo(20), updatedAt: daysAgo(20), dueAt: daysAgo(1) };
     expect(maintenanceKpis([wo({ id: "p", ...tuneUp })], NOW)).toMatchObject({ open: 1, stalled: 0, newWaiting: 0, overdue: 1 });
+  });
+
+  it("splits open work orders into reactive and preventive (closed ones don't count)", () => {
+    const rows = [
+      wo({ id: "r1" }),
+      wo({ id: "r2" }),
+      wo({ id: "p1", preventive: true }),
+      wo({ id: "p2", preventive: true, terminal: true, stage: "Completed", closedAt: daysAgo(1) }),
+    ];
+    expect(maintenanceKpis(rows, NOW)).toMatchObject({ open: 3, openReactive: 2, openPreventive: 1 });
   });
 
   it("says when no work order has a due date, so the tile can show — instead of 0", () => {
@@ -184,24 +195,5 @@ describe("attentionQueue", () => {
 
     expect(attentionQueue(rows, NOW).map((q) => q.row.id)).toEqual(["rvdone", "overdue", "high", "new", "stalled9", "stalled4"]);
     expect(attentionQueue(rows, NOW, 2)).toHaveLength(2);
-  });
-});
-
-describe("recentActivity", () => {
-  it("lists the most recently active work orders with what happened", () => {
-    const rows = [
-      wo({ id: "old", updatedAt: daysAgo(5) }),
-      wo({ id: "done", terminal: true, stage: "Completed", updatedAt: daysAgo(0.1), closedAt: daysAgo(0.1) }),
-      wo({ id: "rv", updatedAt: daysAgo(3), lastUpdateAt: daysAgo(0.2), lastUpdate: "Vendor scheduled for Tue" }),
-      wo({ id: "none", updatedAt: null, lastUpdateAt: null }),
-    ];
-
-    const items = recentActivity(rows, 3);
-    expect(items.map((i) => [i.row.id, i.event])).toEqual([
-      ["done", "completed"],
-      ["rv", "updated"],
-      ["old", "updated"],
-    ]);
-    expect(items[1].detail).toBe("Vendor scheduled for Tue");
   });
 });
