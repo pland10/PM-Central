@@ -13,6 +13,7 @@ import { patternToLike } from "@/lib/transaction-filters";
 import { attachBillCandidates, rentvineBillUrl } from "@/lib/rv-bill-db";
 import { AccountingTabs } from "./AccountingTabs";
 import { ConnectButton } from "./transactions/ConnectButton";
+import { HdImportButton } from "./transactions/HdImportButton";
 import { TransactionsTable } from "./transactions/TransactionsTable";
 
 // Accounting → Bank Transactions tab (the default): card/bank transactions
@@ -55,7 +56,10 @@ export default async function AccountingPage() {
           Card &amp; bank transactions from your connected accounts, refreshed daily. Mark each one
           reimbursable, set your own category, and tick it off as it&apos;s recorded.
         </p>
-        <ConnectButton disabled={!configured} />
+        <div className="flex items-start gap-2">
+          <HdImportButton />
+          <ConnectButton disabled={!configured} />
+        </div>
       </div>
 
       {!configured ? (
