@@ -7,6 +7,8 @@ import { Modal } from "@/components/Modal";
 import { formatCurrencyCents } from "@/lib/format";
 import type { TxnRow } from "@/lib/plaid-db";
 import type { PropertyChoice } from "@/lib/property-options";
+import { rentvinePropertyId } from "@/lib/rentvine-ids";
+import { classifyBilling, type BillingStatus } from "@/lib/rv-bill-match";
 import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -22,6 +24,62 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 // already-archived are handled separately by each caller.)
 const archivable = (r: TxnRow) => r.recordedQuickbooks && (r.recordedRentvine || r.reimbursable === "no");
 
+const billingOf = (r: TxnRow): BillingStatus | null =>
+  classifyBilling({ amount: r.amount, propertyId: r.propertyId, candidates: r.rvCandidates });
+const BILLED_RANK = { not_found: 0, possible: 1, billed: 2, none: 3 } as const;
+const BILLED_TEXT = { not_found: "Not billed", possible: "Possible match", billed: "Billed", none: "" } as const;
+const shortDate = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+function BilledCell({
+  id,
+  status,
+  billUrl,
+  labelFor,
+}: {
+  id: string;
+  status: BillingStatus | null;
+  billUrl: string;
+  labelFor: (rvPropertyId: string) => string;
+}) {
+  const where = (props: string[]) => props.map(labelFor).join(", ");
+  return (
+    <div aria-label={`rv-billed-${id}`} className="text-xs">
+      {!status ? (
+        <span className="text-slate-400">—</span>
+      ) : status.status === "billed" ? (
+        <a
+          href={`${billUrl}${status.match.billId}`}
+          target="_blank"
+          rel="noreferrer"
+          title={`${status.match.payee} · ${status.match.description}`}
+          className="font-medium text-emerald-700 hover:underline"
+        >
+          ✓ Billed {shortDate(status.match.date)}
+        </a>
+      ) : status.status === "not_found" ? (
+        <span className="font-medium text-red-600">✗ Not billed</span>
+      ) : (
+        <details>
+          <summary className="cursor-pointer font-medium text-amber-700">
+            ? Possible ({status.candidates.length})
+          </summary>
+          <ul className="mt-1 space-y-0.5 whitespace-normal text-slate-600">
+            {status.candidates.map((c) => (
+              <li key={`${c.kind}-${c.billId}-${c.properties.join(".")}`}>
+                <a href={`${billUrl}${c.billId}`} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">
+                  {where(c.properties)}
+                </a>{" "}
+                · {shortDate(c.date)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function TransactionsTable({
   initialRows,
   accounts,
@@ -30,6 +88,7 @@ export function TransactionsTable({
   canManageFilters = false,
   categories: initialCategories = [],
   properties = [],
+  rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/bills/",
 }: {
   initialRows: TxnRow[];
   accounts: string[];
@@ -38,6 +97,7 @@ export function TransactionsTable({
   canManageFilters?: boolean; // admins get a link to the filters page
   categories?: string[]; // the shared category list (suggestions while typing)
   properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
+  rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/bills/
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   const [error, setError] = useState("");
@@ -232,11 +292,13 @@ export function TransactionsTable({
   const propertyLookup = useMemo(() => {
     const byKey = new Map<string, PropertyChoice>();
     const byLabel = new Map<string, PropertyChoice>();
+    const byRvId = new Map<string, string>(); // bare Rentvine property id -> label
     for (const c of properties) {
       byKey.set(`${c.propertyId}|${c.unitId ?? ""}`, c);
       byLabel.set(c.label.toLowerCase(), c);
+      if (!c.unitId) byRvId.set(rentvinePropertyId(c.propertyId), c.label);
     }
-    return { byKey, byLabel };
+    return { byKey, byLabel, byRvId };
   }, [properties]);
   const propertyLabel = useCallback(
     (r: Pick<TxnRow, "propertyId" | "unitId">) => {
@@ -438,6 +500,24 @@ export function TransactionsTable({
         ),
       },
       {
+        // Read-only lookup: was this amount billed to the owner in Rentvine,
+        // on the tagged property? Re-evaluated from the row's current property.
+        key: "rvBilled",
+        header: "Billed in Rentvine",
+        nowrap: true,
+        sortable: true,
+        sortValue: (r) => BILLED_RANK[billingOf(r)?.status ?? "none"],
+        exportValue: (r) => BILLED_TEXT[billingOf(r)?.status ?? "none"],
+        render: (r) => (
+          <BilledCell
+            id={r.transactionId}
+            status={billingOf(r)}
+            billUrl={rentvineBillUrl}
+            labelFor={(rv) => propertyLookup.byRvId.get(rv) ?? `Property #${rv}`}
+          />
+        ),
+      },
+      {
         key: "notes",
         header: "Notes",
         exportValue: (r) => r.notes,
@@ -491,7 +571,7 @@ export function TransactionsTable({
           ),
       },
     ],
-    [save, archive, accounts, propertyLabel, propertyLookup]
+    [save, archive, accounts, propertyLabel, propertyLookup, rentvineBillUrl]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -558,6 +638,16 @@ export function TransactionsTable({
           { value: "no", label: "Not yet" },
         ],
         match: (r, v) => r.recordedRentvine === (v === "yes"),
+      },
+      {
+        key: "rvBilled",
+        label: "Billed in Rentvine",
+        options: [
+          { value: "billed", label: "Billed" },
+          { value: "possible", label: "Possible match" },
+          { value: "not_found", label: "Not billed" },
+        ],
+        match: (r, v) => billingOf(r)?.status === v,
       },
     ],
     []

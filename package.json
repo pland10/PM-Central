@@ -18,6 +18,7 @@
     "sync:balances": "tsx scripts/sync-balances.ts",
     "sync:rentvine": "tsx scripts/sync-rentvine.ts",
     "sync:rentvine:wos": "tsx scripts/sync-rentvine-work-orders.ts",
+    "sync:rentvine:bills": "tsx scripts/sync-rentvine-bills.ts",
     "sync:plaid": "tsx scripts/sync-plaid.ts",
     "plaid:sandbox-test": "tsx scripts/plaid-sandbox-test.ts",
     "migrate:invoices": "tsx scripts/migrate-invoices-to-neon.ts",

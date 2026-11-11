@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   accountConfigFromEnv,
+  fetchRentvineBillLines,
   fetchRentvineUnits,
   fetchRentvineWorkOrders,
   liveRentvineSource,
@@ -339,3 +340,106 @@ describe("fetchRentvineUnits", () => {
     await expect(fetchRentvineUnits({ ...config, apiSecret: "" })).rejects.toThrow(/credentials missing/);
   });
 });
+
+describe("fetchRentvineBillLines", () => {
+  const charge = (id: string, over: Record<string, unknown> = {}) => ({
+    transaction: {
+      transactionID: id,
+      transactionTypeID: "7",
+      billID: "2985",
+      propertyID: "36",
+      unitID: "88",
+      amount: "472.19",
+      datePosted: "2026-11-10",
+      description: "Village Permit for HVAC",
+      isVoided: "0",
+      ...over,
+    },
+    token: "t",
+  });
+  const bill = (id: string, over: Record<string, unknown> = {}) => ({
+    bill: { billID: id, reference: "143-26", isVoided: "0", billDate: "2026-11-10", ...over },
+    contact: { name: "PMI Lighthouse Reimbursable" },
+  });
+  const paged = (pages: Record<number, unknown[]>, total: number) => (url: URL) =>
+    jsonResponse(pages[Number(url.searchParams.get("page") ?? "1")] ?? [], {
+      headers: { "Pagination-Total-Pages": String(total) },
+    });
+
+  it("returns live bill lines since the cutoff, with the bill's payee and reference", async () => {
+    stubFetch([
+      [
+        /\/accounting\/transactions$/,
+        paged(
+          {
+            1: [
+              charge("1"),
+              charge("2", { isVoided: "1" }), // voided line
+              charge("3", { billID: "3000" }), // its bill was voided
+              charge("4", { datePosted: "2026-01-02" }), // before the cutoff
+            ],
+          },
+          1
+        ),
+      ],
+      [/\/accounting\/bills$/, paged({ 1: [bill("2985"), bill("3000", { isVoided: "1" })] }, 1)],
+    ]);
+
+    expect(await fetchRentvineBillLines(config, "2026-06-01")).toEqual([
+      {
+        transactionId: "1",
+        billId: "2985",
+        propertyRvId: "36",
+        amount: 472.19,
+        date: "2026-11-10",
+        description: "Village Permit for HVAC",
+        payee: "PMI Lighthouse Reimbursable",
+        reference: "143-26",
+      },
+    ]);
+  });
+
+  it("stops paging once a whole page is older than the cutoff (newest first)", async () => {
+    const fetchMock = stubFetch([
+      [
+        /\/accounting\/transactions$/,
+        paged(
+          {
+            1: [charge("1", { datePosted: "2026-11-10" })],
+            2: [charge("2", { datePosted: "2026-01-02" })],
+            5: [charge("5", { datePosted: "2024-01-01" })],
+          },
+          5
+        ),
+      ],
+      [/\/accounting\/bills$/, paged({ 1: [bill("2985")] }, 1)],
+    ]);
+    const lines = await fetchRentvineBillLines(config, "2026-06-01");
+    expect(lines.map((l) => l.transactionId)).toEqual(["1"]);
+    const pagesAsked = fetchMock.mock.calls
+      .map((c) => new URL(String(c[0])))
+      .filter((u) => u.pathname.endsWith("/accounting/transactions"))
+      .map((u) => u.searchParams.get("page"));
+    expect(pagesAsked).not.toContain("3");
+    expect(pagesAsked).not.toContain("4");
+  });
+
+  it("walks back from the last page when the list is oldest first", async () => {
+    stubFetch([
+      [
+        /\/accounting\/transactions$/,
+        paged(
+          {
+            1: [charge("1", { datePosted: "2024-01-01" })],
+            2: [charge("2", { datePosted: "2026-01-02" })],
+            3: [charge("3", { datePosted: "2026-11-10" })],
+          },
+          3
+        ),
+      ],
+      [/\/accounting\/bills$/, paged({ 1: [bill("2985")] }, 1)],
+    ]);
+    expect((await fetchRentvineBillLines(config, "2026-06-01")).map((l) => l.transactionId)).toEqual(["3"]);
+  });
+});
+
