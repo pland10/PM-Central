@@ -24,8 +24,11 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 // already-archived are handled separately by each caller.)
 const archivable = (r: TxnRow) => r.recordedQuickbooks && (r.recordedRentvine || r.reimbursable === "no");
 
+// Not reimbursable = nothing to bill, so no status (and out of the filter).
 const billingOf = (r: TxnRow): BillingStatus | null =>
-  classifyBilling({ amount: r.amount, propertyId: r.propertyId, candidates: r.rvCandidates });
+  r.reimbursable === "no"
+    ? null
+    : classifyBilling({ amount: r.amount, propertyId: r.propertyId, candidates: r.rvCandidates });
 const BILLED_RANK = { not_found: 0, possible: 1, billed: 2, none: 3 } as const;
 const BILLED_TEXT = { not_found: "Not billed", possible: "Possible match", billed: "Billed", none: "" } as const;
 const shortDate = (iso: string) =>
@@ -36,16 +39,22 @@ function BilledCell({
   status,
   billUrl,
   labelFor,
+  notReimbursable = false,
 }: {
   id: string;
   status: BillingStatus | null;
+  notReimbursable?: boolean;
   billUrl: string;
   labelFor: (rvPropertyId: string) => string;
 }) {
   const where = (props: string[]) => props.map(labelFor).join(", ");
   return (
     <div aria-label={`rv-billed-${id}`} className="text-xs">
-      {!status ? (
+      {notReimbursable ? (
+        <span className="text-slate-400" title="Not reimbursable — no bill needed">
+          —
+        </span>
+      ) : !status ? (
         <span className="text-slate-400">—</span>
       ) : status.status === "billed" ? (
         <a
@@ -272,10 +281,52 @@ export function TransactionsTable({
     }
   }
 
+  // An edited pending charge that vanished with no posted replacement isn't a
+  // real transaction any more: it lives only in the Needs review box.
+  const tableRows = useMemo(() => rows.filter((r) => r.reviewReason !== "pending_dropped"), [rows]);
+  const reviewRows = useMemo(() => rows.filter((r) => r.reviewReason), [rows]);
+
+  // Needs review actions (POST /api/plaid/transactions/:id/review).
+  async function review(id: string, body: { action: "move" | "dismiss" | "ok"; targetId?: string }) {
+    setError("");
+    try {
+      const res = await fetch(`/api/plaid/transactions/${encodeURIComponent(id)}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setError("That review action couldn't be saved. Please try again.");
+      return;
+    }
+    setRows((prev) => {
+      if (body.action === "ok") return prev.map((r) => (r.transactionId === id ? { ...r, reviewReason: null, reviewDetail: "" } : r));
+      const src = prev.find((r) => r.transactionId === id);
+      const rest = prev.filter((r) => r.transactionId !== id);
+      if (body.action !== "move" || !src) return rest;
+      // Mirror the server: fill only what's still empty on the target.
+      return rest.map((r) =>
+        r.transactionId !== body.targetId
+          ? r
+          : {
+              ...r,
+              reimbursable: r.reimbursable ?? src.reimbursable,
+              categoryOverride: r.categoryOverride || src.categoryOverride,
+              recordedQuickbooks: r.recordedQuickbooks || src.recordedQuickbooks,
+              recordedRentvine: r.recordedRentvine || src.recordedRentvine,
+              notes: r.notes || src.notes,
+              propertyId: r.propertyId ?? src.propertyId,
+              unitId: r.propertyId ? r.unitId : src.unitId,
+            }
+      );
+    });
+  }
+
   const summary = useMemo(
     () =>
       summarizeTransactions(
-        rows
+        tableRows
           .filter((r) => !r.archived) // the tiles describe the active working set
           .map((r) => ({
             amount: r.amount,
@@ -284,7 +335,7 @@ export function TransactionsTable({
             recordedRentvine: r.recordedRentvine,
           }))
       ),
-    [rows]
+    [tableRows]
   );
 
   // Property typeahead: the choices (property, or property + unit) come in
@@ -364,8 +415,6 @@ export function TransactionsTable({
               defaultValue={current}
               list={PROPERTY_LIST_ID}
               placeholder="Search…"
-              disabled={r.pending}
-              title={r.pending ? PENDING_HINT : undefined}
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v === current) return;
@@ -416,8 +465,6 @@ export function TransactionsTable({
             defaultValue={r.categoryOverride}
             list={CATEGORY_LIST_ID}
             placeholder="Search…"
-            disabled={r.pending}
-            title={r.pending ? PENDING_HINT : undefined}
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
@@ -438,8 +485,6 @@ export function TransactionsTable({
           <select
             aria-label={`reimbursable-${r.transactionId}`}
             value={r.reimbursable ?? ""}
-            disabled={r.pending}
-            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) =>
               save(r.transactionId, {
                 reimbursable: e.target.value === "yes" ? "yes" : e.target.value === "no" ? "no" : null,
@@ -472,8 +517,6 @@ export function TransactionsTable({
             type="checkbox"
             aria-label={`quickbooks-${r.transactionId}`}
             checked={r.recordedQuickbooks}
-            disabled={r.pending}
-            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) => save(r.transactionId, { recordedQuickbooks: e.target.checked })}
             className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
@@ -492,8 +535,6 @@ export function TransactionsTable({
             type="checkbox"
             aria-label={`rentvine-${r.transactionId}`}
             checked={r.recordedRentvine}
-            disabled={r.pending}
-            title={r.pending ? PENDING_HINT : undefined}
             onChange={(e) => save(r.transactionId, { recordedRentvine: e.target.checked })}
             className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
@@ -512,6 +553,7 @@ export function TransactionsTable({
           <BilledCell
             id={r.transactionId}
             status={billingOf(r)}
+            notReimbursable={r.reimbursable === "no"}
             billUrl={rentvineBillUrl}
             labelFor={(rv) => propertyLookup.byRvId.get(rv) ?? `Property #${rv}`}
           />
@@ -528,8 +570,6 @@ export function TransactionsTable({
             onKeyDown={blurOnEnter}
             defaultValue={r.notes}
             placeholder="—"
-            disabled={r.pending}
-            title={r.pending ? PENDING_HINT : undefined}
             onBlur={(e) => {
               const v = e.target.value;
               if (v !== r.notes) save(r.transactionId, { notes: v });
@@ -587,8 +627,6 @@ export function TransactionsTable({
                   type="checkbox"
                   aria-label={`select-${r.transactionId}`}
                   checked={selected.has(r.transactionId)}
-                  disabled={r.pending}
-                  title={r.pending ? PENDING_HINT : undefined}
                   onChange={() => toggleSelected(r.transactionId)}
                   className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
                 />
@@ -655,6 +693,8 @@ export function TransactionsTable({
 
   return (
     <div>
+      {reviewRows.length > 0 && <ReviewBox items={reviewRows} candidatesFrom={tableRows} onAction={review} />}
+
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryTile label="Transactions" value={String(summary.count)} />
         <SummaryTile label="Total spend" value={formatCurrencyCents(summary.totalSpend)} />
@@ -723,7 +763,7 @@ export function TransactionsTable({
             {selected.size > 0 && <span className="font-medium text-slate-700">{selected.size} selected</span>}
             <button
               type="button"
-              onClick={() => setSelected(new Set(shown.filter((r) => !r.pending).map((r) => r.transactionId)))}
+              onClick={() => setSelected(new Set(shown.map((r) => r.transactionId)))}
               className={BTN}
             >
               Select all {shown.length.toLocaleString()} shown
@@ -818,7 +858,7 @@ export function TransactionsTable({
       )}
 
       <DataTable<TxnRow>
-        rows={reviewing ? eligibleToArchive : rows}
+        rows={reviewing ? eligibleToArchive : tableRows}
         columns={shownColumns}
         onFilteredChange={setShown}
         wide
@@ -842,11 +882,6 @@ const PROPERTY_LIST_ID = "txn-property-options";
 function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
   if (e.key === "Enter") e.currentTarget.blur();
 }
-
-// Pending transactions get a new id when they post (Plaid links it via
-// pending_transaction_id), so an annotation made now would be orphaned — the
-// editors are disabled until a transaction posts.
-const PENDING_HINT = "Pending — you can edit this once it posts.";
 
 const BTN =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600";
@@ -944,5 +979,95 @@ function ArchiveConfirm({
         )}
       </div>
     </Modal>
+  );
+}
+
+// Posted charges an orphaned pending charge most likely became: same account,
+// within ±10 days, closest amount first.
+function moveTargets(src: TxnRow, from: TxnRow[]): TxnRow[] {
+  const t = src.postedDate ? Date.parse(src.postedDate) : NaN;
+  return from
+    .filter(
+      (r) =>
+        !r.pending &&
+        !r.archived &&
+        r.accountName === src.accountName &&
+        (Number.isNaN(t) || !r.postedDate || Math.abs(Date.parse(r.postedDate) - t) <= 10 * 86_400_000)
+    )
+    .sort((a, b) => Math.abs(a.amount - src.amount) - Math.abs(b.amount - src.amount))
+    .slice(0, 25);
+}
+
+// "Needs review": edited pending charges that vanished with no posted
+// replacement linked to them (move the edits to the right charge, or dismiss),
+// and carried-over charges whose posted amount changed (confirm it).
+function ReviewBox({
+  items,
+  candidatesFrom,
+  onAction,
+}: {
+  items: TxnRow[];
+  candidatesFrom: TxnRow[];
+  onAction: (id: string, body: { action: "move" | "dismiss" | "ok"; targetId?: string }) => void;
+}) {
+  const [target, setTarget] = useState<Record<string, string>>({});
+  return (
+    <section aria-label="Needs review" className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-3">
+      <h2 className="text-sm font-semibold text-amber-900">Needs review ({items.length})</h2>
+      <p className="mb-2 text-xs text-amber-800">
+        Edits made on a pending charge that couldn&apos;t be matched to its posted charge automatically, or that posted
+        for a different amount.
+      </p>
+      <ul className="space-y-2">
+        {items.map((r) => {
+          const dropped = r.reviewReason === "pending_dropped";
+          const options = dropped ? moveTargets(r, candidatesFrom) : [];
+          return (
+            <li key={r.transactionId} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-amber-200 bg-white px-3 py-2 text-xs">
+              <span className="font-medium text-slate-800">
+                {r.postedDate ?? "—"} · {r.merchantName} · {formatCurrencyCents(r.amount)}
+              </span>
+              <span className="text-slate-500">{r.accountName}</span>
+              {r.notes && <span className="text-slate-700">{r.notes}</span>}
+              <span className="text-amber-800">{r.reviewDetail}</span>
+              <span className="ml-auto flex flex-wrap items-center gap-2">
+                {dropped ? (
+                  <>
+                    <select
+                      aria-label={`move-target-${r.transactionId}`}
+                      value={target[r.transactionId] ?? ""}
+                      onChange={(e) => setTarget((t) => ({ ...t, [r.transactionId]: e.target.value }))}
+                      className="max-w-[18rem] rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
+                    >
+                      <option value="">Move to…</option>
+                      {options.map((o) => (
+                        <option key={o.transactionId} value={o.transactionId}>
+                          {o.postedDate} · {o.merchantName} · {formatCurrencyCents(o.amount)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!target[r.transactionId]}
+                      onClick={() => onAction(r.transactionId, { action: "move", targetId: target[r.transactionId] })}
+                      className={`${BTN} disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                      Move edits
+                    </button>
+                    <button type="button" onClick={() => onAction(r.transactionId, { action: "dismiss" })} className={BTN}>
+                      Dismiss
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => onAction(r.transactionId, { action: "ok" })} className={BTN}>
+                    Looks right
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

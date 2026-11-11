@@ -75,3 +75,10 @@ ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS unit_external_id TEXT;  
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false; -- filed away (recorded in both QB + Rentvine), hidden from the active list
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;        -- when it was archived
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_by TEXT;               -- who archived it
+
+-- Pending → posted carry-over and the "Needs review" box (src/lib/plaid-sync.ts).
+-- pending_transaction_id: on a posted charge, the pending charge it replaced
+-- (Plaid-owned, set by the sync). review_reason: 'pending_dropped' | 'amount_changed'.
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS pending_transaction_id TEXT;
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_reason TEXT;
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_detail TEXT;

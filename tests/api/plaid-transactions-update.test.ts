@@ -139,13 +139,17 @@ describe("PATCH /api/plaid/transactions/:id", () => {
     expect(update.values.slice(0, 2)).toEqual(["12", null]);
   });
 
-  it("refuses to edit a pending transaction (no row matches pending = false)", async () => {
-    executeRaw.mockResolvedValueOnce(0); // the guarded UPDATE matched nothing
-    const res = await patch({ recordedQuickbooks: true });
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/pending/i);
+  it("edits a pending transaction too — the sync carries its edits over when it posts", async () => {
+    const res = await patch({ recordedQuickbooks: true, notes: "for 66 Francis" });
+    expect(res.status).toBe(200);
     const update = executeRaw.mock.calls.map((c) => sqlOf(c[0])).find((s) => /UPDATE plaid_transactions/.test(s))!;
-    expect(update).toMatch(/pending = false/);
+    expect(update).not.toMatch(/pending = false/);
+  });
+
+  it("404s when the transaction doesn't exist", async () => {
+    executeRaw.mockResolvedValueOnce(0); // the UPDATE matched no row
+    const res = await patch({ notes: "x" });
+    expect(res.status).toBe(404);
   });
 
   describe("archive / unarchive", () => {

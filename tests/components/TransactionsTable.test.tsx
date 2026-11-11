@@ -305,22 +305,82 @@ describe("TransactionsTable", () => {
     expect(screen.queryByRole("columnheader", { name: /category \(plaid\)/i })).toBeNull();
   });
 
-  describe("pending transactions are locked", () => {
+  describe("pending transactions are editable", () => {
     const pendingRow: TxnRow = { ...rows[0], transactionId: "p1", pending: true };
 
-    it("disables every inline editor on a pending row", () => {
+    it("lets you edit a pending row (edits carry over when it posts) and still marks it pending", () => {
       render(<TransactionsTable initialRows={[pendingRow]} accounts={[]} />);
-      for (const label of ["reimbursable-p1", "quickbooks-p1", "rentvine-p1", "category-p1", "notes-p1"]) {
-        expect(screen.getByLabelText(label)).toBeDisabled();
+      for (const label of ["reimbursable-p1", "quickbooks-p1", "rentvine-p1", "category-p1", "notes-p1", "property-p1"]) {
+        expect(screen.getByLabelText(label)).not.toBeDisabled();
       }
+      expect(screen.getByText("(pending)")).toBeInTheDocument();
     });
 
-    it("can't be picked in bulk select", async () => {
+    it("can be picked in bulk select", async () => {
       const user = userEvent.setup();
       render(<TransactionsTable initialRows={[rows[0], pendingRow]} accounts={[]} />);
       await user.click(screen.getByRole("button", { name: /^select$/i }));
-      expect(screen.getByLabelText("select-p1")).toBeDisabled();
-      expect(screen.getByLabelText("select-t1")).not.toBeDisabled();
+      expect(screen.getByLabelText("select-p1")).not.toBeDisabled();
+    });
+  });
+
+  describe("needs review", () => {
+    const dropped: TxnRow = {
+      ...rows[0],
+      transactionId: "d1",
+      pending: true,
+      postedDate: "2026-10-25",
+      amount: 98,
+      notes: "water heater parts",
+      reimbursable: "yes",
+      reviewReason: "pending_dropped",
+      reviewDetail: "Pending charge disappeared with no posted replacement",
+    };
+    const changed: TxnRow = {
+      ...rows[1],
+      transactionId: "a1",
+      amount: 52,
+      notes: "dinner w/ owner",
+      reviewReason: "amount_changed",
+      reviewDetail: "Pending was $45.00",
+    };
+    const box = () => screen.getByRole("region", { name: /needs review/i });
+    const reviewCalls = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/review")).map((c) => [String(c[0]), JSON.parse(c[1].body)]);
+
+    it("keeps a dropped pending charge out of the table and in the review box", () => {
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      expect(screen.queryByLabelText("notes-d1")).toBeNull();
+      expect(within(box()).getByText("water heater parts")).toBeInTheDocument();
+      expect(within(box()).getByText(/disappeared with no posted replacement/i)).toBeInTheDocument();
+    });
+
+    it("moves its edits onto the posted charge you pick", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      await user.selectOptions(within(box()).getByLabelText("move-target-d1"), "t1");
+      await user.click(within(box()).getByRole("button", { name: /move edits/i }));
+      expect(reviewCalls()).toEqual([["/api/plaid/transactions/d1/review", { action: "move", targetId: "t1" }]]);
+      expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
+      expect((screen.getByLabelText("notes-t1") as HTMLInputElement).value).toBe("water heater parts");
+    });
+
+    it("dismisses a declined/reversed one", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      await user.click(within(box()).getByRole("button", { name: /dismiss/i }));
+      expect(reviewCalls()).toEqual([["/api/plaid/transactions/d1/review", { action: "dismiss" }]]);
+      expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
+    });
+
+    it("flags a carried-over charge whose amount changed, until someone says it looks right", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], changed]} accounts={[]} />);
+      expect(screen.getByLabelText("notes-a1")).toBeInTheDocument(); // still in the table
+      expect(within(box()).getByText(/pending was \$45\.00/i)).toBeInTheDocument();
+      await user.click(within(box()).getByRole("button", { name: /looks right/i }));
+      expect(reviewCalls()).toEqual([["/api/plaid/transactions/a1/review", { action: "ok" }]]);
+      expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
     });
   });
 
@@ -497,6 +557,18 @@ describe("TransactionsTable", () => {
       await user.selectOptions(screen.getByRole("combobox", { name: /billed in rentvine/i }), "not_found");
       expect(screen.queryByLabelText("rv-billed-p1")).toBeNull();
       expect(screen.getByLabelText("rv-billed-p2")).toBeInTheDocument();
+    });
+
+    it("turns the check off for charges marked not reimbursable — no bill is needed", async () => {
+      const { user } = renderBills([{ ...unbilled, reimbursable: "no" }, { ...unbilled, transactionId: "p3" }]);
+      const cell = screen.getByLabelText("rv-billed-p2");
+      expect(cell).toHaveTextContent("—");
+      expect(cell).not.toHaveTextContent(/not billed/i);
+      expect(within(cell).getByTitle(/not reimbursable/i)).toBeInTheDocument();
+      // and it drops out of the "Not billed" filter
+      await user.selectOptions(screen.getByRole("combobox", { name: /billed in rentvine/i }), "not_found");
+      expect(screen.queryByLabelText("rv-billed-p2")).toBeNull();
+      expect(screen.getByLabelText("rv-billed-p3")).toBeInTheDocument();
     });
 
     it("shows nothing for credits or before the bill sync has run", () => {
