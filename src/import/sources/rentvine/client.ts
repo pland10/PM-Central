@@ -210,6 +210,113 @@ export async function fetchRentvineUnits(config: RentvineAccountConfig): Promise
   return out;
 }
 
+// Bill lines ("Bill Charge" transactions, type 7) posted since `since`, with
+// their bill's payee and reference — for the Accounting tab's "billed in
+// Rentvine?" lookup (src/lib/rv-bill-match.ts). Verified Nov 2026:
+// /accounting/transactions?transactionTypeID=7 rows wrap `transaction`
+// {transactionID, billID, propertyID, unitID, amount, datePosted, description,
+// isVoided, …} (~270 pages of 15); /accounting/bills rows wrap `bill`
+// {billID, reference, isVoided, billDate, payeeContactID} + `contact` {name}.
+// Only the recent pages are read (see fetchRecent), not the whole history.
+export interface RvBillLineLive {
+  transactionId: string;
+  billId: string;
+  propertyRvId: string; // bare Rentvine property id
+  amount: number;
+  date: string; // YYYY-MM-DD
+  description: string;
+  payee: string;
+  reference: string;
+}
+
+export async function fetchRentvineBillLines(
+  config: RentvineAccountConfig,
+  since: string // YYYY-MM-DD
+): Promise<RvBillLineLive[]> {
+  if (!config.apiKey || !config.apiSecret) {
+    throw new Error(
+      `Rentvine credentials missing for account "${config.account}". ` +
+        `Set RENTVINE_${config.account.toUpperCase()}_API_KEY / _API_SECRET.`
+    );
+  }
+  const { rvGet, unwrap } = rvHttp(config);
+  const charges = await fetchRecent(rvGet, "/accounting/transactions?transactionTypeID=7", (r) =>
+    toDateStr(unwrap(r, "transaction").datePosted), since);
+  // Bills can be dated a little before their lines post; look back further.
+  const billSince = new Date(Date.parse(since) - 60 * 86_400_000).toISOString().slice(0, 10);
+  const billRows = await fetchRecent(rvGet, "/accounting/bills", (r) => toDateStr(unwrap(r, "bill").billDate), billSince);
+
+  const bills = new Map<string, { payee: string; reference: string; voided: boolean }>();
+  for (const row of billRows) {
+    const b = unwrap(row, "bill");
+    const c = row.contact && typeof row.contact === "object" ? (row.contact as Record<string, unknown>) : {};
+    bills.set(toStr(b.billID), {
+      payee: toStr(c.name).trim(),
+      reference: toStr(b.reference).trim(),
+      voided: toStr(b.isVoided) === "1",
+    });
+  }
+
+  const out: RvBillLineLive[] = [];
+  for (const row of charges) {
+    const t = unwrap(row, "transaction");
+    const date = toDateStr(t.datePosted);
+    const billId = toStr(t.billID);
+    const bill = bills.get(billId);
+    if (!billId || toStr(t.isVoided) === "1" || bill?.voided || !date || date < since) continue;
+    out.push({
+      transactionId: toStr(t.transactionID),
+      billId,
+      propertyRvId: toStr(t.propertyID),
+      amount: money(t.amount),
+      date,
+      description: toStr(t.description).trim(),
+      payee: bill?.payee ?? "",
+      reference: bill?.reference ?? "",
+    });
+  }
+  return out;
+}
+
+// Read only the recent end of a long paged list. The sort order isn't
+// documented, so compare the first and last pages and walk from whichever end
+// is newer, stopping at the first page that is entirely older than `since`.
+async function fetchRecent(
+  rvGet: (path: string) => Promise<{ json: unknown; headers: Headers }>,
+  path: string,
+  dateOf: (row: Record<string, unknown>) => string,
+  since: string
+): Promise<Record<string, unknown>[]> {
+  const sep = path.includes("?") ? "&" : "?";
+  const cache = new Map<number, Record<string, unknown>[]>();
+  let totalPages = 1;
+  const page = async (n: number) => {
+    if (!cache.has(n)) {
+      const { json, headers } = await rvGet(`${path}${sep}page=${n}`);
+      if (n === 1) totalPages = Math.max(1, toNum(headers.get("Pagination-Total-Pages")) ?? 1);
+      cache.set(n, Array.isArray(json) ? (json as Record<string, unknown>[]) : []);
+    }
+    return cache.get(n)!;
+  };
+  const newest = (rows: Record<string, unknown>[]) => rows.map(dateOf).sort().pop() ?? "";
+
+  const first = await page(1);
+  if (totalPages === 1) return first.filter((r) => dateOf(r) >= since);
+  const last = await page(totalPages);
+  const order = newest(first) >= newest(last)
+    ? Array.from({ length: totalPages }, (_, i) => i + 1)
+    : Array.from({ length: totalPages }, (_, i) => totalPages - i);
+
+  const out: Record<string, unknown>[] = [];
+  for (const n of order) {
+    const rows = await page(n);
+    const recent = rows.filter((r) => dateOf(r) >= since);
+    out.push(...recent);
+    if (rows.length && recent.length === 0) break;
+  }
+  return out;
+}
+
 export function liveRentvineSource(config: RentvineAccountConfig): RentvineSource {
   const { rvGet, rvGetAll, unwrap } = rvHttp(config);
 

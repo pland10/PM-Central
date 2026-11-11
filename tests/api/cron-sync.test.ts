@@ -43,6 +43,7 @@ describe("/api/cron/sync", () => {
 
     expect(res.status).toBe(200);
     expect(dispatchedWorkflows().sort()).toEqual([
+      "pland10/PM-Central/actions/workflows/sync-rentvine-bills.yml",
       "pland10/leadsimple-search/actions/workflows/backfill.yml",
       "pland10/leadsimple-search/actions/workflows/sync.yml",
     ]);

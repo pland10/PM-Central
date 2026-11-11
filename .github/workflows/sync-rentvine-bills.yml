@@ -1,0 +1,39 @@
+name: Sync Rentvine bills
+
+# Pulls recent Rentvine bill lines (~180 days) into rv_bill_charges, for the
+# Accounting → Bank Transactions "Billed in Rentvine" column. Driven by
+# PM-Central's Vercel Cron (the "hourly" tier: every 2h by day, once
+# overnight) and by the Refresh button on the admin Data page. This repo is
+# public, so these runs cost no Actions minutes — and its logs are public, so
+# the script prints counts only.
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL          - prod Neon connection string (the DB the site reads)
+#   RENTVINE_SUBDOMAIN     - optional; defaults to the account name
+#   RENTVINE_API_KEY
+#   RENTVINE_API_SECRET
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-rentvine-bills
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+      RENTVINE_SUBDOMAIN:  ${{ secrets.RENTVINE_SUBDOMAIN }}
+      RENTVINE_API_KEY:    ${{ secrets.RENTVINE_API_KEY }}
+      RENTVINE_API_SECRET: ${{ secrets.RENTVINE_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci               # runs postinstall -> prisma generate
+      - run: npm run sync:rentvine:bills

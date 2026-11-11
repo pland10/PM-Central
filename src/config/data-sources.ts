@@ -70,6 +70,15 @@ export const DATA_SOURCES: DataSource[] = [
     dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-rentvine.yml", ref: "main" },
   },
   {
+    id: "rentvine_bills",
+    label: "Rentvine bills (billed-to-owner check)",
+    description: "Recent Rentvine bill lines — powers Accounting → Bank Transactions' \"Billed in Rentvine\" column.",
+    cadence: "Every 2h (business hrs)",
+    tier: "hourly",
+    jobs: ["rentvine_bill_charges"],
+    dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-rentvine-bills.yml", ref: "main" },
+  },
+  {
     id: "payments",
     label: "Payments & settlements",
     description: "Rentvine rent payments and ACH settlement status.",

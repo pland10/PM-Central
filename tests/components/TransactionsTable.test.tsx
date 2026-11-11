@@ -136,7 +136,7 @@ describe("TransactionsTable", () => {
 
   it("keeps the Reimbursable / QuickBooks / Rentvine headers on one line", () => {
     setup();
-    for (const name of [/reimbursable\?/i, /in quickbooks/i, /in rentvine/i]) {
+    for (const name of [/reimbursable\?/i, /in quickbooks/i, /^in rentvine/i]) {
       expect(screen.getByRole("columnheader", { name }).className).toMatch(/\bwhitespace-nowrap\b/);
     }
   });
@@ -215,7 +215,7 @@ describe("TransactionsTable", () => {
 
   it("centers the Reimbursable / QuickBooks / Rentvine columns under their headers", () => {
     setup();
-    for (const name of [/reimbursable\?/i, /in quickbooks/i, /in rentvine/i]) {
+    for (const name of [/reimbursable\?/i, /in quickbooks/i, /^in rentvine/i]) {
       expect(screen.getByRole("columnheader", { name }).className).toMatch(/\btext-center\b/);
     }
     expect(screen.getByLabelText("quickbooks-t1").closest("td")!.className).toMatch(/\btext-center\b/);
@@ -435,6 +435,74 @@ describe("TransactionsTable", () => {
       await user.click(screen.getByRole("button", { name: "Cancel" }));
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("billed in Rentvine (by property)", () => {
+    const BILLS = "https://pmilighthouse.rentvine.com/accounting/bills/";
+    const properties = [
+      { label: "19 Colgate Road · Huntington", propertyId: "pmilighthouse:property:36", unitId: null },
+      { label: "66 Francis Court · Elmont", propertyId: "pmilighthouse:property:12", unitId: null },
+    ];
+    const cand = {
+      kind: "line" as const,
+      billId: "2985",
+      amount: 472.19,
+      date: "2026-11-10",
+      description: "Village Permit for HVAC",
+      payee: "PMI Lighthouse Reimbursable",
+      reference: "",
+      properties: ["36"],
+    };
+    const permit: TxnRow = {
+      ...rows[0],
+      transactionId: "p1",
+      amount: 472.19,
+      postedDate: "2026-11-07",
+      propertyId: "pmilighthouse:property:36",
+      rvCandidates: [cand],
+    };
+    const unbilled: TxnRow = { ...rows[1], transactionId: "p2", amount: 55, rvCandidates: [] };
+    const renderBills = (r: TxnRow[]) => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={r} accounts={[]} properties={properties} rentvineBillUrl={BILLS} />);
+      return { user };
+    };
+
+    it("shows Billed, linking to the Rentvine bill, when the amount was billed on the tagged property", () => {
+      renderBills([permit, unbilled]);
+      const cell = screen.getByLabelText("rv-billed-p1");
+      expect(cell).toHaveTextContent(/billed/i);
+      expect(within(cell).getByRole("link")).toHaveAttribute("href", `${BILLS}2985`);
+      expect(screen.getByLabelText("rv-billed-p2")).toHaveTextContent(/not billed/i);
+    });
+
+    it("re-checks when the property changes — billed elsewhere becomes a possible match", async () => {
+      const { user } = renderBills([permit]);
+      const input = screen.getByLabelText("property-p1");
+      await user.clear(input);
+      await user.type(input, "66 Francis Court · Elmont{Enter}");
+      const cell = screen.getByLabelText("rv-billed-p1");
+      expect(cell).toHaveTextContent(/possible/i);
+      expect(cell).toHaveTextContent("19 Colgate Road · Huntington");
+    });
+
+    it("is a possible match when no property is tagged yet", () => {
+      renderBills([{ ...permit, propertyId: null }]);
+      expect(screen.getByLabelText("rv-billed-p1")).toHaveTextContent(/possible/i);
+    });
+
+    it("filters to what still needs billing", async () => {
+      const { user } = renderBills([permit, unbilled]);
+      await user.selectOptions(screen.getByRole("combobox", { name: /billed in rentvine/i }), "not_found");
+      expect(screen.queryByLabelText("rv-billed-p1")).toBeNull();
+      expect(screen.getByLabelText("rv-billed-p2")).toBeInTheDocument();
+    });
+
+    it("shows nothing for credits or before the bill sync has run", () => {
+      renderBills([{ ...permit, rvCandidates: undefined }, { ...unbilled, amount: -20 }]);
+      expect(screen.getByLabelText("rv-billed-p1")).toHaveTextContent("—");
+      expect(screen.getByLabelText("rv-billed-p2")).toHaveTextContent("—");
     });
   });
 });
