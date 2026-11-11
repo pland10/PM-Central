@@ -139,4 +139,15 @@ describe("fetchPlaidTransactions", () => {
     expect(res.rows[0].unitId).toBe("45");
     expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).toMatch(/property_external_id/);
   });
+
+  it("maps the Needs review flag and note", async () => {
+    queryRaw
+      .mockResolvedValueOnce([raw({ review_reason: "amount_changed", review_detail: "Pending was $45.00" }), raw({ transaction_id: "t2" })])
+      .mockResolvedValueOnce([{ n: 1 }]);
+    const res = await fetchPlaidTransactions();
+    expect(res.rows[0]).toMatchObject({ reviewReason: "amount_changed", reviewDetail: "Pending was $45.00" });
+    expect(res.rows[1]).toMatchObject({ reviewReason: null, reviewDetail: "" });
+    expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).toMatch(/review_reason/);
+  });
 });
+

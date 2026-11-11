@@ -34,7 +34,13 @@ export type TxnRow = {
   // attached by the page; the table classifies them by the tagged property.
   // undefined = the bill sync hasn't run.
   rvCandidates?: RvCandidate[];
+  // Needs review: 'pending_dropped' (an edited pending charge vanished with no
+  // posted replacement) | 'amount_changed' (edits carried over, amount differs).
+  reviewReason?: ReviewReason | null;
+  reviewDetail?: string;
 };
+
+export type ReviewReason = "pending_dropped" | "amount_changed";
 
 export type TransactionsResult = {
   rows: TxnRow[];
@@ -61,6 +67,8 @@ type RawTxn = {
   property_external_id: string | null;
   unit_external_id: string | null;
   archived: boolean | null;
+  review_reason?: string | null;
+  review_detail?: string | null;
 };
 
 function money(v: Prisma.Decimal | number | null): number {
@@ -87,7 +95,7 @@ export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] =
     const rows = await prisma.$queryRaw<RawTxn[]>(Prisma.sql`
       SELECT transaction_id, posted_date, account_name, merchant_name, name, amount, category, pending,
              reimbursable, category_override, recorded_quickbooks, recorded_rentvine, notes,
-             property_external_id, unit_external_id, archived
+             property_external_id, unit_external_id, archived, review_reason, review_detail
       FROM plaid_transactions
       ${hideLikes.length ? Prisma.sql`WHERE NOT ${matchesHidden(hideLikes)}` : Prisma.empty}
       ORDER BY posted_date DESC NULLS LAST, synced_at DESC
@@ -132,6 +140,9 @@ export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] =
       propertyId: r.property_external_id || null,
       unitId: r.unit_external_id || null,
       archived: !!r.archived,
+      reviewReason:
+        r.review_reason === "pending_dropped" || r.review_reason === "amount_changed" ? r.review_reason : null,
+      reviewDetail: r.review_detail ?? "",
     }));
 
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();
