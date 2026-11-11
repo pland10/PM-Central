@@ -577,4 +577,22 @@ describe("TransactionsTable", () => {
       expect(screen.getByLabelText("rv-billed-p2")).toHaveTextContent("—");
     });
   });
+
+  it("picks up new rows when the server sends a fresh list (e.g. after an import) without a page reload", () => {
+    const { rerender } = render(<TransactionsTable initialRows={rows} accounts={["American Express", "The Home Depot"]} />);
+    expect(screen.queryByText("Invoice 8513573 · PO FHOUSE")).not.toBeInTheDocument();
+    const imported: TxnRow = {
+      ...rows[0],
+      transactionId: "hd:8513573",
+      postedDate: "2026-11-04",
+      accountName: "Home Depot Pro",
+      merchantName: "The Home Depot",
+      name: "Invoice 8513573 · PO FHOUSE",
+      amount: 27.06,
+    };
+    rerender(
+      <TransactionsTable initialRows={[imported, ...rows]} accounts={["American Express", "Home Depot Pro", "The Home Depot"]} />
+    );
+    expect(screen.getByText("$27.06")).toBeInTheDocument();
+  });
 });
