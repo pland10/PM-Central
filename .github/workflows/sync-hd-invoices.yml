@@ -1,0 +1,40 @@
+name: Sync Home Depot Pro invoices
+
+# The Home Depot Pro card (Citi) isn't on Plaid. This signs in to Citi's
+# commercial card site with a headless browser, downloads the "Invoices by
+# Statement Date" CSV (View Invoices → Download List → CSV) and saves it into
+# plaid_transactions for Accounting → Bank Transactions. Driven by PM-Central's
+# Vercel Cron (daily tier) and the Refresh button on the admin Data page.
+# This repo is public, so runs cost no Actions minutes — and its logs are
+# public, so the script prints counts only. One login attempt per run, never
+# retried.
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL       prod Neon connection string (the DB the site reads)
+#   HD_PRO_EMAIL       Citi user ID for the Home Depot Pro card site
+#   HD_PRO_PASSWORD
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-hd-invoices
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+      HD_PRO_EMAIL:    ${{ secrets.HD_PRO_EMAIL }}
+      HD_PRO_PASSWORD: ${{ secrets.HD_PRO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci               # runs postinstall -> prisma generate
+      - run: npx playwright install --with-deps chromium > /dev/null
+      - run: npm run sync:hd
