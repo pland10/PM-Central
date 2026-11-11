@@ -97,6 +97,15 @@ export const DATA_SOURCES: DataSource[] = [
     dispatch: { owner: "pland10", repo: "leadsimple-search", workflow: "backfill.yml", ref: "master" },
   },
   {
+    id: "hd_invoices",
+    label: "Home Depot Pro card (Citi)",
+    description: "Home Depot Pro invoices downloaded from Citi's card site (not on Plaid) into Accounting → Bank Transactions.",
+    cadence: "Daily",
+    tier: "daily",
+    jobs: ["hd_invoices"],
+    dispatch: { owner: "pland10", repo: "PM-Central", workflow: "sync-hd-invoices.yml", ref: "main" },
+  },
+  {
     id: "bank_transactions",
     label: "Bank transactions (Plaid)",
     description: "Card & bank transactions (Amex, Home Depot, …) from Plaid — powers Accounting → Bank Transactions.",
