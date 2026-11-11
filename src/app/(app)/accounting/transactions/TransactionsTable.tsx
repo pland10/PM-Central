@@ -24,8 +24,11 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 // already-archived are handled separately by each caller.)
 const archivable = (r: TxnRow) => r.recordedQuickbooks && (r.recordedRentvine || r.reimbursable === "no");
 
+// Not reimbursable = nothing to bill, so no status (and out of the filter).
 const billingOf = (r: TxnRow): BillingStatus | null =>
-  classifyBilling({ amount: r.amount, propertyId: r.propertyId, candidates: r.rvCandidates });
+  r.reimbursable === "no"
+    ? null
+    : classifyBilling({ amount: r.amount, propertyId: r.propertyId, candidates: r.rvCandidates });
 const BILLED_RANK = { not_found: 0, possible: 1, billed: 2, none: 3 } as const;
 const BILLED_TEXT = { not_found: "Not billed", possible: "Possible match", billed: "Billed", none: "" } as const;
 const shortDate = (iso: string) =>
@@ -36,16 +39,22 @@ function BilledCell({
   status,
   billUrl,
   labelFor,
+  notReimbursable = false,
 }: {
   id: string;
   status: BillingStatus | null;
+  notReimbursable?: boolean;
   billUrl: string;
   labelFor: (rvPropertyId: string) => string;
 }) {
   const where = (props: string[]) => props.map(labelFor).join(", ");
   return (
     <div aria-label={`rv-billed-${id}`} className="text-xs">
-      {!status ? (
+      {notReimbursable ? (
+        <span className="text-slate-400" title="Not reimbursable — no bill needed">
+          —
+        </span>
+      ) : !status ? (
         <span className="text-slate-400">—</span>
       ) : status.status === "billed" ? (
         <a
@@ -512,6 +521,7 @@ export function TransactionsTable({
           <BilledCell
             id={r.transactionId}
             status={billingOf(r)}
+            notReimbursable={r.reimbursable === "no"}
             billUrl={rentvineBillUrl}
             labelFor={(rv) => propertyLookup.byRvId.get(rv) ?? `Property #${rv}`}
           />
