@@ -66,6 +66,11 @@ describe("normalizeTransaction", () => {
     });
   });
 
+  it("keeps the link from a posted charge back to the pending one it replaced", () => {
+    expect(normalizeTransaction({ ...raw, pending_transaction_id: "pend_9" }).pendingTransactionId).toBe("pend_9");
+    expect(normalizeTransaction(raw).pendingTransactionId).toBeNull();
+  });
+
   it("falls back: account id for unknown account, raw name for missing merchant, USD currency", () => {
     const row = normalizeTransaction({
       transaction_id: "txn_2",

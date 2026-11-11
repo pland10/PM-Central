@@ -22,6 +22,9 @@ export type PlaidRawTransaction = {
   authorized_date?: string | null;
   payment_channel?: string | null;
   pending?: boolean;
+  // On a posted charge: the id of the pending charge it replaced (when the
+  // institution provides it).
+  pending_transaction_id?: string | null;
   personal_finance_category?: { primary?: string | null; detailed?: string | null } | null;
 };
 
@@ -39,6 +42,7 @@ export type TransactionRow = {
   categoryDetail: string;
   paymentChannel: string;
   pending: boolean;
+  pendingTransactionId: string | null; // posted charge -> the pending one it replaced
 };
 
 export type SyncResult = {
@@ -128,6 +132,7 @@ export function normalizeTransaction(
     categoryDetail: str(raw.personal_finance_category?.detailed),
     paymentChannel: str(raw.payment_channel),
     pending: Boolean(raw.pending),
+    pendingTransactionId: raw.pending_transaction_id ? str(raw.pending_transaction_id) : null,
   };
 }
 

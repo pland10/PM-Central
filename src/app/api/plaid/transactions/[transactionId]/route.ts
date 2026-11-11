@@ -126,17 +126,15 @@ export async function PATCH(
 
   try {
     await ensurePlaidAnnotationColumns(prisma);
-    // Only posted transactions are editable: a pending one gets a new id when it
-    // posts, so an annotation here would be orphaned. The UI disables the editors
-    // on pending rows; this is the authoritative backstop.
+    // Pending rows are editable too: a pending charge gets a new id when it
+    // posts, and the sync carries these edits over to the posted row (via
+    // Plaid's pending_transaction_id) or, failing that, puts the pending row in
+    // the Needs review box (src/lib/plaid-sync.ts).
     const updated = await prisma.$executeRaw(
-      Prisma.sql`UPDATE plaid_transactions SET ${Prisma.join(sets)} WHERE transaction_id = ${transactionId} AND pending = false`
+      Prisma.sql`UPDATE plaid_transactions SET ${Prisma.join(sets)} WHERE transaction_id = ${transactionId}`
     );
     if (updated === 0) {
-      return NextResponse.json(
-        { error: "This transaction is still pending — you can edit it once it posts." },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Transaction not found." }, { status: 404 });
     }
   } catch (e) {
     // Don't leak DB/driver internals to the browser; log the detail server-side.

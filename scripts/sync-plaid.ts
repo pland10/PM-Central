@@ -38,6 +38,9 @@ async function main() {
 
     let upserted = 0;
     let removed = 0;
+    let carried = 0;
+    let flagged = 0;
+    let dropped = 0;
     for (const item of items) {
       const r = await syncOneItem(prisma, {
         itemId: item.item_id,
@@ -46,9 +49,15 @@ async function main() {
       });
       upserted += r.upserted;
       removed += r.removed;
+      carried += r.carried;
+      flagged += r.flagged;
+      dropped += r.dropped;
     }
 
     console.log(`Synced ${upserted} transaction(s), removed ${removed}, across ${items.length} account(s).`);
+    // Pending → posted links (counts only — the logs are public): how often the
+    // card issuers send the link that lets edits carry over automatically.
+    console.log(`Pending→posted: ${carried} linked (edits carried), ${flagged} amount change(s) flagged, ${dropped} sent to review.`);
 
     try {
       await prisma.$executeRaw(Prisma.sql`

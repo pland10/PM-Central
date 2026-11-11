@@ -54,9 +54,9 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
     expect((updates()[0][0] as { values: unknown[] }).values[0]).toBeNull();
   });
 
-  it("skips pending transactions (guards pending = false)", async () => {
+  it("includes pending transactions (their edits carry over when they post)", async () => {
     await patch({ ids: ["t1", "t2"], reimbursable: "yes" });
-    expect(sqlOf(updates()[0][0])).toMatch(/pending = false/);
+    expect(sqlOf(updates()[0][0])).not.toMatch(/pending = false/);
   });
 
   it("rejects a request with no ids or no reimbursable value", async () => {
