@@ -21,6 +21,9 @@ import { upsertHdInvoices } from "../src/lib/hd-invoices-db";
 // bank account). The repo's Actions logs are public: counts only — never page
 // text, invoice data or screenshots.
 
+// The app's view name from the URL hash (e.g. "#sec/signon") — safe to log.
+const screen = (url: string) => (/#[a-z]+\/[a-z]+/i.exec(url)?.[0] ?? "unknown screen");
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
@@ -36,22 +39,28 @@ async function downloadInvoicesCsv(user: string, pass: string): Promise<string> 
     });
     const page = await ctx.newPage();
     await page.goto(CITI_HD_START_URL, { timeout: 60_000, waitUntil: "domcontentloaded" });
+    // The site is a single-page app that redirects to its sign-on view and
+    // redraws the form; typing before it settles loses the input.
+    await page.waitForTimeout(10_000);
 
     const id = page.locator(S.userId);
     const pw = page.locator(`${S.password}:visible`);
-    await id.waitFor({ timeout: 30_000 });
-    if ((await pw.count()) !== 1) throw new Error("Citi sign-in form not as expected — not attempting to log in.");
+    if ((await id.count()) !== 1 || (await pw.count()) !== 1) {
+      throw new Error(`Citi sign-in form not as expected at ${screen(page.url())} — not attempting to log in.`);
+    }
 
     await id.click();
-    await id.pressSequentially(user, { delay: 50 });
+    await id.pressSequentially(user, { delay: 60 });
     await pw.click();
-    await pw.pressSequentially(pass, { delay: 50 });
+    await pw.pressSequentially(pass, { delay: 60 });
+    await page.waitForTimeout(800);
     await pw.press("Enter");
 
-    // Wait for either the signed-in page or the form to settle.
-    await page.locator(S.signOff).waitFor({ timeout: 30_000 }).catch(() => {});
+    // Signed in = the account page's View Invoices button is showing (Sign
+    // Off can sit hidden in the page while still on the sign-on view).
+    await page.locator(S.viewInvoices).waitFor({ state: "visible", timeout: 45_000 }).catch(() => {});
     const outcome = classifyCitiLogin({
-      signedIn: (await page.locator(S.signOff).count()) > 0,
+      signedIn: await page.locator(S.viewInvoices).isVisible().catch(() => false),
       passwordFieldVisible: (await page.locator(`${S.password}:visible`).count()) > 0,
       text: await page.locator("body").innerText().catch(() => ""),
     });
@@ -62,14 +71,15 @@ async function downloadInvoicesCsv(user: string, pass: string): Promise<string> 
         blocked: "Citi blocked the automated browser.",
         unknown: "Citi sign-in didn't reach the account page.",
       };
-      throw new Error(`Login ${outcome}: ${why[outcome]}`);
+      throw new Error(`Login ${outcome} at ${screen(page.url())}: ${why[outcome]}`);
     }
     console.log("Signed in to Citi.");
 
     await page.locator(S.viewInvoices).click();
+    await page.waitForTimeout(5_000);
     await page.locator(S.downloadList).waitFor({ timeout: 30_000 });
     await page.locator(S.downloadList).click();
-    await page.locator(S.csvRadio).waitFor({ timeout: 15_000 });
+    await page.locator(S.csvRadio).waitFor({ state: "attached", timeout: 15_000 });
     await page.locator(S.csvRadio).check({ force: true });
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 30_000 }),
