@@ -10,6 +10,7 @@ import { buildPropertyChoices, listPropertyOptions, type PropertyOption } from "
 import { listActiveUnits } from "@/lib/rentvine-units";
 import { prisma } from "@/lib/prisma";
 import { patternToLike } from "@/lib/transaction-filters";
+import { attachBillCandidates, rentvineBillUrl } from "@/lib/rv-bill-db";
 import { AccountingTabs } from "./AccountingTabs";
 import { ConnectButton } from "./transactions/ConnectButton";
 import { TransactionsTable } from "./transactions/TransactionsTable";
@@ -40,6 +41,9 @@ export default async function AccountingPage() {
     : [{ rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 }, [], [], []];
   // Properties, plus each unit of a multi-unit property, for the picker.
   const propertyChoices = buildPropertyChoices(properties, units);
+  // "Billed in Rentvine?" — each charge's same-amount Rentvine bill lines
+  // (rv_bill_charges); the table checks them against the tagged property.
+  const rowsWithBills = rows.length ? await attachBillCandidates(rows) : rows;
 
   return (
     <div>
@@ -74,13 +78,14 @@ export default async function AccountingPage() {
       ) : (
         <div className="mt-4">
           <TransactionsTable
-            initialRows={rows}
+            initialRows={rowsWithBills}
             accounts={accounts}
             capped={capped}
             hiddenCount={hiddenCount}
             canManageFilters={user?.role === "admin"}
             categories={categories}
             properties={propertyChoices}
+            rentvineBillUrl={rentvineBillUrl()}
           />
         </div>
       )}

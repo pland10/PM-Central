@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import type { Reimbursable } from "@/lib/transactions-view";
+import type { RvCandidate } from "@/lib/rv-bill-match";
 
 // Server-only read layer for the Accounting → Transactions tab. Reads the
 // plaid_transactions mirror that scripts/sync-plaid.ts fills (see
@@ -29,6 +30,10 @@ export type TxnRow = {
   propertyId: string | null; // linked property (Property.externalId)
   unitId: string | null; // linked Rentvine unit, null = whole property
   archived: boolean; // filed away (recorded in both QB + Rentvine)
+  // Rentvine bill lines this charge could be (same amount, near the date) —
+  // attached by the page; the table classifies them by the tagged property.
+  // undefined = the bill sync hasn't run.
+  rvCandidates?: RvCandidate[];
 };
 
 export type TransactionsResult = {
