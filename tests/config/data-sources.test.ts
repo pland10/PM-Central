@@ -18,4 +18,14 @@ describe("DATA_SOURCES", () => {
       dispatch: { repo: "PM-Central", workflow: "sync-rentvine-bills.yml" },
     });
   });
+
+  it("downloads the Home Depot Pro invoice list from Citi daily", () => {
+    const s = getDataSource("hd_invoices");
+    expect(s).toMatchObject({
+      tier: "daily",
+      jobs: ["hd_invoices"],
+      dispatch: { repo: "PM-Central", workflow: "sync-hd-invoices.yml", ref: "main" },
+    });
+    expect(s?.selfScheduled).toBeFalsy(); // the daily tier sweep runs it
+  });
 });

@@ -56,6 +56,7 @@ describe("/api/cron/sync", () => {
 
     expect(dispatchedWorkflows().sort()).toEqual([
       "pland10/PM-Central/actions/workflows/sync-balances.yml",
+      "pland10/PM-Central/actions/workflows/sync-hd-invoices.yml",
       "pland10/PM-Central/actions/workflows/sync-rentvine.yml",
     ]);
     const [, init] = github.mock.calls[0];
