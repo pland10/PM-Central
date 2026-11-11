@@ -109,6 +109,14 @@ export function TransactionsTable({
   rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/bills/
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
+  // When the server sends a fresh list (router.refresh() after an import or a
+  // newly connected account), show it — otherwise new rows only appear after
+  // a full page reload. Saved edits are already in the fresh list.
+  const [lastInitial, setLastInitial] = useState(initialRows);
+  if (initialRows !== lastInitial) {
+    setLastInitial(initialRows);
+    setRows(initialRows);
+  }
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<string[]>(initialCategories);
 
