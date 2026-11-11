@@ -499,6 +499,18 @@ describe("TransactionsTable", () => {
       expect(screen.getByLabelText("rv-billed-p2")).toBeInTheDocument();
     });
 
+    it("turns the check off for charges marked not reimbursable — no bill is needed", async () => {
+      const { user } = renderBills([{ ...unbilled, reimbursable: "no" }, { ...unbilled, transactionId: "p3" }]);
+      const cell = screen.getByLabelText("rv-billed-p2");
+      expect(cell).toHaveTextContent("—");
+      expect(cell).not.toHaveTextContent(/not billed/i);
+      expect(within(cell).getByTitle(/not reimbursable/i)).toBeInTheDocument();
+      // and it drops out of the "Not billed" filter
+      await user.selectOptions(screen.getByRole("combobox", { name: /billed in rentvine/i }), "not_found");
+      expect(screen.queryByLabelText("rv-billed-p2")).toBeNull();
+      expect(screen.getByLabelText("rv-billed-p3")).toBeInTheDocument();
+    });
+
     it("shows nothing for credits or before the bill sync has run", () => {
       renderBills([{ ...permit, rvCandidates: undefined }, { ...unbilled, amount: -20 }]);
       expect(screen.getByLabelText("rv-billed-p1")).toHaveTextContent("—");
