@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import { Logo } from "@/components/Logo";
 import { BRAND } from "@/config/brand";
+import { PoweredByPmCentral } from "@/components/PmCentralMark";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="flex min-h-screen items-center justify-center p-4"
+      className="flex min-h-screen flex-col items-center justify-center gap-6 p-4"
       style={{ backgroundColor: BRAND.colors.ink }}
     >
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
@@ -103,6 +104,7 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
+      <PoweredByPmCentral />
     </div>
   );
 }

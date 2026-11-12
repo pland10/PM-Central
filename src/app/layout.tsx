@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BRAND, brandCssVars } from "@/config/brand";
+import { PM_CENTRAL_NAME } from "@/components/PmCentralMark";
 import { APP_ENV, IS_PRODUCTION } from "@/config/environment";
 
 // Non-prod deployments get an env suffix in the browser-tab title so prod and
-// dev tabs are easy to tell apart. Prod stays plain "PMI Lighthouse".
+// dev tabs are easy to tell apart. The tab shows the product (PM Central).
 const ENV_TITLE_SUFFIX = IS_PRODUCTION ? "" : APP_ENV === "staging" ? " - Staging" : " - Dev";
-const BASE_TITLE = `${BRAND.name}${ENV_TITLE_SUFFIX}`;
+const BASE_TITLE = `${PM_CENTRAL_NAME}${ENV_TITLE_SUFFIX}`;
 
 export const metadata: Metadata = {
-  // default: pages without their own title. template: "%s · PMI Lighthouse - Dev".
+  // default: pages without their own title. template: "%s · PM Central - Dev".
   title: { default: BASE_TITLE, template: `%s · ${BASE_TITLE}` },
-  description: `${BRAND.name} — ${BRAND.tagline}`,
+  description: `${PM_CENTRAL_NAME} for ${BRAND.name}`,
   // Tab icon + home-screen icon; the install icons live in app/manifest.ts.
   icons: {
     icon: [
