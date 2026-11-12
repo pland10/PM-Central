@@ -14,8 +14,10 @@ function pngSize(publicPath: string): string {
 describe("web app manifest", () => {
   const m = manifest();
 
-  it("names the app and opens it standalone at the dashboard", () => {
-    expect(m.name).toMatch(/^PMI Lighthouse/);
+  it("names the app after the product (PM Central), opening standalone at the dashboard", () => {
+    expect(m.name).toMatch(/^PM Central/);
+    expect(m.short_name).toMatch(/^PM Central/);
+    expect(m.description).toContain("PMI Lighthouse"); // the company using it
     expect(m.start_url).toBe("/");
     expect(m.display).toBe("standalone");
   });

@@ -42,4 +42,9 @@ describe("SidebarFooter", () => {
 
     expect(reload).toHaveBeenCalledOnce();
   });
+
+  it("shows the PM Central mark next to the product name", () => {
+    render(<SidebarFooter tagline="PM Central" version="v1.0.0" />);
+    expect(screen.getByRole("img", { name: "PM Central" })).toBeTruthy();
+  });
 });

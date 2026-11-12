@@ -1,18 +1,20 @@
 import type { MetadataRoute } from "next";
 import { BRAND } from "@/config/brand";
+import { PM_CENTRAL_NAME } from "@/components/PmCentralMark";
 import { APP_ENV, IS_PRODUCTION } from "@/config/environment";
 
 // Web app manifest (served at /manifest.webmanifest and linked automatically).
-// Lets Chrome/Edge "Install app" with a real icon. Icons are in public/ and are
-// generated from the logo's orange mark. Non-prod names get an env suffix so an
+// Lets Chrome/Edge "Install app" with a real icon. The installed app is the
+// product (PM Central, with its Swirl mark — see PmCentralMark); the company
+// using it (BRAND) shows inside the app. Non-prod names get an env suffix so an
 // installed dev app is easy to tell apart.
 const suffix = IS_PRODUCTION ? "" : APP_ENV === "staging" ? " - Staging" : " - Dev";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${BRAND.name}${suffix}`,
-    short_name: `${BRAND.name}${suffix}`,
-    description: `${BRAND.name} — ${BRAND.tagline}`,
+    name: `${PM_CENTRAL_NAME}${suffix}`,
+    short_name: `${PM_CENTRAL_NAME}${suffix}`,
+    description: `${PM_CENTRAL_NAME} for ${BRAND.name}`,
     start_url: "/",
     display: "standalone",
     background_color: BRAND.colors.ink,

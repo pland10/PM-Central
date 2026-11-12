@@ -1,9 +1,11 @@
 "use client";
 
 import { BRAND } from "@/config/brand";
+import { PmCentralMark } from "@/components/PmCentralMark";
 
 // Bottom of the desktop sidebar: a Refresh button (installed Chrome apps tuck
-// reload away under the ⋯ menu) and the tagline with the running version.
+// reload away under the ⋯ menu) and the product mark + name (PM Central) with
+// the running version.
 export function SidebarFooter({ tagline, version }: { tagline: string; version: string }) {
   return (
     <div className="mt-auto flex flex-col gap-2 p-3">
@@ -31,7 +33,10 @@ export function SidebarFooter({ tagline, version }: { tagline: string; version: 
         Refresh
       </button>
       <div className="px-3 text-xs leading-snug text-white">
-        <div>{tagline}</div>
+        <div className="flex items-center gap-1.5 text-white">
+          <PmCentralMark size={18} houseColor="#FFFFFF" className="shrink-0" />
+          <span>{tagline}</span>
+        </div>
         <div className="mt-0.5 text-sm font-medium text-white">{version}</div>
       </div>
     </div>
