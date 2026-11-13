@@ -42,7 +42,7 @@ export function ManagementDashboard({ data }: { data: ManagementKpis }) {
 
   const { workOrders: wo, accounting: acc } = data;
   const notInQb = acc.recorded.rvOnly + acc.recorded.neither;
-  const notInRv = acc.recorded.qbOnly + acc.recorded.neither;
+  const notInRv = acc.recorded.notInRentvine; // excludes not-reimbursable rows
   const recordedData = [
     { name: "In both", value: acc.recorded.both, fill: C.teal },
     { name: "QuickBooks only", value: acc.recorded.qbOnly, fill: C.blue },
@@ -189,7 +189,7 @@ export function ManagementDashboard({ data }: { data: ManagementKpis }) {
         <SectionTitle>Accounting Ops</SectionTitle>
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Tile label="Not in QuickBooks" value={notInQb} tone={notInQb > 0 ? "amber" : "slate"} />
-          <Tile label="Not in Rentvine" value={notInRv} tone={notInRv > 0 ? "amber" : "slate"} />
+          <Tile label="Not in Rentvine" value={notInRv} tone={notInRv > 0 ? "amber" : "slate"} hint="excl. not reimbursable" />
           <Tile label="Archived this week" value={acc.archivedThisWeek} tone="emerald" />
           <Tile label="Active rows" value={acc.recorded.total} hint="not archived / pending" />
         </div>
