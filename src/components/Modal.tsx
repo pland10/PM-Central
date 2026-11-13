@@ -9,11 +9,15 @@ export function Modal({
   onClose,
   children,
   footer,
+  dismissOnBackdrop = true,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   footer: React.ReactNode;
+  // Click on the dark backdrop closes the modal. Turn off for data-entry modals
+  // (e.g. the split editor) so a stray click outside doesn't discard the form.
+  dismissOnBackdrop?: boolean;
 }) {
   const titleId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -26,7 +30,10 @@ export function Modal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-24" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-24"
+      onClick={dismissOnBackdrop ? onClose : undefined}
+    >
       <div
         ref={boxRef}
         role="dialog"

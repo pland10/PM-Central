@@ -126,6 +126,7 @@ export function SplitEditor({
     <Modal
       title={`Split ${formatCurrencyCents(charge.amount)} · ${charge.merchantName}`}
       onClose={onClose}
+      dismissOnBackdrop={false}
       footer={
         <>
           {isSplit && (

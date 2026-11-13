@@ -212,4 +212,17 @@ describe("DataTable", () => {
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
     expect(screen.getAllByRole("cell")[0].className).toMatch(/\bpx-2\b/);
   });
+
+  it("applies rowClassName only to matching rows", () => {
+    render(
+      <DataTable
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.id}
+        rowClassName={(r) => (r.status === "closed" ? "split-tint" : undefined)}
+      />
+    );
+    expect(screen.getByText("25 Thorney Lane").closest("tr")).toHaveClass("split-tint");
+    expect(screen.getByText("66 Francis Court").closest("tr")).not.toHaveClass("split-tint");
+  });
 });
