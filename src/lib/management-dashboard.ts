@@ -37,6 +37,9 @@ export type RecordedProgress = {
   qbOnly: number;
   rvOnly: number;
   neither: number;
+  // Not in Rentvine AND still needs to be: not-reimbursable rows never go to
+  // Rentvine (see archive-rules.ts), so they're excluded.
+  notInRentvine: number;
 };
 
 export type ManagementKpis = {
@@ -68,9 +71,9 @@ export type ManagementKpis = {
   };
 };
 
-const EMPTY_RECORDED: RecordedProgress = { total: 0, both: 0, qbOnly: 0, rvOnly: 0, neither: 0 };
+const EMPTY_RECORDED: RecordedProgress = { total: 0, both: 0, qbOnly: 0, rvOnly: 0, neither: 0, notInRentvine: 0 };
 
-type RecRow = { total: number; both: number; qb_only: number; rv_only: number; neither: number };
+type RecRow = { total: number; both: number; qb_only: number; rv_only: number; neither: number; not_in_rv: number };
 
 async function fetchAccounting(
   weeks: number,
@@ -90,7 +93,8 @@ async function fetchAccounting(
           COUNT(*) FILTER (WHERE recorded_quickbooks AND recorded_rentvine)::int AS both,
           COUNT(*) FILTER (WHERE recorded_quickbooks AND NOT recorded_rentvine)::int AS qb_only,
           COUNT(*) FILTER (WHERE NOT recorded_quickbooks AND recorded_rentvine)::int AS rv_only,
-          COUNT(*) FILTER (WHERE NOT recorded_quickbooks AND NOT recorded_rentvine)::int AS neither
+          COUNT(*) FILTER (WHERE NOT recorded_quickbooks AND NOT recorded_rentvine)::int AS neither,
+          COUNT(*) FILTER (WHERE NOT recorded_rentvine AND reimbursable IS DISTINCT FROM 'no')::int AS not_in_rv
         FROM plaid_transactions WHERE archived = false AND pending = false`),
     ]);
     const series = archivedByWeek(
@@ -103,7 +107,7 @@ async function fetchAccounting(
       archivedByWeek: series,
       archivedThisWeek: series.length ? series[series.length - 1].count : 0,
       recorded: r
-        ? { total: r.total, both: r.both, qbOnly: r.qb_only, rvOnly: r.rv_only, neither: r.neither }
+        ? { total: r.total, both: r.both, qbOnly: r.qb_only, rvOnly: r.rv_only, neither: r.neither, notInRentvine: r.not_in_rv }
         : EMPTY_RECORDED,
     };
   } catch {

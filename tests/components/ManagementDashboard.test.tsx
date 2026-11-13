@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Recharts needs real layout (ResizeObserver + sizes) that jsdom lacks, so stub
 // it to passthroughs — this test covers the dashboard's own structure, tiles,
@@ -24,6 +25,12 @@ vi.mock("recharts", () => {
   };
 });
 
+vi.mock("@/lib/auth/supabase-browser", () => ({
+  createSupabaseBrowserClient: () => ({ auth: { updateUser: vi.fn(async () => ({})) } }),
+}));
+
+beforeEach(() => localStorage.clear());
+
 import { ManagementDashboard } from "@/app/(app)/management/ManagementDashboard";
 import type { ManagementKpis } from "@/lib/management-dashboard";
 
@@ -42,7 +49,7 @@ const data: ManagementKpis = {
   accounting: {
     archivedByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 5 }],
     archivedThisWeek: 5,
-    recorded: { total: 40, both: 25, qbOnly: 6, rvOnly: 4, neither: 5 },
+    recorded: { total: 40, both: 25, qbOnly: 6, rvOnly: 4, neither: 5, notInRentvine: 7 },
   },
   collections: {
     headline: { collectedThisWeek: 48250, pendingTotal: 3100, returnedThisWeek: 1, returnedTotalWindow: 3 },
@@ -95,9 +102,10 @@ describe("ManagementDashboard", () => {
 
   it("derives Not-in-QuickBooks / Not-in-Rentvine from the recorded breakdown", () => {
     render(<ManagementDashboard data={data} />);
-    // not in QB = rvOnly(4) + neither(5) = 9; not in RV = qbOnly(6) + neither(5) = 11
+    // not in QB = rvOnly(4) + neither(5) = 9. Not in RV comes from the loader's
+    // notInRentvine (7), which excludes not-reimbursable rows — not qbOnly + neither (11).
     expect(within(screen.getByText("Not in QuickBooks").parentElement!).getByText("9")).toBeInTheDocument();
-    expect(within(screen.getByText("Not in Rentvine").parentElement!).getByText("11")).toBeInTheDocument();
+    expect(within(screen.getByText("Not in Rentvine").parentElement!).getByText("7")).toBeInTheDocument();
     expect(within(screen.getByText("Archived this week").parentElement!).getByText("5")).toBeInTheDocument();
   });
 
@@ -108,5 +116,67 @@ describe("ManagementDashboard", () => {
     expect(screen.getByText("Open backlog by stage")).toBeInTheDocument();
     expect(screen.getByText("Rows archived")).toBeInTheDocument();
     expect(screen.getByText("Recorded in QuickBooks / Rentvine")).toBeInTheDocument();
+  });
+});
+
+describe("ManagementDashboard layout", () => {
+  const sectionOrder = () =>
+    screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+
+  it("renders sections in the default order", () => {
+    render(<ManagementDashboard data={data} />);
+    expect(sectionOrder()).toEqual(["Collections & Rent", "Work Orders", "Accounting Ops", "Portfolio & Leasing"]);
+  });
+
+  it("applies a saved layout: section order and widget order within a group", () => {
+    render(
+      <ManagementDashboard
+        data={data}
+        initialLayout={{
+          order: {
+            root: ["leasing", "collections"],
+            "collections.charts": ["col.returns", "col.rent"],
+          },
+          collapsed: [],
+        }}
+      />
+    );
+    expect(sectionOrder()).toEqual(["Portfolio & Leasing", "Collections & Rent", "Work Orders", "Accounting Ops"]);
+    const returns = screen.getByText("Returned / NSF");
+    const rent = screen.getByText("Rent collected");
+    expect(returns.compareDocumentPosition(rent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("collapses and expands a section, and remembers it", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDashboard data={data} />);
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Collapse Collections & Rent" }));
+    expect(screen.queryByText("Rent collected")).not.toBeInTheDocument();
+    expect(screen.getByText("Work Orders")).toBeInTheDocument(); // others untouched
+    expect(JSON.parse(localStorage.getItem("pmi.managementLayout")!).collapsed).toEqual(["collections"]);
+
+    await user.click(screen.getByRole("button", { name: "Expand Collections & Rent" }));
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+  });
+
+  it("starts collapsed when the saved layout says so", () => {
+    render(<ManagementDashboard data={data} initialLayout={{ order: {}, collapsed: ["workorders"] }} />);
+    expect(screen.queryByText("Opened vs closed")).not.toBeInTheDocument();
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+  });
+
+  it("shows drag handles only in rearrange mode, plus reset once customised", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDashboard data={data} initialLayout={{ order: { root: ["leasing"] }, collapsed: [] }} />);
+    expect(screen.queryByRole("button", { name: /^Move section/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Rearrange" }));
+    expect(screen.getAllByRole("button", { name: /^Move section/ })).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Move widget Rent collected" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reset to default" }));
+    expect(sectionOrder()[0]).toBe("Collections & Rent");
   });
 });

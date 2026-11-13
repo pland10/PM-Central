@@ -56,3 +56,17 @@ Add the metric to `exportSheets` (`Summary` sheet row, or a new sheet) so
   `tdd` skill.
 - `npx tsc --noEmit`, then `smoke-test` after deploy: the user eyeballs the
   tile/panel, including the empty state.
+
+## Management Dashboard (`/management`) is different
+`src/app/(app)/management/ManagementDashboard.tsx` declares its content as data:
+`sections → groups (Tiles / Charts) → widgets`, rendered by `SortableLayout.tsx`.
+Users can reorder sections, swap groups inside a section, reorder widgets within
+their group (never across), and collapse sections. Saved to
+`user_metadata.management_layout` + localStorage `pmi.managementLayout`; merge
+logic is the pure `src/lib/dashboard-layout.ts` (tested).
+- To add a tile/chart: add a `W("<section-prefix>.<name>", "Label", node)` to the
+  right group. **Ids are persisted**: keep them stable; new ids are appended to
+  the end of the group for users with a saved layout.
+- A new section: add `{ id, title, groups: [...] }`; group ids are `<section>.tiles` / `<section>.charts`.
+- Drop detection is pointer-based (`pointerWithin`, falls back to closest-center
+  for keyboard) because sections/groups differ a lot in height.
