@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StaffMember, WorkOrderNote } from "@/lib/work-order-notes";
 
 // A notes thread in a side panel — shared by work orders (Maintenance / Work
 // Orders) and bank transactions (Accounting). Adding a note never emails
-// anyone; "Add note & email" sends it to the person picked in "Email to".
+// anyone; "Add note & email" sends one email to everyone ticked in "Email to".
 // The API (GET ?<listQuery>, POST {...postKey, body, emailTo?}, PATCH {id,
 // body}, DELETE ?id=) decides who may be emailed and who may edit.
 
@@ -47,7 +47,7 @@ export function NotesPanel({
 }) {
   const [notes, setNotes] = useState<WorkOrderNote[] | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [emailTo, setEmailTo] = useState("");
+  const [emailTo, setEmailTo] = useState<string[]>([]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
@@ -65,7 +65,7 @@ export function NotesPanel({
         if (!res.ok) throw new Error(d.error || `Failed (${res.status})`);
         setNotes(d.notes ?? []);
         setStaff(d.staff ?? []);
-        setEmailTo(d.assigneeEmail ?? "");
+        setEmailTo(d.assigneeEmail ? [d.assigneeEmail] : []);
         setMe(d.me ?? "");
         setCanModerate(Boolean(d.canModerate));
       } catch (e) {
@@ -147,7 +147,7 @@ export function NotesPanel({
       if (withEmail) {
         setMsg(
           d.emailed
-            ? { tone: "ok", text: `Note added and emailed ${emailTo}.` }
+            ? { tone: "ok", text: `Note added and emailed ${emailTo.join(", ")}.` }
             : { tone: "err", text: `Note added, but the email didn't send: ${d.emailError || "unknown error"}` }
         );
       }
@@ -200,28 +200,13 @@ export function NotesPanel({
             <span className="text-xs text-slate-400">or</span>
             <button
               type="button"
-              disabled={busy || empty || !emailTo}
+              disabled={busy || empty || emailTo.length === 0}
               onClick={() => add(true)}
               className={`${btn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}
             >
               Add note &amp; email
             </button>
-            <label className="flex items-center gap-1 text-xs text-slate-600">
-              Email to
-              <select
-                aria-label="Email to"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-                className="max-w-[11rem] rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
-              >
-                <option value="">Choose…</option>
-                {staff.map((s) => (
-                  <option key={s.email} value={s.email}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <RecipientPicker staff={staff} value={emailTo} onChange={setEmailTo} />
           </div>
           {msg && (
             <p className={`text-xs ${msg.tone === "ok" ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>
@@ -301,6 +286,84 @@ export function NotesPanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// "Email to" as a multi-select: a button that opens a checklist of the people
+// the API allows. Shows the one name, or "N people".
+function RecipientPicker({
+  staff,
+  value,
+  onChange,
+}: {
+  staff: StaffMember[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const chosen = staff.filter((s) => value.includes(s.email));
+  const summary =
+    value.length === 0 ? "Choose…" : value.length === 1 ? (chosen[0]?.name ?? value[0]) : `${value.length} people`;
+  const toggle = (email: string) =>
+    onChange(value.includes(email) ? value.filter((e) => e !== email) : [...value, email]);
+
+  return (
+    <div ref={ref} className="relative flex items-center gap-1 text-xs text-slate-600">
+      <span aria-hidden="true">Email to</span>
+      <button
+        type="button"
+        aria-label="Email to"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        title={chosen.map((s) => s.name).join(", ")}
+        className="flex max-w-[11rem] items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
+      >
+        <span className="truncate">{summary}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-10 mt-1 max-h-64 w-56 overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+          {staff.length === 0 ? (
+            <p className="px-2.5 py-1.5 text-slate-400">No one to email.</p>
+          ) : (
+            staff.map((s) => (
+              <label key={s.email} className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50">
+                <input type="checkbox" checked={value.includes(s.email)} onChange={() => toggle(s.email)} aria-label={s.name} />
+                <span className="truncate text-slate-700">{s.name}</span>
+              </label>
+            ))
+          )}
+          {value.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="mt-1 w-full border-t border-slate-100 px-2.5 pt-1.5 text-left text-slate-400 hover:text-slate-600"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

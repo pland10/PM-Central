@@ -74,11 +74,26 @@ describe("transaction notes API", () => {
     const d = await res.json();
     expect(d.emailed).toBe(true);
     const mail = vi.mocked(sendEmail).mock.calls[0][0];
-    expect(mail.to).toBe("bo@pmi.com");
+    expect(mail.to).toEqual(["bo@pmi.com"]);
     expect(mail.replyTo).toBe("admin@pmi.com");
     expect(mail.subject).toContain("$27.06");
     expect(mail.html).toContain("https://pmilighthouse.app/accounting");
     expect(db.markTransactionNoteEmailed).toHaveBeenCalledWith(5, "bo@pmi.com");
+  });
+
+  it("emails several Accounting users in one message and records them all", async () => {
+    const res = await POST(req("POST", { transactionId: "t1", body: "Both please look", emailTo: ["bo@pmi.com", "admin@pmi.com"] }));
+    expect((await res.json()).emailed).toBe(true);
+    expect(vi.mocked(sendEmail)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendEmail).mock.calls[0][0].to).toEqual(["bo@pmi.com", "admin@pmi.com"]);
+    expect(db.markTransactionNoteEmailed).toHaveBeenCalledWith(5, "bo@pmi.com, admin@pmi.com");
+  });
+
+  it("refuses the whole list if anyone lacks Accounting access", async () => {
+    const res = await POST(req("POST", { transactionId: "t1", body: "x", emailTo: ["bo@pmi.com", "stranger@gmail.com"] }));
+    expect(res.status).toBe(400);
+    expect(db.addTransactionNote).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it("refuses to email anyone without Accounting access", async () => {
