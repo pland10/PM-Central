@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS payout_batches (
 -- Additive for tables created before the confirmation gate.
 ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS confirmed_by TEXT;
+-- The bank's (Chase) transaction # for the transfer, entered when confirming.
+ALTER TABLE payout_batches ADD COLUMN IF NOT EXISTS bank_reference TEXT;
 
 -- One row per payment that's been batched, keyed on Rentvine's payoutID so a
 -- payment can only ever land in one batch. Amount/payee/etc. are snapshotted at
