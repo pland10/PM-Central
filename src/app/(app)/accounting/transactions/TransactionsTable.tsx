@@ -10,11 +10,16 @@ import type { PropertyChoice } from "@/lib/property-options";
 import { rentvinePropertyId } from "@/lib/rentvine-ids";
 import { classifyBilling, type BillingStatus } from "@/lib/rv-bill-match";
 import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "@/lib/transactions-view";
+import type { NoteSummary } from "@/lib/work-order-notes-db";
+import { NotesCell } from "../../work-orders/NotesCell";
+import { NotesPanel } from "@/components/NotesPanel";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
 // in a sortable/filterable DataTable with the hand-entered columns editable
-// inline (reimbursable?, your own category, recorded in QuickBooks / Rentvine,
-// notes). Each edit is saved on its own via PATCH /api/plaid/transactions/:id.
+// inline (reimbursable?, your own category, recorded in QuickBooks / Rentvine).
+// Each edit is saved on its own via PATCH /api/plaid/transactions/:id. Notes
+// are a thread per charge (like work orders), with "Add note & email" —
+// /api/accounting/transaction-notes.
 // (Plaid's own category column was dropped as unhelpful; the `category` field is
 // still synced and kept in the DB for possible later use.)
 
@@ -89,6 +94,9 @@ function BilledCell({
   );
 }
 
+// Stable default (a fresh {} each render would look like new server data).
+const NO_NOTES: Record<string, NoteSummary> = {};
+
 export function TransactionsTable({
   initialRows,
   accounts,
@@ -98,6 +106,7 @@ export function TransactionsTable({
   categories: initialCategories = [],
   properties = [],
   rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/bills/",
+  noteSummaries = NO_NOTES,
 }: {
   initialRows: TxnRow[];
   accounts: string[];
@@ -107,8 +116,17 @@ export function TransactionsTable({
   categories?: string[]; // the shared category list (suggestions while typing)
   properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
   rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/bills/
+  noteSummaries?: Record<string, NoteSummary>; // notes thread per transaction: count + latest
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
+  // Notes thread summaries, kept in step with the panel (and fresh server data).
+  const [notes, setNotes] = useState<Record<string, NoteSummary>>(noteSummaries);
+  const [lastNotes, setLastNotes] = useState(noteSummaries);
+  if (noteSummaries !== lastNotes) {
+    setLastNotes(noteSummaries);
+    setNotes(noteSummaries);
+  }
+  const [notesFor, setNotesFor] = useState<TxnRow | null>(null);
   // When the server sends a fresh list (router.refresh() after an import or a
   // newly connected account), show it — otherwise new rows only appear after
   // a full page reload. Saved edits are already in the fresh list.
@@ -307,6 +325,18 @@ export function TransactionsTable({
     } catch {
       setError("That review action couldn't be saved. Please try again.");
       return;
+    }
+    if (body.action !== "ok") {
+      setNotes((prev) => {
+        const { [id]: moved, ...rest } = prev;
+        if (body.action !== "move" || !moved || !body.targetId) return rest;
+        const into = rest[body.targetId];
+        const merged =
+          into && into.latestAt > moved.latestAt
+            ? { ...into, count: into.count + moved.count }
+            : { ...moved, count: moved.count + (into?.count ?? 0) };
+        return { ...rest, [body.targetId]: merged };
+      });
     }
     setRows((prev) => {
       if (body.action === "ok") return prev.map((r) => (r.transactionId === id ? { ...r, reviewReason: null, reviewDetail: "" } : r));
@@ -570,19 +600,13 @@ export function TransactionsTable({
       {
         key: "notes",
         header: "Notes",
-        exportValue: (r) => r.notes,
+        sortValue: (r) => notes[r.transactionId]?.latestAt ?? "",
+        exportValue: (r) => notes[r.transactionId]?.latest ?? "",
         render: (r) => (
-          <input
-            key={`notes-${r.transactionId}-${r.notes}`}
-            aria-label={`notes-${r.transactionId}`}
-            onKeyDown={blurOnEnter}
-            defaultValue={r.notes}
-            placeholder="—"
-            onBlur={(e) => {
-              const v = e.target.value;
-              if (v !== r.notes) save(r.transactionId, { notes: v });
-            }}
-            className="w-36 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+          <NotesCell
+            summary={notes[r.transactionId]}
+            onOpen={() => setNotesFor(r)}
+            ariaLabel={`notes-${r.transactionId}`}
           />
         ),
       },
@@ -619,7 +643,7 @@ export function TransactionsTable({
           ),
       },
     ],
-    [save, archive, accounts, propertyLabel, propertyLookup, rentvineBillUrl]
+    [save, archive, accounts, propertyLabel, propertyLookup, rentvineBillUrl, notes]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -701,7 +725,9 @@ export function TransactionsTable({
 
   return (
     <div>
-      {reviewRows.length > 0 && <ReviewBox items={reviewRows} candidatesFrom={tableRows} onAction={review} />}
+      {reviewRows.length > 0 && (
+        <ReviewBox items={reviewRows} candidatesFrom={tableRows} onAction={review} notes={notes} />
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryTile label="Transactions" value={String(summary.count)} />
@@ -872,13 +898,40 @@ export function TransactionsTable({
         wide
         dense
         rowKey={(r) => r.transactionId}
-        search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${r.notes}`}
+        search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${notes[r.transactionId]?.latest ?? ""}`}
         searchPlaceholder="Search merchant, notes…"
         facets={facets}
         initialFacets={{ status: "active" }}
         initialSort={{ key: "postedDate", dir: "desc" }}
         exportName="Transactions"
       />
+
+      {notesFor && (
+        <NotesPanel
+          api="/api/accounting/transaction-notes"
+          listQuery={`txn=${encodeURIComponent(notesFor.transactionId)}`}
+          postKey={{ transactionId: notesFor.transactionId }}
+          heading={["Notes", notesFor.postedDate, notesFor.accountName].filter(Boolean).join(" · ")}
+          title={`${formatCurrencyCents(notesFor.amount)} · ${notesFor.merchantName}`}
+          placeholder="e.g. Owner approved — bill to 18-47 26th Rd"
+          dialogLabel={`Notes for ${formatCurrencyCents(notesFor.amount)} · ${notesFor.merchantName}`}
+          onClose={() => setNotesFor(null)}
+          onAdded={(note, count) =>
+            setNotes((prev) => ({
+              ...prev,
+              [notesFor.transactionId]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
+            }))
+          }
+          onChanged={(latest, count) =>
+            setNotes((prev) => {
+              const { [notesFor.transactionId]: _drop, ...rest } = prev;
+              return latest
+                ? { ...rest, [notesFor.transactionId]: { count, latest: latest.body, latestAt: latest.createdAt, latestBy: latest.authorName } }
+                : rest;
+            })
+          }
+        />
+      )}
     </div>
   );
 }
@@ -1013,9 +1066,11 @@ function ReviewBox({
   items,
   candidatesFrom,
   onAction,
+  notes,
 }: {
   items: TxnRow[];
   candidatesFrom: TxnRow[];
+  notes: Record<string, NoteSummary>;
   onAction: (id: string, body: { action: "move" | "dismiss" | "ok"; targetId?: string }) => void;
 }) {
   const [target, setTarget] = useState<Record<string, string>>({});
@@ -1036,7 +1091,7 @@ function ReviewBox({
                 {r.postedDate ?? "—"} · {r.merchantName} · {formatCurrencyCents(r.amount)}
               </span>
               <span className="text-slate-500">{r.accountName}</span>
-              {r.notes && <span className="text-slate-700">{r.notes}</span>}
+              {notes[r.transactionId] && <span className="text-slate-700">{notes[r.transactionId].latest}</span>}
               <span className="text-amber-800">{r.reviewDetail}</span>
               <span className="ml-auto flex flex-wrap items-center gap-2">
                 {dropped ? (

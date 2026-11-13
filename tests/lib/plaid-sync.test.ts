@@ -80,6 +80,8 @@ describe("syncOneItem", () => {
     expect(del).toMatch(/recorded_quickbooks = false/);
     expect(del).toMatch(/recorded_rentvine = false/);
     expect(del).toMatch(/notes IS NULL/);
+    // …and rows with a notes thread (Bank Transactions → Notes) count as edited.
+    expect(del).toMatch(/NOT EXISTS \(SELECT 1 FROM transaction_notes/);
   });
 
   const sqls = (prisma: PrismaClient) => vi.mocked(prisma.$executeRaw).mock.calls.map((c) => sqlOf(c[0]));
@@ -124,5 +126,19 @@ describe("syncOneItem", () => {
     expect(all[mark]).toMatch(/pending = true/);
     expect(r.dropped).toBe(1);
   });
-});
 
+  it("moves a pending charge's notes thread onto the posted charge before dropping the pending copy", async () => {
+    mockPlaid({ added: [{ transaction_id: "post1", pending_transaction_id: "pend1", account_id: "a1", amount: 52, date: "2026-11-10", name: "X" }] });
+    const prisma = { $executeRaw: vi.fn().mockResolvedValue(1) } as unknown as PrismaClient;
+    await syncOneItem(prisma, { itemId: "item1", accessToken: "tok", cursor: "c0" });
+    const all = sqls(prisma);
+    const move = all.findIndex((s) => /UPDATE transaction_notes/.test(s));
+    const drop = all.findIndex((s) => /DELETE FROM plaid_transactions WHERE pending = true/.test(s));
+    expect(move).toBeGreaterThan(-1);
+    expect(all[move]).toMatch(/t\.pending_transaction_id = n\.transaction_id/);
+    expect(move).toBeLessThan(drop);
+    // a pending charge that only had notes still gets the amount-changed flag
+    const flag = all.find((s) => /review_reason = 'amount_changed'/.test(s))!;
+    expect(flag).toMatch(/EXISTS \(SELECT 1 FROM transaction_notes/);
+  });
+});

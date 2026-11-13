@@ -229,11 +229,37 @@ describe("TransactionsTable", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
   });
 
-  it("saves notes when you press Enter", async () => {
-    const { user } = setup();
-    await user.type(screen.getByLabelText("notes-t1"), "owner to repay{Enter}");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ notes: "owner to repay" });
+  describe("notes thread", () => {
+    const summaries = {
+      t1: { count: 2, latest: "owner to repay", latestAt: "2026-11-13T12:00:00.000Z", latestBy: "Ann Admin" },
+    };
+
+    it("shows each charge's latest note and how many there are, or Add note", () => {
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      expect(screen.getByText("owner to repay")).toBeInTheDocument();
+      expect(screen.getByLabelText("notes-t1")).toHaveTextContent("2 notes");
+      expect(screen.getByLabelText("notes-t2")).toHaveTextContent("Add note");
+    });
+
+    it("opens the thread for that charge (with email), instead of a one-line box", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ notes: [], staff: [{ name: "Bo Bookkeeper", email: "bo@pmi.com" }], me: "a@pmi.com", canModerate: true }), { status: 200 })
+      );
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      await user.click(screen.getByLabelText("notes-t1"));
+      const dialog = await screen.findByRole("dialog", { name: /notes for \$100\.00 · the home depot/i });
+      expect(fetchMock.mock.calls.some((c) => String(c[0]) === "/api/accounting/transaction-notes?txn=t1")).toBe(true);
+      expect(within(dialog).getByRole("button", { name: /add note & email/i })).toBeInTheDocument();
+    });
+
+    it("finds a charge by the text of its latest note", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      await user.type(screen.getByPlaceholderText(/search merchant/i), "owner to repay");
+      expect(screen.queryByLabelText("notes-t2")).toBeNull();
+      expect(screen.getByLabelText("notes-t1")).toBeInTheDocument();
+    });
   });
 
   describe("property typeahead", () => {
@@ -331,7 +357,6 @@ describe("TransactionsTable", () => {
       pending: true,
       postedDate: "2026-10-25",
       amount: 98,
-      notes: "water heater parts",
       reimbursable: "yes",
       reviewReason: "pending_dropped",
       reviewDetail: "Pending charge disappeared with no posted replacement",
@@ -340,29 +365,30 @@ describe("TransactionsTable", () => {
       ...rows[1],
       transactionId: "a1",
       amount: 52,
-      notes: "dinner w/ owner",
       reviewReason: "amount_changed",
       reviewDetail: "Pending was $45.00",
     };
+    const droppedNotes = { d1: { count: 1, latest: "water heater parts", latestAt: "2026-10-25T12:00:00.000Z", latestBy: "Ann" } };
     const box = () => screen.getByRole("region", { name: /needs review/i });
     const reviewCalls = () =>
       fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/review")).map((c) => [String(c[0]), JSON.parse(c[1].body)]);
 
     it("keeps a dropped pending charge out of the table and in the review box", () => {
-      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} noteSummaries={droppedNotes} />);
       expect(screen.queryByLabelText("notes-d1")).toBeNull();
       expect(within(box()).getByText("water heater parts")).toBeInTheDocument();
       expect(within(box()).getByText(/disappeared with no posted replacement/i)).toBeInTheDocument();
     });
 
-    it("moves its edits onto the posted charge you pick", async () => {
+    it("moves its edits (and notes) onto the posted charge you pick", async () => {
       const user = userEvent.setup();
-      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} noteSummaries={droppedNotes} />);
       await user.selectOptions(within(box()).getByLabelText("move-target-d1"), "t1");
       await user.click(within(box()).getByRole("button", { name: /move edits/i }));
       expect(reviewCalls()).toEqual([["/api/plaid/transactions/d1/review", { action: "move", targetId: "t1" }]]);
       expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
-      expect((screen.getByLabelText("notes-t1") as HTMLInputElement).value).toBe("water heater parts");
+      expect(screen.getByLabelText("notes-t1")).toHaveTextContent("1 note");
+      expect(screen.getByText("water heater parts")).toBeInTheDocument();
     });
 
     it("dismisses a declined/reversed one", async () => {

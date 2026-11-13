@@ -82,3 +82,33 @@ ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS archived_by TEXT;       
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS pending_transaction_id TEXT;
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_reason TEXT;
 ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_detail TEXT;
+
+-- Notes thread per transaction (Bank Transactions → Notes, with "Add note &
+-- email"; src/lib/transaction-notes*.ts), replacing the single `notes` field.
+-- The sync moves a pending charge's notes onto its posted replacement and never
+-- auto-deletes a charge that has notes. Also applied in code by
+-- ensurePlaidAnnotationColumns.
+CREATE TABLE IF NOT EXISTS transaction_notes (
+    id             SERIAL PRIMARY KEY,
+    transaction_id TEXT NOT NULL,          -- plaid_transactions.transaction_id
+    body           TEXT NOT NULL,
+    author_email   TEXT,
+    author_name    TEXT,
+    emailed_to     TEXT,
+    emailed_at     TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ DEFAULT now(),
+    edited_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS transaction_notes_txn_idx ON transaction_notes (transaction_id, created_at DESC);
+
+-- One-time copy of the old single Notes field into the thread (as "Earlier
+-- note"). Each row is flagged in the same statement that copies it, so it
+-- never repeats and a deleted note doesn't come back.
+ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes_migrated BOOLEAN NOT NULL DEFAULT false;
+WITH moved AS (
+    UPDATE plaid_transactions SET notes_migrated = true
+    WHERE notes_migrated = false AND btrim(COALESCE(notes, '')) <> ''
+    RETURNING transaction_id, notes, annotated_at
+)
+INSERT INTO transaction_notes (transaction_id, body, author_name, created_at)
+SELECT transaction_id, btrim(notes), 'Earlier note', COALESCE(annotated_at, now()) FROM moved;
