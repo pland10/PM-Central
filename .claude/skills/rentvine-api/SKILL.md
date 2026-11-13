@@ -81,6 +81,14 @@ LeadSimple stage — "Estimate Requested" / "Multiple Estimates" — instead).
   independently and can disagree (see the "closed in Rentvine, open in
   LeadSimple" mismatch and the `reconcile-rentvine` skill).
 
+## Web app links (not the API)
+Deep links for people open the Rentvine **web app**, whose paths differ from the API's.
+Verified: `/properties/<id>`, `/units/<id>`, `/leases/<id>`, `/maintenance/work-orders/<id>`,
+`/portfolios/<id>` (src/lib/externalLinks.ts), `/accounting/payables/payouts/<id>`, and
+`/accounting/payables/bills/<id>` (rentvineBillUrl in src/lib/rv-bill-db.ts). `/accounting/bills/<id>`
+is the API path and shows "not found" in the browser, even though the Rentvine MCP prints links in that form.
+Don't guess a new one: ask the user to open the record in Rentvine and paste the address bar.
+
 ## Keys
 Rentvine has **one API key per integration** (Settings → API Keys). The
 `PM-Central` key is used by the app (Vercel) and PM-Central Actions — and, until

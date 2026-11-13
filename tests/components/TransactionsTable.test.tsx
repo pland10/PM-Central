@@ -525,7 +525,7 @@ describe("TransactionsTable", () => {
   });
 
   describe("billed in Rentvine (by property)", () => {
-    const BILLS = "https://pmilighthouse.rentvine.com/accounting/bills/";
+    const BILLS = "https://pmilighthouse.rentvine.com/accounting/payables/bills/";
     const properties = [
       { label: "19 Colgate Road · Huntington", propertyId: "pmilighthouse:property:36", unitId: null },
       { label: "66 Francis Court · Elmont", propertyId: "pmilighthouse:property:12", unitId: null },

@@ -107,7 +107,7 @@ export function TransactionsTable({
   canManageFilters = false,
   categories: initialCategories = [],
   properties = [],
-  rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/bills/",
+  rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/payables/bills/",
   noteSummaries = NO_NOTES,
 }: {
   initialRows: TxnRow[];
@@ -117,7 +117,7 @@ export function TransactionsTable({
   canManageFilters?: boolean; // admins get a link to the filters page
   categories?: string[]; // the shared category list (suggestions while typing)
   properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
-  rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/bills/
+  rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/payables/bills/
   noteSummaries?: Record<string, NoteSummary>; // notes thread per transaction: count + latest
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
@@ -993,6 +993,9 @@ export function TransactionsTable({
         wide
         dense
         rowKey={(r) => rowIdOf(r)}
+        // Tint split lines and give them a brand accent stripe so the lines of
+        // one charge read as a linked group.
+        rowClassName={(r) => (r.split ? "bg-brand-50/60 shadow-[inset_3px_0_0_0_var(--brand-primary)]" : undefined)}
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${notes[r.transactionId]?.latest ?? ""}`}
         searchPlaceholder="Search merchant, notes…"
         facets={facets}
