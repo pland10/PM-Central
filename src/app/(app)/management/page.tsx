@@ -20,7 +20,7 @@ export default async function ManagementDashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Management Dashboard</h1>
           <p className="mt-1 text-sm text-slate-500">
-            KPIs for review — collections, work orders and accounting ops. Leasing &amp; inspections coming next.
+            KPIs for review — collections, work orders, accounting ops, and leasing.
           </p>
         </div>
         <span className="text-xs text-slate-400">
