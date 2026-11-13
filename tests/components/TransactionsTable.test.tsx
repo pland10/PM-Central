@@ -229,11 +229,37 @@ describe("TransactionsTable", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
   });
 
-  it("saves notes when you press Enter", async () => {
-    const { user } = setup();
-    await user.type(screen.getByLabelText("notes-t1"), "owner to repay{Enter}");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ notes: "owner to repay" });
+  describe("notes thread", () => {
+    const summaries = {
+      t1: { count: 2, latest: "owner to repay", latestAt: "2026-11-13T12:00:00.000Z", latestBy: "Ann Admin" },
+    };
+
+    it("shows each charge's latest note and how many there are, or Add note", () => {
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      expect(screen.getByText("owner to repay")).toBeInTheDocument();
+      expect(screen.getByLabelText("notes-t1")).toHaveTextContent("2 notes");
+      expect(screen.getByLabelText("notes-t2")).toHaveTextContent("Add note");
+    });
+
+    it("opens the thread for that charge (with email), instead of a one-line box", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ notes: [], staff: [{ name: "Bo Bookkeeper", email: "bo@pmi.com" }], me: "a@pmi.com", canModerate: true }), { status: 200 })
+      );
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      await user.click(screen.getByLabelText("notes-t1"));
+      const dialog = await screen.findByRole("dialog", { name: /notes for \$100\.00 · the home depot/i });
+      expect(fetchMock.mock.calls.some((c) => String(c[0]) === "/api/accounting/transaction-notes?txn=t1")).toBe(true);
+      expect(within(dialog).getByRole("button", { name: /add note & email/i })).toBeInTheDocument();
+    });
+
+    it("finds a charge by the text of its latest note", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+      await user.type(screen.getByPlaceholderText(/search merchant/i), "owner to repay");
+      expect(screen.queryByLabelText("notes-t2")).toBeNull();
+      expect(screen.getByLabelText("notes-t1")).toBeInTheDocument();
+    });
   });
 
   describe("property typeahead", () => {
@@ -331,7 +357,6 @@ describe("TransactionsTable", () => {
       pending: true,
       postedDate: "2026-10-25",
       amount: 98,
-      notes: "water heater parts",
       reimbursable: "yes",
       reviewReason: "pending_dropped",
       reviewDetail: "Pending charge disappeared with no posted replacement",
@@ -340,29 +365,30 @@ describe("TransactionsTable", () => {
       ...rows[1],
       transactionId: "a1",
       amount: 52,
-      notes: "dinner w/ owner",
       reviewReason: "amount_changed",
       reviewDetail: "Pending was $45.00",
     };
+    const droppedNotes = { d1: { count: 1, latest: "water heater parts", latestAt: "2026-10-25T12:00:00.000Z", latestBy: "Ann" } };
     const box = () => screen.getByRole("region", { name: /needs review/i });
     const reviewCalls = () =>
       fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/review")).map((c) => [String(c[0]), JSON.parse(c[1].body)]);
 
     it("keeps a dropped pending charge out of the table and in the review box", () => {
-      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} noteSummaries={droppedNotes} />);
       expect(screen.queryByLabelText("notes-d1")).toBeNull();
       expect(within(box()).getByText("water heater parts")).toBeInTheDocument();
       expect(within(box()).getByText(/disappeared with no posted replacement/i)).toBeInTheDocument();
     });
 
-    it("moves its edits onto the posted charge you pick", async () => {
+    it("moves its edits (and notes) onto the posted charge you pick", async () => {
       const user = userEvent.setup();
-      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} />);
+      render(<TransactionsTable initialRows={[rows[0], dropped]} accounts={[]} noteSummaries={droppedNotes} />);
       await user.selectOptions(within(box()).getByLabelText("move-target-d1"), "t1");
       await user.click(within(box()).getByRole("button", { name: /move edits/i }));
       expect(reviewCalls()).toEqual([["/api/plaid/transactions/d1/review", { action: "move", targetId: "t1" }]]);
       expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
-      expect((screen.getByLabelText("notes-t1") as HTMLInputElement).value).toBe("water heater parts");
+      expect(screen.getByLabelText("notes-t1")).toHaveTextContent("1 note");
+      expect(screen.getByText("water heater parts")).toBeInTheDocument();
     });
 
     it("dismisses a declined/reversed one", async () => {
@@ -594,5 +620,136 @@ describe("TransactionsTable", () => {
       <TransactionsTable initialRows={[imported, ...rows]} accounts={["American Express", "Home Depot Pro", "The Home Depot"]} />
     );
     expect(screen.getByText("$27.06")).toBeInTheDocument();
+  });
+});
+
+describe("TransactionsTable — split a charge into lines", () => {
+  const properties = [
+    { label: "66 Francis Court · Elmont", propertyId: "p1", unitId: null },
+    { label: "8204 138th Street · Jamaica", propertyId: "p2", unitId: null },
+  ];
+  const header = { ...rows[1], transactionId: "s1", amount: 200, reimbursable: null, recordedQuickbooks: false } as TxnRow;
+  const lineRows = (over: Partial<TxnRow>[] = [{}, {}]): TxnRow[] => [
+    { ...header, rowId: "s1#7", amount: 120, propertyId: "p1", reimbursable: "yes", split: { lineId: 7, lineNo: 1, count: 2, total: 200, balanced: true }, ...over[0] },
+    { ...header, rowId: "s1#8", amount: 80, propertyId: null, reimbursable: "no", split: { lineId: 8, lineNo: 2, count: 2, total: 200, balanced: true }, ...over[1] },
+  ];
+  const calls = () => fetchMock.mock.calls.map((c) => [String(c[0]), c[1]?.method, c[1]?.body ? JSON.parse(c[1].body) : undefined]);
+
+  it("shows each line as its own row, marked as part of a split", () => {
+    render(<TransactionsTable initialRows={lineRows()} accounts={[]} properties={properties} />);
+    // (amounts can also appear in the summary tiles)
+    expect(screen.getAllByText("$120.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$80.00").length).toBeGreaterThan(0);
+    expect(screen.getByText(/split 1 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/split 2 of 2/i)).toBeInTheDocument();
+  });
+
+  it("saves an edit on a line to that line only", async () => {
+    const user = userEvent.setup();
+    render(<TransactionsTable initialRows={lineRows()} accounts={[]} properties={properties} />);
+    await user.click(screen.getByLabelText("quickbooks-s1#8"));
+    expect(calls()).toEqual([["/api/plaid/transactions/s1/splits/8", "PATCH", { recordedQuickbooks: true }]]);
+    expect(screen.getByLabelText("quickbooks-s1#8")).toBeChecked();
+    expect(screen.getByLabelText("quickbooks-s1#7")).not.toBeChecked();
+  });
+
+  it("warns when a split's lines no longer add up to the charge", () => {
+    const off = { lineId: 7, lineNo: 1, count: 2, total: 210, balanced: false };
+    render(
+      <TransactionsTable
+        initialRows={lineRows([{ split: off }, { split: { ...off, lineId: 8, lineNo: 2 } }])}
+        accounts={[]}
+        properties={properties}
+      />
+    );
+    expect(screen.getAllByText(/lines don.t add up/i).length).toBeGreaterThan(0);
+  });
+
+  it("splits a charge: lines must add up before you can save, then each shows as a row", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        lines: [
+          { id: 21, amount: 120, reimbursable: "yes", categoryOverride: "", recordedQuickbooks: false, recordedRentvine: false, propertyId: "p1", unitId: null },
+          { id: 22, amount: 80, reimbursable: "no", categoryOverride: "", recordedQuickbooks: false, recordedRentvine: false, propertyId: null, unitId: null },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+    render(<TransactionsTable initialRows={[header]} accounts={[]} properties={properties} />);
+    await user.click(screen.getByRole("button", { name: "split-s1" }));
+    const dialog = screen.getByRole("dialog", { name: /split \$200\.00 · lowe's/i });
+
+    // starts as the whole amount on line 1 and an empty line 2
+    const amt1 = within(dialog).getByLabelText("split-amount-1");
+    expect(amt1).toHaveValue("200.00");
+    await user.clear(amt1);
+    await user.type(amt1, "120");
+    await user.type(within(dialog).getByLabelText("split-amount-2"), "70");
+    expect(within(dialog).getByText(/\$10\.00 left/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /save split/i })).toBeDisabled();
+
+    await user.clear(within(dialog).getByLabelText("split-amount-2"));
+    await user.type(within(dialog).getByLabelText("split-amount-2"), "80");
+    await user.type(within(dialog).getByLabelText("split-property-1"), "66 Francis Court · Elmont");
+    await user.selectOptions(within(dialog).getByLabelText("split-reimbursable-1"), "yes");
+    await user.selectOptions(within(dialog).getByLabelText("split-reimbursable-2"), "no");
+    await user.click(within(dialog).getByRole("button", { name: /save split/i }));
+
+    const [url, method, body] = calls()[0];
+    expect([url, method]).toEqual(["/api/plaid/transactions/s1/splits", "PUT"]);
+    expect(body.lines).toEqual([
+      expect.objectContaining({ amount: 120, propertyId: "p1", unitId: null, reimbursable: "yes" }),
+      expect.objectContaining({ amount: 80, propertyId: null, reimbursable: "no" }),
+    ]);
+    expect(await screen.findByText(/split 1 of 2/i)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("refuses a property that isn't one of yours, without saving", async () => {
+    const user = userEvent.setup();
+    render(<TransactionsTable initialRows={[header]} accounts={[]} properties={properties} />);
+    await user.click(screen.getByRole("button", { name: "split-s1" }));
+    const dialog = screen.getByRole("dialog");
+    await user.clear(within(dialog).getByLabelText("split-amount-1"));
+    await user.type(within(dialog).getByLabelText("split-amount-1"), "100");
+    await user.type(within(dialog).getByLabelText("split-amount-2"), "100");
+    await user.type(within(dialog).getByLabelText("split-property-2"), "Nowhere Lane");
+    await user.click(within(dialog).getByRole("button", { name: /save split/i }));
+    expect(within(dialog).getByText(/isn.t one of your properties/i)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("unsplits back to one row with the charge's own fields", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, header: { reimbursable: "yes", categoryOverride: "Repairs", recordedQuickbooks: false, recordedRentvine: false, propertyId: null, unitId: null } }),
+    });
+    const user = userEvent.setup();
+    render(<TransactionsTable initialRows={lineRows()} accounts={[]} properties={properties} />);
+    await user.click(screen.getAllByRole("button", { name: /edit split/i })[0]);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /unsplit/i }));
+    expect(calls()[0].slice(0, 2)).toEqual(["/api/plaid/transactions/s1/splits", "DELETE"]);
+    expect(await screen.findByRole("button", { name: "split-s1" })).toBeInTheDocument(); // one unsplit row again
+    expect(screen.queryByText(/split 1 of 2/i)).toBeNull();
+    expect(screen.getByLabelText("category-s1")).toHaveValue("Repairs"); // the charge's own fields
+  });
+
+  it("archives a split charge only once every line is recorded", () => {
+    const notYet = lineRows([
+      { recordedQuickbooks: true, recordedRentvine: true },
+      { recordedQuickbooks: false },
+    ]);
+    const { unmount } = render(<TransactionsTable initialRows={notYet} accounts={[]} properties={properties} />);
+    expect(screen.queryByRole("button", { name: /^archive-/ })).toBeNull();
+    unmount();
+    const done = lineRows([
+      { recordedQuickbooks: true, recordedRentvine: true },
+      { recordedQuickbooks: true }, // not reimbursable → QB is enough
+    ]);
+    render(<TransactionsTable initialRows={done} accounts={[]} properties={properties} />);
+    // one Archive for the whole charge
+    expect(screen.getAllByRole("button", { name: /^archive-/ })).toHaveLength(1);
   });
 });

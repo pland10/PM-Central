@@ -50,6 +50,52 @@ const ANNOTATION_DDL = [
   // posted amount differs). review_detail is a short human note.
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_reason TEXT`,
   `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS review_detail TEXT`,
+  // Notes thread per transaction (Bank Transactions → Notes; see
+  // src/lib/transaction-notes.ts), replacing the single Notes field. Keyed by
+  // transaction_id; the sync moves a pending charge's notes to its posted
+  // replacement, and a charge with notes counts as edited (never auto-deleted).
+  `CREATE TABLE IF NOT EXISTS transaction_notes (
+     id             SERIAL PRIMARY KEY,
+     transaction_id TEXT NOT NULL,
+     body           TEXT NOT NULL,
+     author_email   TEXT,
+     author_name    TEXT,
+     emailed_to     TEXT,
+     emailed_at     TIMESTAMPTZ,
+     created_at     TIMESTAMPTZ DEFAULT now(),
+     edited_at      TIMESTAMPTZ
+   )`,
+  `CREATE INDEX IF NOT EXISTS transaction_notes_txn_idx ON transaction_notes (transaction_id, created_at DESC)`,
+  // Split lines (Bank Transactions → Split): a charge divided into lines that
+  // each carry their own amount + annotations (src/lib/transaction-splits.ts).
+  // While a charge has lines, they're its annotations; the header's own
+  // columns are left as they were (and come back if it's unsplit).
+  `CREATE TABLE IF NOT EXISTS transaction_splits (
+     id                   SERIAL PRIMARY KEY,
+     transaction_id       TEXT NOT NULL,
+     line_no              INT NOT NULL,
+     amount               NUMERIC(14,2) NOT NULL,
+     reimbursable         TEXT,
+     category_override    TEXT,
+     recorded_quickbooks  BOOLEAN NOT NULL DEFAULT false,
+     recorded_rentvine    BOOLEAN NOT NULL DEFAULT false,
+     property_external_id TEXT,
+     unit_external_id     TEXT,
+     created_at           TIMESTAMPTZ DEFAULT now(),
+     updated_at           TIMESTAMPTZ DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS transaction_splits_txn_idx ON transaction_splits (transaction_id, line_no)`,
+  // One-time copy of the old single Notes field into the thread. Each row is
+  // flagged in the same statement that copies it, so the copy never repeats
+  // and a note someone later deletes doesn't come back.
+  `ALTER TABLE plaid_transactions ADD COLUMN IF NOT EXISTS notes_migrated BOOLEAN NOT NULL DEFAULT false`,
+  `WITH moved AS (
+     UPDATE plaid_transactions SET notes_migrated = true
+     WHERE notes_migrated = false AND btrim(COALESCE(notes, '')) <> ''
+     RETURNING transaction_id, notes, annotated_at
+   )
+   INSERT INTO transaction_notes (transaction_id, body, author_name, created_at)
+   SELECT transaction_id, btrim(notes), 'Earlier note', COALESCE(annotated_at, now()) FROM moved`,
 ];
 
 // Lazy ensure-guard (db-change skill, Pattern B): run the additive ALTERs once
@@ -123,7 +169,8 @@ export async function syncOneItem(
 
   // Pending → posted: copy whatever was edited on the pending row onto the
   // posted row that replaced it (filling only fields still empty there), flag
-  // it for review if the amount changed, then drop the pending copy.
+  // it for review if the amount changed, move its notes thread, then drop the
+  // pending copy.
   let carried = 0;
   let flagged = 0;
   const linked = rows.filter((r) => r.transactionId && !r.pending && r.pendingTransactionId).map((r) => r.transactionId);
@@ -148,8 +195,21 @@ export async function syncOneItem(
         review_detail = 'Pending was $' || to_char(p.amount, 'FM999999990.00')
       FROM plaid_transactions p
       WHERE t.transaction_id IN (${ids}) AND t.pending_transaction_id = p.transaction_id
-        AND p.annotated_at IS NOT NULL
+        AND (p.annotated_at IS NOT NULL
+             OR EXISTS (SELECT 1 FROM transaction_notes n WHERE n.transaction_id = p.transaction_id)
+             OR EXISTS (SELECT 1 FROM transaction_splits sp WHERE sp.transaction_id = p.transaction_id))
         AND ABS(t.amount - p.amount) >= 0.005`);
+    // …its split lines move too (unless the posted charge already has its own)…
+    await prisma.$executeRaw(Prisma.sql`
+      UPDATE transaction_splits sp SET transaction_id = t.transaction_id, updated_at = now()
+      FROM plaid_transactions t
+      WHERE t.transaction_id IN (${ids}) AND t.pending_transaction_id = sp.transaction_id
+        AND NOT EXISTS (SELECT 1 FROM transaction_splits x WHERE x.transaction_id = t.transaction_id)`);
+    // …and the pending charge's notes thread moves with it.
+    await prisma.$executeRaw(Prisma.sql`
+      UPDATE transaction_notes n SET transaction_id = t.transaction_id
+      FROM plaid_transactions t
+      WHERE t.transaction_id IN (${ids}) AND t.pending_transaction_id = n.transaction_id`);
     await prisma.$executeRaw(Prisma.sql`
       DELETE FROM plaid_transactions
       WHERE pending = true AND transaction_id IN (
@@ -172,7 +232,9 @@ export async function syncOneItem(
         AND recorded_quickbooks = false
         AND recorded_rentvine = false
         AND archived = false
-        AND (notes IS NULL OR notes = '')`);
+        AND (notes IS NULL OR notes = '')
+        AND NOT EXISTS (SELECT 1 FROM transaction_notes n WHERE n.transaction_id = plaid_transactions.transaction_id)
+        AND NOT EXISTS (SELECT 1 FROM transaction_splits sp WHERE sp.transaction_id = plaid_transactions.transaction_id)`);
     // What's left of the removed ones was edited by hand. An edited PENDING
     // charge that vanished without a posted replacement linking back to it goes
     // to the review box (the team moves the edits to the right charge or

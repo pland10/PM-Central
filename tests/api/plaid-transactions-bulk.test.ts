@@ -49,6 +49,14 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
     expect(q.values).toEqual(["yes", "admin@pmi.com", ["t1", "t2"]]);
   });
 
+  it("sets reimbursable on selected split lines too (line ids look like <charge>#<line>)", async () => {
+    const res = await patch({ ids: ["t1", "t2#7", "t2#8"], reimbursable: "no" });
+    expect(res.status).toBe(200);
+    expect((updates()[0][0] as { values: unknown[] }).values).toEqual(["no", "admin@pmi.com", ["t1"]]);
+    const lines = executeRaw.mock.calls.map((c) => c[0] as { values: unknown[] }).find((q) => /UPDATE transaction_splits/.test(sqlOf(q)))!;
+    expect(lines.values).toEqual(["no", [7, 8]]);
+  });
+
   it("can clear the flag back to unreviewed", async () => {
     await patch({ ids: ["t1"], reimbursable: null });
     expect((updates()[0][0] as { values: unknown[] }).values[0]).toBeNull();
@@ -96,6 +104,7 @@ describe("PATCH /api/plaid/transactions (bulk)", () => {
       expect(sql).toMatch(/recorded_rentvine = true OR reimbursable = 'no'/); // QB + (RV or not reimbursable)
       expect(sql).toMatch(/pending = false/);
       expect(sql).toMatch(/archived = false/); // skip rows already archived
+      expect(sql).toMatch(/FROM transaction_splits/); // split charges: every line recorded
       expect(q.values).toEqual(["admin@pmi.com"]);
       expect(sql).toMatch(/RETURNING transaction_id/);
     });

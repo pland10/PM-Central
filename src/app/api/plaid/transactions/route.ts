@@ -6,6 +6,9 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import { sanitizeAnnotationPatch } from "@/lib/transactions-view";
+import { ARCHIVABLE_SQL } from "@/lib/archive-rules";
+import { parseRowId } from "@/lib/transaction-splits";
+import { setLinesReimbursable } from "@/lib/transaction-splits-db";
 
 // Bulk edit from the Transactions tab's multi-select: set the reimbursable flag
 // on many transactions in one UPDATE. Same gating as the single-row PATCH
@@ -39,8 +42,7 @@ export async function PATCH(req: NextRequest) {
         UPDATE plaid_transactions
         SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
         WHERE archived = false AND pending = false
-          AND recorded_quickbooks = true
-          AND (recorded_rentvine = true OR reimbursable = 'no')
+          AND ${ARCHIVABLE_SQL}
         RETURNING transaction_id`);
       const ids = rows.map((r) => r.transaction_id);
       return NextResponse.json({ ok: true, archived: ids.length, ids });
@@ -74,20 +76,31 @@ export async function PATCH(req: NextRequest) {
   if (!Array.isArray(rawIds) || !body || !("reimbursable" in body)) {
     return NextResponse.json({ error: "Send ids and reimbursable." }, { status: 400 });
   }
-  const ids = [...new Set(rawIds.filter((x): x is string => typeof x === "string" && x !== ""))];
-  if (ids.length === 0 || rawIds.length > MAX_IDS) {
+  const rowIds = [...new Set(rawIds.filter((x): x is string => typeof x === "string" && x !== ""))];
+  if (rowIds.length === 0 || rawIds.length > MAX_IDS) {
     return NextResponse.json({ error: `Select between 1 and ${MAX_IDS} transactions.` }, { status: 400 });
+  }
+  // A selected split line is "<charge>#<line>": it updates that line, not the charge.
+  const ids: string[] = [];
+  const lineIds: number[] = [];
+  for (const id of rowIds) {
+    const { lineId } = parseRowId(id);
+    if (lineId !== null) lineIds.push(lineId);
+    else ids.push(id);
   }
   const { reimbursable } = sanitizeAnnotationPatch({ reimbursable: body.reimbursable });
 
   try {
     await ensurePlaidAnnotationColumns(prisma);
     // Pending rows included: the sync carries their edits over when they post.
-    const updated = await prisma.$executeRaw(Prisma.sql`
-      UPDATE plaid_transactions
-      SET reimbursable = ${reimbursable ?? null}, annotated_at = now(), annotated_by = ${user?.email ?? "operator"}
-      WHERE transaction_id = ANY(${ids})`);
-    return NextResponse.json({ ok: true, updated });
+    const updated = ids.length
+      ? await prisma.$executeRaw(Prisma.sql`
+          UPDATE plaid_transactions
+          SET reimbursable = ${reimbursable ?? null}, annotated_at = now(), annotated_by = ${user?.email ?? "operator"}
+          WHERE transaction_id = ANY(${ids})`)
+      : 0;
+    const updatedLines = await setLinesReimbursable(lineIds, reimbursable ?? null);
+    return NextResponse.json({ ok: true, updated: updated + updatedLines });
   } catch (e) {
     console.error(`[plaid] bulk reimbursable save failed for ${ids.length} rows:`, e);
     return NextResponse.json({ error: "Could not save." }, { status: 500 });
