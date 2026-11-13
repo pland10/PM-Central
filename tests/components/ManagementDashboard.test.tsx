@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Recharts needs real layout (ResizeObserver + sizes) that jsdom lacks, so stub
 // it to passthroughs — this test covers the dashboard's own structure, tiles,
@@ -23,6 +24,12 @@ vi.mock("recharts", () => {
     LabelList: Leaf,
   };
 });
+
+vi.mock("@/lib/auth/supabase-browser", () => ({
+  createSupabaseBrowserClient: () => ({ auth: { updateUser: vi.fn(async () => ({})) } }),
+}));
+
+beforeEach(() => localStorage.clear());
 
 import { ManagementDashboard } from "@/app/(app)/management/ManagementDashboard";
 import type { ManagementKpis } from "@/lib/management-dashboard";
@@ -109,5 +116,67 @@ describe("ManagementDashboard", () => {
     expect(screen.getByText("Open backlog by stage")).toBeInTheDocument();
     expect(screen.getByText("Rows archived")).toBeInTheDocument();
     expect(screen.getByText("Recorded in QuickBooks / Rentvine")).toBeInTheDocument();
+  });
+});
+
+describe("ManagementDashboard layout", () => {
+  const sectionOrder = () =>
+    screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+
+  it("renders sections in the default order", () => {
+    render(<ManagementDashboard data={data} />);
+    expect(sectionOrder()).toEqual(["Collections & Rent", "Work Orders", "Accounting Ops", "Portfolio & Leasing"]);
+  });
+
+  it("applies a saved layout: section order and widget order within a group", () => {
+    render(
+      <ManagementDashboard
+        data={data}
+        initialLayout={{
+          order: {
+            root: ["leasing", "collections"],
+            "collections.charts": ["col.returns", "col.rent"],
+          },
+          collapsed: [],
+        }}
+      />
+    );
+    expect(sectionOrder()).toEqual(["Portfolio & Leasing", "Collections & Rent", "Work Orders", "Accounting Ops"]);
+    const returns = screen.getByText("Returned / NSF");
+    const rent = screen.getByText("Rent collected");
+    expect(returns.compareDocumentPosition(rent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("collapses and expands a section, and remembers it", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDashboard data={data} />);
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Collapse Collections & Rent" }));
+    expect(screen.queryByText("Rent collected")).not.toBeInTheDocument();
+    expect(screen.getByText("Work Orders")).toBeInTheDocument(); // others untouched
+    expect(JSON.parse(localStorage.getItem("pmi.managementLayout")!).collapsed).toEqual(["collections"]);
+
+    await user.click(screen.getByRole("button", { name: "Expand Collections & Rent" }));
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+  });
+
+  it("starts collapsed when the saved layout says so", () => {
+    render(<ManagementDashboard data={data} initialLayout={{ order: {}, collapsed: ["workorders"] }} />);
+    expect(screen.queryByText("Opened vs closed")).not.toBeInTheDocument();
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+  });
+
+  it("shows drag handles only in rearrange mode, plus reset once customised", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDashboard data={data} initialLayout={{ order: { root: ["leasing"] }, collapsed: [] }} />);
+    expect(screen.queryByRole("button", { name: /^Move section/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Rearrange" }));
+    expect(screen.getAllByRole("button", { name: /^Move section/ })).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Move widget Rent collected" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reset to default" }));
+    expect(sectionOrder()[0]).toBe("Collections & Rent");
   });
 });

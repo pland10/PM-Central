@@ -41,6 +41,10 @@ export type AppUser = {
   dashboardOrder: string[] | null;
   // Panel ids the user has hidden (user_metadata.dashboard_hidden), or null.
   dashboardHidden: string[] | null;
+  // Management Dashboard arrangement (user_metadata.management_layout): section
+  // order, collapsed sections, widget order. Raw — reconciled by
+  // reconcileLayout() in src/lib/dashboard-layout.ts. Optional for test fakes.
+  managementLayout?: unknown;
 };
 
 // Resolve the current user (or null) plus a simple role. Role comes from the
@@ -101,5 +105,6 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     canEditAll,
     dashboardOrder,
     dashboardHidden,
+    managementLayout: meta.management_layout ?? null,
   };
 }

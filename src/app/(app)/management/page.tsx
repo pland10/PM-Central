@@ -27,7 +27,7 @@ export default async function ManagementDashboardPage() {
           As of {new Date(data.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
         </span>
       </div>
-      <ManagementDashboard data={data} />
+      <ManagementDashboard data={data} initialLayout={user.managementLayout ?? null} canPersist />
     </div>
   );
 }
