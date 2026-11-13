@@ -25,6 +25,7 @@ export function Combobox({
   className = "",
   strict = false,
   limit = 8,
+  autoFocus,
 }: {
   options: string[];
   value: string;
@@ -35,6 +36,7 @@ export function Combobox({
   className?: string;
   strict?: boolean;
   limit?: number;
+  autoFocus?: boolean;
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +114,7 @@ export function Combobox({
         aria-autocomplete="list"
         aria-activedescendant={show && active >= 0 ? `${listId}-${active}` : undefined}
         autoComplete="off"
+        autoFocus={autoFocus}
         value={value}
         placeholder={placeholder}
         onChange={(e) => {

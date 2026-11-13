@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Combobox } from "@/components/Combobox";
 import type { PropertyChoice } from "@/lib/property-options";
 
 const input = "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm";
@@ -8,7 +9,6 @@ const input = "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm";
 // "+ New work order": creates it straight in Rentvine (nothing stored here).
 // Just a property (or unit) and a description; priority defaults to Medium.
 export function NewWorkOrder({ choices }: { choices: PropertyChoice[] }) {
-  const listId = useId();
   const [open, setOpen] = useState(false);
   const [property, setProperty] = useState("");
   const [description, setDescription] = useState("");
@@ -18,6 +18,7 @@ export function NewWorkOrder({ choices }: { choices: PropertyChoice[] }) {
   const [created, setCreated] = useState<{ number: string; url: string | null } | null>(null);
 
   const byLabel = useMemo(() => new Map(choices.map((c) => [c.label.toLowerCase(), c])), [choices]);
+  const labels = useMemo(() => choices.map((c) => c.label), [choices]);
   const choice = byLabel.get(property.trim().toLowerCase());
 
   function reset() {
@@ -86,19 +87,16 @@ export function NewWorkOrder({ choices }: { choices: PropertyChoice[] }) {
 
             <label className="mb-3 block text-xs text-slate-500">
               Property
-              <input
-                className={input}
-                list={listId}
+              <Combobox
+                ariaLabel="Property"
+                options={labels}
                 value={property}
-                onChange={(e) => setProperty(e.target.value)}
+                onChange={setProperty}
+                strict
                 placeholder="Start typing an address…"
                 autoFocus
+                className={input}
               />
-              <datalist id={listId}>
-                {choices.map((c) => (
-                  <option key={`${c.propertyId}:${c.unitId ?? ""}`} value={c.label} />
-                ))}
-              </datalist>
             </label>
             <label className="mb-3 block text-xs text-slate-500">
               What needs doing

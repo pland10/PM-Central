@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewWorkOrder } from "@/app/(app)/maintenance/NewWorkOrder";
@@ -52,5 +52,32 @@ describe("NewWorkOrder", () => {
     await user.click(screen.getByRole("button", { name: "Create in Rentvine" }));
     expect(screen.getByText("Pick a property from the list.")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("property box is a short searchable list, picked with the keyboard", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1} Main St · Town`, propertyId: `p${i}`, unitId: null }));
+    render(<NewWorkOrder choices={[...many, ...choices]} />);
+    await user.click(screen.getByRole("button", { name: "+ New work order" }));
+    const box = screen.getByRole("combobox", { name: "Property" });
+    await user.type(box, "1");
+    expect(within(screen.getByRole("listbox", { name: "Property" })).getAllByRole("option")).toHaveLength(8);
+    expect(screen.getByText(/more — keep typing/)).toBeTruthy();
+    await user.clear(box);
+    await user.type(box, "jamaica 2{Enter}");
+    expect(box).toHaveValue("8204 138th Street · Jamaica — Unit 2");
+    await user.type(screen.getByPlaceholderText(/Kitchen sink/), "No heat");
+    await user.click(screen.getByRole("button", { name: "Create in Rentvine" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ propertyId: "pmilighthouse:property:48", unitId: "46" });
+  });
+
+  it("clicking a suggestion picks it without closing the popup", async () => {
+    const user = userEvent.setup();
+    render(<NewWorkOrder choices={choices} />);
+    await user.click(screen.getByRole("button", { name: "+ New work order" }));
+    await user.type(screen.getByRole("combobox", { name: "Property" }), "unit");
+    await user.click(screen.getByRole("option", { name: "8204 138th Street · Jamaica — Unit 2" }));
+    expect(screen.getByRole("dialog", { name: "New work order" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Property" })).toHaveValue("8204 138th Street · Jamaica — Unit 2");
   });
 });
