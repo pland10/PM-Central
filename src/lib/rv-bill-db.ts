@@ -62,5 +62,5 @@ export function rentvineBillUrl(): string {
   const explicit = (process.env.RENTVINE_BASE_URL || "").trim();
   const host = explicit ? explicit.replace(/^https?:\/\//, "").split("/")[0] : "";
   const sub = process.env.RENTVINE_SUBDOMAIN || process.env.RENTVINE_ACCOUNT || "pmilighthouse";
-  return `https://${host || `${sub}.rentvine.com`}/accounting/bills/`;
+  return `https://${host || `${sub}.rentvine.com`}/accounting/payables/bills/`;
 }
