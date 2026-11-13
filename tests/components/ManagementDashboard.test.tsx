@@ -44,13 +44,27 @@ const data: ManagementKpis = {
     archivedThisWeek: 5,
     recorded: { total: 40, both: 25, qbOnly: 6, rvOnly: 4, neither: 5 },
   },
+  collections: {
+    headline: { collectedThisWeek: 48250, pendingTotal: 3100, returnedThisWeek: 1, returnedTotalWindow: 3 },
+    collectedByWeek: [{ week: "2026-11-09", label: "Nov 9", amount: 48250 }],
+    returnsByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 1 }],
+  },
 };
 
 describe("ManagementDashboard", () => {
-  it("renders both KPI sections", () => {
+  it("renders all KPI sections", () => {
     render(<ManagementDashboard data={data} />);
+    expect(screen.getByText("Collections & Rent")).toBeInTheDocument();
     expect(screen.getByText("Work Orders")).toBeInTheDocument();
     expect(screen.getByText("Accounting Ops")).toBeInTheDocument();
+  });
+
+  it("shows collections tiles with formatted money and chart cards", () => {
+    render(<ManagementDashboard data={data} />);
+    expect(within(screen.getByText("Collected this week").parentElement!).getByText("$48,250")).toBeInTheDocument();
+    expect(within(screen.getByText("In-flight (pending)").parentElement!).getByText("$3,100")).toBeInTheDocument();
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+    expect(screen.getByText("Returned / NSF")).toBeInTheDocument();
   });
 
   it("shows the work-order headline tiles", () => {

@@ -5,11 +5,18 @@ import { listWorkOrders } from "@/lib/work-orders-dashboard";
 import {
   archivedByWeek,
   backlogByStage,
+  collectionsHeadline,
   openedClosedByWeek,
   preventiveSplit,
   recentWeekStarts,
+  rentCollectedByWeek,
+  returnsByWeek,
   workOrderHeadline,
   type ArchivePoint,
+  type CollectionsHeadline,
+  type CountWeekPoint,
+  type MoneyWeekPoint,
+  type PaymentRow,
   type StageCount,
   type WeekPoint,
   type WorkOrderHeadline,
@@ -40,6 +47,11 @@ export type ManagementKpis = {
     archivedByWeek: ArchivePoint[];
     archivedThisWeek: number;
     recorded: RecordedProgress;
+  };
+  collections: {
+    headline: CollectionsHeadline;
+    collectedByWeek: MoneyWeekPoint[];
+    returnsByWeek: CountWeekPoint[];
   };
 };
 
@@ -86,8 +98,45 @@ async function fetchAccounting(
   }
 }
 
+async function fetchCollections(
+  weeks: number,
+  now: Date
+): Promise<{ headline: CollectionsHeadline; collectedByWeek: MoneyWeekPoint[]; returnsByWeek: CountWeekPoint[] }> {
+  const empty = {
+    headline: collectionsHeadline([], now),
+    collectedByWeek: rentCollectedByWeek([], weeks, now),
+    returnsByWeek: returnsByWeek([], weeks, now),
+  };
+  try {
+    const firstWeek = recentWeekStarts(now, weeks)[0];
+    // Tenant rent payments (rvpay_*). Window the charts, but keep all pending so
+    // the in-flight headline is complete.
+    const rows = await prisma.$queryRaw<{ date_posted: Date | string | null; amount: Prisma.Decimal | number | string; status: string }[]>(
+      Prisma.sql`SELECT date_posted, amount, status FROM payments
+                 WHERE source_id LIKE 'rvpay_%' AND (date_posted >= ${firstWeek}::date OR status = 'pending')`
+    );
+    const payments: PaymentRow[] = rows.map((r) => ({
+      datePosted:
+        r.date_posted == null ? null : r.date_posted instanceof Date ? r.date_posted.toISOString().slice(0, 10) : String(r.date_posted).slice(0, 10),
+      amount: Number(r.amount) || 0,
+      status: r.status,
+    }));
+    return {
+      headline: collectionsHeadline(payments, now),
+      collectedByWeek: rentCollectedByWeek(payments, weeks, now),
+      returnsByWeek: returnsByWeek(payments, weeks, now),
+    };
+  } catch {
+    return empty; // payments table not present / not reachable
+  }
+}
+
 export async function loadManagementKpis(weeks = 12, now: Date = new Date()): Promise<ManagementKpis> {
-  const [wos, accounting] = await Promise.all([listWorkOrders(), fetchAccounting(weeks, now)]);
+  const [wos, accounting, collections] = await Promise.all([
+    listWorkOrders(),
+    fetchAccounting(weeks, now),
+    fetchCollections(weeks, now),
+  ]);
   const orders = wos ?? [];
   return {
     weeks,
@@ -99,5 +148,6 @@ export async function loadManagementKpis(weeks = 12, now: Date = new Date()): Pr
       preventive: preventiveSplit(orders),
     },
     accounting,
+    collections,
   };
 }

@@ -3,12 +3,16 @@ import type { WorkOrderRow } from "@/lib/work-orders";
 import {
   archivedByWeek,
   backlogByStage,
+  collectionsHeadline,
   medianDaysToClose,
   openedClosedByWeek,
   preventiveSplit,
   recentWeekStarts,
+  rentCollectedByWeek,
+  returnsByWeek,
   weekStart,
   workOrderHeadline,
+  type PaymentRow,
 } from "@/lib/management-kpis";
 
 // 2026-11-09 is a Monday; 2026-11-13 is that Friday.
@@ -141,5 +145,36 @@ describe("archivedByWeek", () => {
     expect(series.find((p) => p.week === "2026-11-09")?.count).toBe(2);
     expect(series.find((p) => p.week === "2026-11-02")?.count).toBe(1);
     expect(series.find((p) => p.week === "2026-10-26")?.count).toBe(0);
+  });
+});
+
+describe("collections (rent)", () => {
+  const payments: PaymentRow[] = [
+    { datePosted: "2026-11-10", amount: 1000, status: "cleared" }, // this week, received
+    { datePosted: "2026-11-11", amount: 500, status: "pending" }, // this week, received + in-flight
+    { datePosted: "2026-11-03", amount: 800, status: "cleared" }, // last week
+    { datePosted: "2026-11-10", amount: 300, status: "returned" }, // this week, NSF
+    { datePosted: "2026-11-10", amount: 999, status: "voided" }, // excluded entirely
+    { datePosted: "2026-01-01", amount: 1, status: "cleared" }, // older than the window
+  ];
+
+  it("sums received rent by the week it was paid, excluding returned/voided", () => {
+    const series = rentCollectedByWeek(payments, 3, NOW);
+    expect(series.find((p) => p.week === "2026-11-09")?.amount).toBe(1500); // 1000 + 500
+    expect(series.find((p) => p.week === "2026-11-02")?.amount).toBe(800);
+    expect(series.find((p) => p.week === "2026-10-26")?.amount).toBe(0);
+  });
+
+  it("counts returned / NSF payments per week", () => {
+    expect(returnsByWeek(payments, 3, NOW).find((p) => p.week === "2026-11-09")?.count).toBe(1);
+  });
+
+  it("headlines collected-this-week, in-flight, and returns", () => {
+    expect(collectionsHeadline(payments, NOW)).toEqual({
+      collectedThisWeek: 1500,
+      pendingTotal: 500,
+      returnedThisWeek: 1,
+      returnedTotalWindow: 1,
+    });
   });
 });
