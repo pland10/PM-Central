@@ -112,3 +112,27 @@ WITH moved AS (
 )
 INSERT INTO transaction_notes (transaction_id, body, author_name, created_at)
 SELECT transaction_id, btrim(notes), 'Earlier note', COALESCE(annotated_at, now()) FROM moved;
+
+-- Split lines (Bank Transactions → Split; src/lib/transaction-splits*.ts): one
+-- charge divided into lines that each carry their own amount + annotations,
+-- like a GL entry. The lines must add up to the charge (checked on save; the
+-- page warns if a later sync changes the amount). While a charge has lines,
+-- they ARE its annotations; the charge's own columns stay as they were and come
+-- back if it's unsplit. The sync moves a pending charge's lines onto its posted
+-- replacement and never auto-deletes a split charge. Also applied in code by
+-- ensurePlaidAnnotationColumns.
+CREATE TABLE IF NOT EXISTS transaction_splits (
+    id                   SERIAL PRIMARY KEY,
+    transaction_id       TEXT NOT NULL,          -- plaid_transactions.transaction_id
+    line_no              INT NOT NULL,           -- 1-based order
+    amount               NUMERIC(14,2) NOT NULL,
+    reimbursable         TEXT,                   -- 'yes' | 'no' | null
+    category_override    TEXT,
+    recorded_quickbooks  BOOLEAN NOT NULL DEFAULT false,
+    recorded_rentvine    BOOLEAN NOT NULL DEFAULT false,
+    property_external_id TEXT,
+    unit_external_id     TEXT,
+    created_at           TIMESTAMPTZ DEFAULT now(),
+    updated_at           TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS transaction_splits_txn_idx ON transaction_splits (transaction_id, line_no);

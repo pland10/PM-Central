@@ -42,6 +42,7 @@ describe("POST /api/plaid/transactions/:id/review", () => {
     expect(del).toMatch(/review_reason = 'pending_dropped'/);
     // its notes thread goes with it
     expect(sqls().some((s) => /DELETE FROM transaction_notes/.test(s))).toBe(true);
+    expect(sqls().some((s) => /DELETE FROM transaction_splits/.test(s))).toBe(true);
   });
 
   it("moves the edits onto the chosen posted charge, then removes the dropped one", async () => {
@@ -58,6 +59,11 @@ describe("POST /api/plaid/transactions/:id/review", () => {
     const notes = all.findIndex((s) => /UPDATE transaction_notes SET transaction_id/.test(s));
     expect(notes).toBeGreaterThan(-1);
     expect(notes).toBeLessThan(del);
+    // split lines too, unless the chosen charge already has its own
+    const splits = all.findIndex((s) => /UPDATE transaction_splits SET transaction_id/.test(s));
+    expect(splits).toBeGreaterThan(-1);
+    expect(all[splits]).toMatch(/NOT EXISTS \(SELECT 1 FROM transaction_splits WHERE transaction_id = /);
+    expect(splits).toBeLessThan(del);
   });
 
   it("clears an amount-changed flag once someone has looked", async () => {

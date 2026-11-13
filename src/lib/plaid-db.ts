@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import type { Reimbursable } from "@/lib/transactions-view";
 import type { RvCandidate } from "@/lib/rv-bill-match";
+import { expandSplitRows, type SplitInfo } from "@/lib/transaction-splits";
+import { loadSplits } from "@/lib/transaction-splits-db";
 
 // Server-only read layer for the Accounting → Transactions tab. Reads the
 // plaid_transactions mirror that scripts/sync-plaid.ts fills (see
@@ -14,6 +16,11 @@ import type { RvCandidate } from "@/lib/rv-bill-match";
 
 export type TxnRow = {
   transactionId: string;
+  // A split charge shows as one row per line: rowId is "<transactionId>#<lineId>"
+  // and `split` says which line (src/lib/transaction-splits.ts). Unset for an
+  // unsplit charge, whose row id is just the transaction id.
+  rowId?: string;
+  split?: SplitInfo;
   postedDate: string | null;
   accountName: string;
   merchantName: string;
@@ -146,9 +153,12 @@ export async function fetchPlaidTransactions(limit = 2000, hideLikes: string[] =
     }));
 
     const accounts = [...new Set(mapped.map((r) => r.accountName).filter(Boolean))].sort();
+    // A split charge shows as one row per line (src/lib/transaction-splits.ts).
+    const splits = await loadSplits(mapped.map((r) => r.transactionId));
+    const expanded = expandSplitRows(mapped, splits);
     // At the cap there may be older rows we didn't load, so the summary totals
     // would be partial — let the page say so rather than present them as whole.
-    return { rows: mapped, accounts, linkedCount, capped: mapped.length >= limit, hiddenCount };
+    return { rows: expanded, accounts, linkedCount, capped: mapped.length >= limit, hiddenCount };
   } catch {
     // Table not created yet (SQL not applied / first sync not run) — show empty.
     return { rows: [], accounts: [], linkedCount: 0, capped: false, hiddenCount: 0 };

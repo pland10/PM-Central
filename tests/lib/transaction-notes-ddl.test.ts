@@ -21,4 +21,17 @@ describe("transaction notes storage", () => {
     expect(order(/INSERT INTO transaction_notes/)).toBeGreaterThan(order(/CREATE TABLE IF NOT EXISTS transaction_notes/));
     expect(order(/INSERT INTO transaction_notes/)).toBeGreaterThan(order(/notes_migrated BOOLEAN/));
   });
+
+  it("creates the split-lines table too", async () => {
+    const run = vi.fn().mockResolvedValue(0);
+    // a fresh module so the once-per-process guard runs again
+    vi.resetModules();
+    const { ensurePlaidAnnotationColumns: ensure } = await import("@/lib/plaid-sync");
+    await ensure({ $executeRawUnsafe: run } as unknown as PrismaClient);
+    const sql = run.mock.calls.map((c) => String(c[0]).replace(/\s+/g, " "));
+    const t = sql.find((s) => /CREATE TABLE IF NOT EXISTS transaction_splits/.test(s))!;
+    expect(t).toMatch(/amount NUMERIC\(14,2\) NOT NULL/);
+    expect(t).toMatch(/property_external_id TEXT/);
+    expect(sql.some((s) => /CREATE INDEX IF NOT EXISTS transaction_splits_txn_idx/.test(s))).toBe(true);
+  });
 });

@@ -161,6 +161,9 @@ describe("PATCH /api/plaid/transactions/:id", () => {
       expect(sql).toMatch(/recorded_quickbooks = true/);
       expect(sql).toMatch(/recorded_rentvine = true OR reimbursable = 'no'/);
       expect(sql).toMatch(/pending = false/);
+      // a split charge: every line must be recorded (QB + (RV or not reimbursable))
+      expect(sql).toMatch(/FROM transaction_splits/);
+      expect(sql).toMatch(/NOT \(sp2\.recorded_quickbooks AND \(sp2\.recorded_rentvine OR sp2\.reimbursable = 'no'\)\)/);
     });
 
     it("409s when the row isn't eligible to archive (the guard matched no row)", async () => {

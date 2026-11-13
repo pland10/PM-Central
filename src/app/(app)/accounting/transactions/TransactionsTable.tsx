@@ -13,6 +13,8 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 import type { NoteSummary } from "@/lib/work-order-notes-db";
 import { NotesCell } from "../../work-orders/NotesCell";
 import { NotesPanel } from "@/components/NotesPanel";
+import { expandSplitRows, parseRowId, rowIdOf } from "@/lib/transaction-splits";
+import { SplitEditor, type EditorLine } from "./SplitEditor";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
 // in a sortable/filterable DataTable with the hand-entered columns editable
@@ -127,6 +129,8 @@ export function TransactionsTable({
     setNotes(noteSummaries);
   }
   const [notesFor, setNotesFor] = useState<TxnRow | null>(null);
+  // The charge whose split editor is open (any of its rows).
+  const [splitFor, setSplitFor] = useState<TxnRow | null>(null);
   // When the server sends a fresh list (router.refresh() after an import or a
   // newly connected account), show it — otherwise new rows only appear after
   // a full page reload. Saved edits are already in the fresh list.
@@ -140,17 +144,24 @@ export function TransactionsTable({
 
   // Optimistically apply the edit, then persist. If the save fails, roll the
   // row back to what it was so the UI never diverges from the server.
+  // `id` is the row id: the transaction id, or "<id>#<line>" for a split line
+  // (which saves to that line only).
   const save = useCallback(async (id: string, patch: AnnotationPatch) => {
     let prevRow: TxnRow | undefined;
     setRows((prev) =>
       prev.map((r) => {
-        if (r.transactionId !== id) return r;
+        if (rowIdOf(r) !== id) return r;
         prevRow = r;
         return { ...r, ...patch };
       })
     );
+    const { transactionId: txn, lineId } = parseRowId(id);
+    const url =
+      lineId !== null
+        ? `/api/plaid/transactions/${encodeURIComponent(txn)}/splits/${lineId}`
+        : `/api/plaid/transactions/${encodeURIComponent(id)}`;
     try {
-      const res = await fetch(`/api/plaid/transactions/${encodeURIComponent(id)}`, {
+      const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -161,12 +172,12 @@ export function TransactionsTable({
       // → "Payroll"); show what was actually saved and add it to the list.
       const saved = data?.patch?.categoryOverride;
       if (typeof saved === "string") {
-        setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, categoryOverride: saved } : r)));
+        setRows((prev) => prev.map((r) => (rowIdOf(r) === id ? { ...r, categoryOverride: saved } : r)));
         if (saved) setCategories((prev) => (prev.includes(saved) ? prev : [...prev, saved].sort((a, b) => a.localeCompare(b))));
       }
       setError("");
     } catch (e) {
-      if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
+      if (prevRow) setRows((prev) => prev.map((r) => (rowIdOf(r) === id ? prevRow! : r)));
       const reason = e instanceof Error && e.message ? `${e.message} ` : "";
       setError(`${reason}A change couldn't be saved — reverted it.`);
     }
@@ -175,14 +186,8 @@ export function TransactionsTable({
   // Archive / unarchive one row (a row recorded in both QuickBooks and Rentvine
   // can be filed away; unarchiving undoes a mistake). Optimistic like `save`.
   const archive = useCallback(async (id: string, archived: boolean) => {
-    let prevRow: TxnRow | undefined;
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.transactionId !== id) return r;
-        prevRow = r;
-        return { ...r, archived };
-      })
-    );
+    // A split charge archives as a whole: every line row goes together.
+    setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, archived } : r)));
     try {
       const res = await fetch(`/api/plaid/transactions/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -193,7 +198,7 @@ export function TransactionsTable({
       if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "");
       setError("");
     } catch (e) {
-      if (prevRow) setRows((prev) => prev.map((r) => (r.transactionId === id ? prevRow! : r)));
+      setRows((prev) => prev.map((r) => (r.transactionId === id ? { ...r, archived: !archived } : r)));
       const reason = e instanceof Error && e.message ? `${e.message} ` : "";
       setError(`${reason}Couldn't ${archived ? "archive" : "unarchive"} — reverted it.`);
     }
@@ -202,9 +207,16 @@ export function TransactionsTable({
   // Rows that can be filed away: in QuickBooks and either also in Rentvine or
   // marked not reimbursable (the items that never go to Rentvine), posted, not
   // already archived. Powers the "Archive all recorded" button.
+  // A split charge is archivable once EVERY line is (mirrors the API).
+  const chargeArchivable = useMemo(() => {
+    const ok = new Map<string, boolean>();
+    for (const r of rows) ok.set(r.transactionId, (ok.get(r.transactionId) ?? true) && archivable(r));
+    return ok;
+  }, [rows]);
+  const canArchive = useCallback((r: TxnRow) => chargeArchivable.get(r.transactionId) ?? false, [chargeArchivable]);
   const eligibleToArchive = useMemo(
-    () => rows.filter((r) => archivable(r) && !r.pending && !r.archived),
-    [rows]
+    () => rows.filter((r) => canArchive(r) && !r.pending && !r.archived),
+    [rows, canArchive]
   );
 
   // Archive every eligible row at once — confirmed in a modal (with a
@@ -223,11 +235,11 @@ export function TransactionsTable({
   }, [undo]);
 
   const archiveAllRecorded = useCallback(async () => {
-    const eligible = rows.filter((r) => archivable(r) && !r.pending && !r.archived);
+    const eligible = rows.filter((r) => canArchive(r) && !r.pending && !r.archived);
     setConfirmArchive(false);
     if (eligible.length === 0) return;
     const ids = new Set(eligible.map((r) => r.transactionId));
-    const before = new Map(eligible.map((r) => [r.transactionId, r]));
+    const before = new Map(eligible.map((r) => [rowIdOf(r), r]));
     setRows((prev) => prev.map((r) => (ids.has(r.transactionId) ? { ...r, archived: true } : r)));
     try {
       const res = await fetch("/api/plaid/transactions", {
@@ -242,10 +254,10 @@ export function TransactionsTable({
       setReviewing(false);
       setUndo({ ids: done, count: typeof data?.archived === "number" ? data.archived : done.length });
     } catch {
-      setRows((prev) => prev.map((r) => before.get(r.transactionId) ?? r));
+      setRows((prev) => prev.map((r) => before.get(rowIdOf(r)) ?? r));
       setError("Couldn't archive all recorded — reverted it. Please try again.");
     }
-  }, [rows]);
+  }, [rows, canArchive]);
 
   const undoArchive = useCallback(async () => {
     if (!undo) return;
@@ -290,8 +302,8 @@ export function TransactionsTable({
   async function bulkSetReimbursable(value: Reimbursable) {
     const ids = [...selected];
     if (ids.length === 0) return;
-    const before = new Map(rows.filter((r) => selected.has(r.transactionId)).map((r) => [r.transactionId, r]));
-    setRows((prev) => prev.map((r) => (selected.has(r.transactionId) ? { ...r, reimbursable: value } : r)));
+    const before = new Map(rows.filter((r) => selected.has(rowIdOf(r))).map((r) => [rowIdOf(r), r]));
+    setRows((prev) => prev.map((r) => (selected.has(rowIdOf(r)) ? { ...r, reimbursable: value } : r)));
     try {
       const res = await fetch("/api/plaid/transactions", {
         method: "PATCH",
@@ -302,7 +314,7 @@ export function TransactionsTable({
       setError("");
       stopSelecting();
     } catch {
-      setRows((prev) => prev.map((r) => before.get(r.transactionId) ?? r));
+      setRows((prev) => prev.map((r) => before.get(rowIdOf(r)) ?? r));
       setError("The bulk change couldn't be saved — reverted it. Please try again.");
     }
   }
@@ -310,7 +322,41 @@ export function TransactionsTable({
   // An edited pending charge that vanished with no posted replacement isn't a
   // real transaction any more: it lives only in the Needs review box.
   const tableRows = useMemo(() => rows.filter((r) => r.reviewReason !== "pending_dropped"), [rows]);
-  const reviewRows = useMemo(() => rows.filter((r) => r.reviewReason), [rows]);
+  const reviewRows = useMemo(() => {
+    const seen = new Set<string>();
+    return rows.filter((r) => r.reviewReason && !seen.has(r.transactionId) && seen.add(r.transactionId));
+  }, [rows]);
+
+  // The split editor's starting lines: the charge's current lines, or (first
+  // split) the whole amount on line 1 with the charge's own fields + an empty line 2.
+  function editorLinesFor(r: TxnRow): EditorLine[] {
+    const toEditor = (x: TxnRow): EditorLine => ({
+      amount: x.amount.toFixed(2),
+      property: propertyLabel(x),
+      categoryOverride: x.categoryOverride,
+      reimbursable: x.reimbursable,
+      recordedQuickbooks: x.recordedQuickbooks,
+      recordedRentvine: x.recordedRentvine,
+    });
+    if (r.split) return rows.filter((x) => x.transactionId === r.transactionId).map(toEditor);
+    return [
+      toEditor(r),
+      { amount: "", property: "", categoryOverride: "", reimbursable: null, recordedQuickbooks: false, recordedRentvine: false },
+    ];
+  }
+
+  // Swap a charge's row(s) for new ones, in place. `make` gets the charge's
+  // header row (its own fields, the full amount, no split info).
+  function replaceCharge(transactionId: string, make: (header: TxnRow) => TxnRow[]) {
+    setRows((prev) => {
+      const at = prev.findIndex((r) => r.transactionId === transactionId);
+      if (at < 0) return prev;
+      const first = prev[at];
+      const header: TxnRow = { ...first, amount: first.split?.total ?? first.amount, rowId: undefined, split: undefined };
+      const rest = prev.filter((r) => r.transactionId !== transactionId);
+      return [...rest.slice(0, at), ...make(header), ...rest.slice(at)];
+    });
+  }
 
   // Needs review actions (POST /api/plaid/transactions/:id/review).
   async function review(id: string, body: { action: "move" | "dismiss" | "ok"; targetId?: string }) {
@@ -447,8 +493,8 @@ export function TransactionsTable({
           const current = propertyLabel(r);
           return (
             <input
-              key={`prop-${r.transactionId}-${r.propertyId ?? ""}-${r.unitId ?? ""}`}
-              aria-label={`property-${r.transactionId}`}
+              key={`prop-${rowIdOf(r)}-${r.propertyId ?? ""}-${r.unitId ?? ""}`}
+              aria-label={`property-${rowIdOf(r)}`}
               onKeyDown={blurOnEnter}
               defaultValue={current}
               list={PROPERTY_LIST_ID}
@@ -457,7 +503,7 @@ export function TransactionsTable({
                 const v = e.target.value.trim();
                 if (v === current) return;
                 if (!v) {
-                  if (r.propertyId) save(r.transactionId, { propertyId: null, unitId: null });
+                  if (r.propertyId) save(rowIdOf(r), { propertyId: null, unitId: null });
                   return;
                 }
                 const choice = propertyLookup.byLabel.get(v.toLowerCase());
@@ -467,7 +513,7 @@ export function TransactionsTable({
                   return;
                 }
                 if (choice.propertyId !== r.propertyId || choice.unitId !== r.unitId) {
-                  save(r.transactionId, { propertyId: choice.propertyId, unitId: choice.unitId });
+                  save(rowIdOf(r), { propertyId: choice.propertyId, unitId: choice.unitId });
                 }
               }}
               className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
@@ -484,9 +530,41 @@ export function TransactionsTable({
         exportValue: (r) => r.amount,
         filter: { type: "number", value: (r) => r.amount },
         render: (r) => (
-          <span className={`tabular-nums ${r.amount < 0 ? "text-emerald-700" : "text-slate-800"}`}>
-            {formatCurrencyCents(r.amount)}
-          </span>
+          <div className="flex flex-col items-end">
+            <span className={`tabular-nums ${r.amount < 0 ? "text-emerald-700" : "text-slate-800"}`}>
+              {formatCurrencyCents(r.amount)}
+            </span>
+            {r.split ? (
+              <>
+                <span className="whitespace-nowrap text-[11px] text-slate-500">
+                  Split {r.split.lineNo} of {r.split.count} · {formatCurrencyCents(r.split.total)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSplitFor(r)}
+                  className="text-[11px] font-medium text-brand-600 hover:underline"
+                >
+                  Edit split
+                </button>
+                {!r.split.balanced && (
+                  <span className="whitespace-nowrap text-[11px] font-medium text-amber-700" title="The charge's amount changed after it was split">
+                    Lines don&apos;t add up
+                  </span>
+                )}
+              </>
+            ) : (
+              !r.archived && (
+                <button
+                  type="button"
+                  aria-label={`split-${r.transactionId}`}
+                  onClick={() => setSplitFor(r)}
+                  className="text-[11px] font-medium text-slate-400 hover:text-brand-600"
+                >
+                  Split
+                </button>
+              )
+            )}
+          </div>
         ),
       },
       {
@@ -497,15 +575,15 @@ export function TransactionsTable({
         exportValue: (r) => r.categoryOverride,
         render: (r) => (
           <input
-            key={`cat-${r.transactionId}-${r.categoryOverride}`}
-            aria-label={`category-${r.transactionId}`}
+            key={`cat-${rowIdOf(r)}-${r.categoryOverride}`}
+            aria-label={`category-${rowIdOf(r)}`}
             onKeyDown={blurOnEnter}
             defaultValue={r.categoryOverride}
             list={CATEGORY_LIST_ID}
             placeholder="Search…"
             onBlur={(e) => {
               const v = e.target.value.trim();
-              if (v !== r.categoryOverride) save(r.transactionId, { categoryOverride: v });
+              if (v !== r.categoryOverride) save(rowIdOf(r), { categoryOverride: v });
             }}
             className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
@@ -521,10 +599,10 @@ export function TransactionsTable({
         exportValue: (r) => (r.reimbursable === "yes" ? "Yes" : r.reimbursable === "no" ? "No" : ""),
         render: (r) => (
           <select
-            aria-label={`reimbursable-${r.transactionId}`}
+            aria-label={`reimbursable-${rowIdOf(r)}`}
             value={r.reimbursable ?? ""}
             onChange={(e) =>
-              save(r.transactionId, {
+              save(rowIdOf(r), {
                 reimbursable: e.target.value === "yes" ? "yes" : e.target.value === "no" ? "no" : null,
               })
             }
@@ -553,9 +631,9 @@ export function TransactionsTable({
         render: (r) => (
           <input
             type="checkbox"
-            aria-label={`quickbooks-${r.transactionId}`}
+            aria-label={`quickbooks-${rowIdOf(r)}`}
             checked={r.recordedQuickbooks}
-            onChange={(e) => save(r.transactionId, { recordedQuickbooks: e.target.checked })}
+            onChange={(e) => save(rowIdOf(r), { recordedQuickbooks: e.target.checked })}
             className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
@@ -571,9 +649,9 @@ export function TransactionsTable({
         render: (r) => (
           <input
             type="checkbox"
-            aria-label={`rentvine-${r.transactionId}`}
+            aria-label={`rentvine-${rowIdOf(r)}`}
             checked={r.recordedRentvine}
-            onChange={(e) => save(r.transactionId, { recordedRentvine: e.target.checked })}
+            onChange={(e) => save(rowIdOf(r), { recordedRentvine: e.target.checked })}
             className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
         ),
@@ -589,7 +667,7 @@ export function TransactionsTable({
         exportValue: (r) => BILLED_TEXT[billingOf(r)?.status ?? "none"],
         render: (r) => (
           <BilledCell
-            id={r.transactionId}
+            id={rowIdOf(r)}
             status={billingOf(r)}
             notReimbursable={r.reimbursable === "no"}
             billUrl={rentvineBillUrl}
@@ -624,7 +702,11 @@ export function TransactionsTable({
             >
               Unarchive
             </button>
-          ) : !r.pending && archivable(r) ? (
+          ) : r.split && r.split.lineNo > 1 ? (
+            <span className="text-slate-300" title="A split charge is archived as a whole — use line 1">
+              ·
+            </span>
+          ) : !r.pending && canArchive(r) ? (
             <button
               type="button"
               aria-label={`archive-${r.transactionId}`}
@@ -636,14 +718,18 @@ export function TransactionsTable({
           ) : (
             <span
               className="text-slate-300"
-              title="To archive: record it in QuickBooks and Rentvine, or in QuickBooks and mark it not reimbursable"
+              title={
+                r.split
+                  ? "To archive a split charge: record every line in QuickBooks and Rentvine (or QuickBooks + not reimbursable)"
+                  : "To archive: record it in QuickBooks and Rentvine, or in QuickBooks and mark it not reimbursable"
+              }
             >
               —
             </span>
           ),
       },
     ],
-    [save, archive, accounts, propertyLabel, propertyLookup, rentvineBillUrl, notes]
+    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, rentvineBillUrl, notes]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -657,9 +743,9 @@ export function TransactionsTable({
               render: (r) => (
                 <input
                   type="checkbox"
-                  aria-label={`select-${r.transactionId}`}
-                  checked={selected.has(r.transactionId)}
-                  onChange={() => toggleSelected(r.transactionId)}
+                  aria-label={`select-${rowIdOf(r)}`}
+                  checked={selected.has(rowIdOf(r))}
+                  onChange={() => toggleSelected(rowIdOf(r))}
                   className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
                 />
               ),
@@ -797,7 +883,7 @@ export function TransactionsTable({
             {selected.size > 0 && <span className="font-medium text-slate-700">{selected.size} selected</span>}
             <button
               type="button"
-              onClick={() => setSelected(new Set(shown.map((r) => r.transactionId)))}
+              onClick={() => setSelected(new Set(shown.map((r) => rowIdOf(r))))}
               className={BTN}
             >
               Select all {shown.length.toLocaleString()} shown
@@ -897,7 +983,7 @@ export function TransactionsTable({
         onFilteredChange={setShown}
         wide
         dense
-        rowKey={(r) => r.transactionId}
+        rowKey={(r) => rowIdOf(r)}
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${notes[r.transactionId]?.latest ?? ""}`}
         searchPlaceholder="Search merchant, notes…"
         facets={facets}
@@ -905,6 +991,31 @@ export function TransactionsTable({
         initialSort={{ key: "postedDate", dir: "desc" }}
         exportName="Transactions"
       />
+
+      {splitFor && (
+        <SplitEditor
+          charge={{
+            transactionId: splitFor.transactionId,
+            amount: splitFor.split?.total ?? splitFor.amount,
+            merchantName: splitFor.merchantName,
+            postedDate: splitFor.postedDate,
+          }}
+          isSplit={!!splitFor.split}
+          initialLines={editorLinesFor(splitFor)}
+          resolveProperty={(label) => propertyLookup.byLabel.get(label.toLowerCase()) ?? null}
+          propertyListId={PROPERTY_LIST_ID}
+          categoryListId={CATEGORY_LIST_ID}
+          onClose={() => setSplitFor(null)}
+          onSaved={(lines) => {
+            replaceCharge(splitFor.transactionId, (header) => expandSplitRows([header], { [header.transactionId]: lines }));
+            setSplitFor(null);
+          }}
+          onUnsplit={(fields) => {
+            replaceCharge(splitFor.transactionId, (header) => [{ ...header, ...fields }]);
+            setSplitFor(null);
+          }}
+        />
+      )}
 
       {notesFor && (
         <NotesPanel
@@ -1088,7 +1199,7 @@ function ReviewBox({
           return (
             <li key={r.transactionId} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-amber-200 bg-white px-3 py-2 text-xs">
               <span className="font-medium text-slate-800">
-                {r.postedDate ?? "—"} · {r.merchantName} · {formatCurrencyCents(r.amount)}
+                {r.postedDate ?? "—"} · {r.merchantName} · {formatCurrencyCents(r.split?.total ?? r.amount)}
               </span>
               <span className="text-slate-500">{r.accountName}</span>
               {notes[r.transactionId] && <span className="text-slate-700">{notes[r.transactionId].latest}</span>}
