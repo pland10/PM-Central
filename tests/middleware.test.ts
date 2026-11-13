@@ -41,7 +41,7 @@ describe("middleware — routes that bypass the login gate", () => {
   // page's tab icon), so those must be outside it — but pages must not be.
   const gated = (path: string) => config.matcher.some((m) => new RegExp(`^${m}$`).test(path));
 
-  it.each(["/favicon.ico", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/apple-touch-icon.png", "/logo.png"])(
+  it.each(["/favicon.ico", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/apple-touch-icon.png", "/logo.png", "/icon-pmc-192.png", "/icon-pmc-512.png", "/icon-pmc-maskable-512.png", "/icon-pmc-apple-180.png"])(
     "serves %s without the login gate",
     (path) => expect(gated(path)).toBe(false)
   );
