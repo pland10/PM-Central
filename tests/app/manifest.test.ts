@@ -30,9 +30,14 @@ describe("web app manifest", () => {
     expect(icons.some((i) => i.purpose === "maskable")).toBe(true);
   });
 
+  it("names the icons after the current (PM Central) artwork so installed apps refetch them", () => {
+    // Chrome only re-downloads an installed app's icon when its URL changes.
+    for (const icon of m.icons ?? []) expect(icon.src).toMatch(/^\/icon-pmc-/);
+  });
+
   it("ships a favicon and an Apple touch icon", () => {
     const ico = readFileSync(join(__dirname, "..", "..", "public", "favicon.ico"));
     expect(ico.readUInt16LE(2)).toBe(1); // ICO type
-    expect(pngSize("apple-touch-icon.png")).toBe("180x180");
+    expect(pngSize("icon-pmc-apple-180.png")).toBe("180x180");
   });
 });
