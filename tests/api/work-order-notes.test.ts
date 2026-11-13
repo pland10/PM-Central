@@ -78,12 +78,28 @@ describe("/api/work-orders/notes", () => {
     const res = await post({ woId: "abc", body: "Call the plumber", emailTo: "jasper@pmi.com" });
     expect(res.status).toBe(201);
     const mail = vi.mocked(sendEmail).mock.calls[0][0];
-    expect(mail.to).toBe("jasper@pmi.com");
+    expect(mail.to).toEqual(["jasper@pmi.com"]);
     expect(mail.replyTo).toBe("paul@pmi.com");
     expect(mail.subject).toBe("Note on WO #100480 — Garage door wire broke");
     const upd = executeRaw.mock.calls.find((c) => /UPDATE work_order_notes SET emailed_to/.test(sqlOf(c[0])))![0] as { values: unknown[] };
     expect(upd.values).toEqual(["jasper@pmi.com", 7]);
     expect((await res.json()).emailed).toBe(true);
+  });
+
+  it("emails several staff in one message and records them all", async () => {
+    const res = await post({ woId: "abc", body: "FYI both", emailTo: ["jasper@pmi.com", "paul@pmi.com"] });
+    expect(res.status).toBe(201);
+    expect(vi.mocked(sendEmail)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendEmail).mock.calls[0][0].to).toEqual(["jasper@pmi.com", "paul@pmi.com"]);
+    const upd = executeRaw.mock.calls.find((c) => /UPDATE work_order_notes SET emailed_to/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(upd.values).toEqual(["jasper@pmi.com, paul@pmi.com", 7]);
+    expect(await res.json()).toMatchObject({ emailed: true, note: { emailedTo: "jasper@pmi.com, paul@pmi.com" } });
+  });
+
+  it("won't email anyone if one of several isn't a PM-Central user", async () => {
+    const res = await post({ woId: "abc", body: "hi", emailTo: ["jasper@pmi.com", "random@example.com"] });
+    expect(res.status).toBe(400);
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it("won't email someone who isn't a PM-Central user", async () => {

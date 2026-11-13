@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { listStaff } from "@/lib/staff";
 import { sendEmail } from "@/lib/email";
-import { matchStaffEmail, noteEmail, normalizeNoteBody } from "@/lib/work-order-notes";
+import { matchStaffEmail, noteEmail, normalizeNoteBody, resolveRecipients } from "@/lib/work-order-notes";
 import { addNote, deleteNote, listNotes, markEmailed, noteAuthor, updateNote } from "@/lib/work-order-notes-db";
 
 // Work-order notes (Work Orders list → Notes). Any signed-in user.
 //   GET    ?wo=<id>                     → notes (newest first) + who can be emailed
-//   POST   { woId, body, emailTo? }     → save; email only if emailTo is given,
-//                                          and only to a PM-Central user.
+//   POST   { woId, body, emailTo? }     → save; email only if emailTo is given
+//                                          (one address or a list), and only to
+//                                          PM-Central users — one email to all.
 //   PATCH  { id, body }                 → edit a note (author or an admin)
 //   DELETE ?id=<id>                     → delete a note (author or an admin)
 export const dynamic = "force-dynamic";
@@ -112,13 +113,13 @@ export async function POST(req: NextRequest) {
   const body = normalizeNoteBody(b?.body);
   if (!woId || !body) return NextResponse.json({ error: "Write a note first." }, { status: 400 });
 
-  const emailTo = typeof b?.emailTo === "string" ? b.emailTo.trim().toLowerCase() : "";
   // Only PM-Central users can be emailed — never an arbitrary address.
-  const staff = emailTo ? await listStaff() : [];
-  const recipient = emailTo ? staff.find((s) => s.email.toLowerCase() === emailTo) : undefined;
-  if (emailTo && !recipient) {
-    return NextResponse.json({ error: "Pick someone who uses PM-Central to email." }, { status: 400 });
+  const wantsEmail = b?.emailTo !== undefined && b?.emailTo !== null;
+  const picked = resolveRecipients(b?.emailTo, wantsEmail ? await listStaff() : []);
+  if ("error" in picked) {
+    return NextResponse.json({ error: "Pick people who use PM-Central to email." }, { status: 400 });
   }
+  const recipients = picked.emails;
 
   try {
     const wo = await workOrder(woId);
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
     const author = user.name || user.email || "PM-Central";
     const note = await addNote({ woId, woNumber: number, body, authorEmail: user.email ?? "", authorName: author });
 
-    if (!recipient) return NextResponse.json({ note, emailed: false }, { status: 201 });
+    if (recipients.length === 0) return NextResponse.json({ note, emailed: false }, { status: 201 });
 
     const mail = noteEmail({
       number,
@@ -138,12 +139,13 @@ export async function POST(req: NextRequest) {
       appUrl: `${req.nextUrl.origin}/work-orders`,
       leadSimpleUrl: wo.link ?? undefined,
     });
-    const sent = await sendEmail({ to: recipient.email, ...mail, replyTo: user.email ?? undefined });
+    const sent = await sendEmail({ to: recipients, ...mail, replyTo: user.email ?? undefined });
     if (!sent.ok) {
       return NextResponse.json({ note, emailed: false, emailError: sent.error }, { status: 201 });
     }
-    await markEmailed(note.id, recipient.email);
-    return NextResponse.json({ note: { ...note, emailedTo: recipient.email }, emailed: true }, { status: 201 });
+    const emailedTo = recipients.join(", ");
+    await markEmailed(note.id, emailedTo);
+    return NextResponse.json({ note: { ...note, emailedTo }, emailed: true }, { status: 201 });
   } catch (e) {
     console.error("[wo-notes] save failed:", e);
     return NextResponse.json({ error: "Could not save the note." }, { status: 500 });

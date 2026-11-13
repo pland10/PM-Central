@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchStaffEmail, noteEmail, normalizeNoteBody } from "@/lib/work-order-notes";
+import { matchStaffEmail, noteEmail, normalizeNoteBody, resolveRecipients } from "@/lib/work-order-notes";
 
 describe("normalizeNoteBody", () => {
   it("trims, rejects empty and caps the length", () => {
@@ -41,5 +41,30 @@ describe("noteEmail", () => {
     expect(e.html).toContain('href="https://pmilighthouse.app/work-orders"');
     expect(e.html).toContain('href="https://app.leadsimple.com/x"');
     expect(e.html).not.toContain("<ABC>");
+  });
+});
+
+describe("resolveRecipients", () => {
+  const staff = [
+    { name: "Jasper Jed Belen", email: "jasper@pmi.com" },
+    { name: "Paul Landman", email: "Paul@pmi.com" },
+  ];
+  it("accepts one address or a list, case-insensitively, deduped, in staff spelling", () => {
+    expect(resolveRecipients("JASPER@pmi.com", staff)).toEqual({ emails: ["jasper@pmi.com"] });
+    expect(resolveRecipients(["paul@pmi.com", "jasper@pmi.com", "Paul@PMI.com"], staff)).toEqual({
+      emails: ["Paul@pmi.com", "jasper@pmi.com"],
+    });
+  });
+  it("nobody to email: missing, empty string or empty list", () => {
+    for (const raw of [undefined, null, "", "  ", []]) expect(resolveRecipients(raw, staff)).toEqual({ emails: [] });
+  });
+  it("rejects the whole request if any address isn't on the staff list", () => {
+    expect(resolveRecipients(["jasper@pmi.com", "stranger@gmail.com"], staff)).toEqual({ error: "unknown" });
+    expect(resolveRecipients("stranger@gmail.com", staff)).toEqual({ error: "unknown" });
+  });
+  it("rejects junk shapes and more than 20 people", () => {
+    expect(resolveRecipients(5, staff)).toEqual({ error: "invalid" });
+    expect(resolveRecipients(["jasper@pmi.com", 3], staff)).toEqual({ error: "invalid" });
+    expect(resolveRecipients(Array(21).fill("jasper@pmi.com"), staff)).toEqual({ error: "invalid" });
   });
 });

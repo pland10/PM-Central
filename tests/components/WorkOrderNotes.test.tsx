@@ -11,7 +11,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const b = JSON.parse(String(init.body));
-      return ok({ note: { id: 8, body: b.body, authorName: "Paul Landman", authorEmail: "paul@pmi.com", createdAt: "2026-11-02T15:00:00.000Z", editedAt: null, emailedTo: b.emailTo ?? null }, emailed: Boolean(b.emailTo) }, 201);
+      return ok({ note: { id: 8, body: b.body, authorName: "Paul Landman", authorEmail: "paul@pmi.com", createdAt: "2026-11-02T15:00:00.000Z", editedAt: null, emailedTo: Array.isArray(b.emailTo) ? b.emailTo.join(", ") : b.emailTo ?? null }, emailed: Boolean(b.emailTo) }, 201);
     }
     if (init?.method === "PATCH") {
       const b = JSON.parse(String(init.body));
@@ -63,12 +63,37 @@ describe("WorkOrderNotes", () => {
     const user = userEvent.setup();
     render(<WorkOrderNotes wo={wo} onClose={() => {}} />);
     await screen.findByText("Called the vendor");
-    expect((screen.getByLabelText(/email to/i) as HTMLSelectElement).value).toBe("jasper@pmi.com");
+    expect(screen.getByRole("button", { name: /email to/i })).toHaveTextContent("Jasper Jed Belen");
     await user.type(screen.getByLabelText(/new note/i), "Please call the vendor");
     await user.click(screen.getByRole("button", { name: /add note & email/i }));
-    expect(posts()).toEqual([{ woId: "abc", body: "Please call the vendor", emailTo: "jasper@pmi.com" }]);
+    expect(posts()).toEqual([{ woId: "abc", body: "Please call the vendor", emailTo: ["jasper@pmi.com"] }]);
     expect(await screen.findByText(/note added and emailed jasper@pmi.com/i)).toBeTruthy();
-    expect(screen.getByText(/· emailed jasper@pmi.com/)).toBeTruthy(); // recorded on the note
+  });
+
+  it("can email several people: tick them in the Email to list", async () => {
+    const user = userEvent.setup();
+    render(<WorkOrderNotes wo={wo} onClose={() => {}} />);
+    await screen.findByText("Called the vendor");
+    await user.click(screen.getByRole("button", { name: /email to/i }));
+    const jasper = screen.getByRole("checkbox", { name: "Jasper Jed Belen" });
+    const paul = screen.getByRole("checkbox", { name: "Paul Landman" });
+    expect(jasper).toBeChecked(); // the assignee, pre-ticked
+    await user.click(paul);
+    expect(screen.getByRole("button", { name: /email to/i })).toHaveTextContent("2 people");
+    await user.type(screen.getByLabelText(/new note/i), "FYI both");
+    await user.click(screen.getByRole("button", { name: /add note & email/i }));
+    expect(posts()).toEqual([{ woId: "abc", body: "FYI both", emailTo: ["jasper@pmi.com", "paul@pmi.com"] }]);
+    expect(await screen.findByText(/note added and emailed jasper@pmi.com, paul@pmi.com/i)).toBeTruthy();
+  });
+
+  it("Add note & email is off until someone is ticked", async () => {
+    const user = userEvent.setup();
+    render(<WorkOrderNotes wo={wo} onClose={() => {}} />);
+    await screen.findByText("Called the vendor");
+    await user.type(screen.getByLabelText(/new note/i), "x");
+    await user.click(screen.getByRole("button", { name: /email to/i }));
+    await user.click(screen.getByRole("checkbox", { name: "Jasper Jed Belen" })); // untick the default
+    expect(screen.getByRole("button", { name: /add note & email/i })).toBeDisabled();
   });
 
   it("won't add an empty note", async () => {
