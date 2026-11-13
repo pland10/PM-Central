@@ -85,6 +85,14 @@ describe("ManagementDashboard", () => {
     expect(screen.getByText("Returned / NSF")).toBeInTheDocument();
   });
 
+  it("shows collections tiles with formatted money and chart cards", () => {
+    render(<ManagementDashboard data={data} />);
+    expect(within(screen.getByText("Collected this week").parentElement!).getByText("$48,250")).toBeInTheDocument();
+    expect(within(screen.getByText("In-flight (pending)").parentElement!).getByText("$3,100")).toBeInTheDocument();
+    expect(screen.getByText("Rent collected")).toBeInTheDocument();
+    expect(screen.getByText("Returned / NSF")).toBeInTheDocument();
+  });
+
   it("shows the work-order headline tiles", () => {
     render(<ManagementDashboard data={data} />);
     expect(within(screen.getByText("Open").parentElement!).getByText("27")).toBeInTheDocument();
