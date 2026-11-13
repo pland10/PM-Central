@@ -14,12 +14,13 @@ export const metadata: Metadata = {
   title: { default: BASE_TITLE, template: `%s · ${BASE_TITLE}` },
   description: `${PM_CENTRAL_NAME} for ${BRAND.name}`,
   // Tab icon + home-screen icon; the install icons live in app/manifest.ts.
+  // New artwork = new file names / ?v= so browsers and installed apps refetch.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/favicon.ico?v=pmc", sizes: "any" },
+      { url: "/icon-pmc-192.png", type: "image/png", sizes: "192x192" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: "/icon-pmc-apple-180.png",
   },
 };
 
