@@ -45,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tra
       // Its notes thread goes with it (only once the charge itself is gone).
       if (n > 0) {
         await prisma.$executeRaw(Prisma.sql`DELETE FROM transaction_notes WHERE transaction_id = ${id}`);
+        await prisma.$executeRaw(Prisma.sql`DELETE FROM transaction_splits WHERE transaction_id = ${id}`);
       }
     } else {
       const [copied] = await prisma.$transaction([
@@ -62,11 +63,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tra
           FROM plaid_transactions p
           WHERE t.transaction_id = ${targetId} AND t.pending = false
             AND p.transaction_id = ${id} AND p.review_reason = 'pending_dropped'`),
-        // The notes thread moves to the chosen charge too.
+        // Split lines move to the chosen charge (unless it has its own)…
+        prisma.$executeRaw(Prisma.sql`
+          UPDATE transaction_splits SET transaction_id = ${targetId}, updated_at = now()
+          WHERE transaction_id = ${id}
+            AND NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = ${targetId})
+            AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${id} AND review_reason = 'pending_dropped')
+            AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${targetId} AND pending = false)`),
+        // …and the notes thread moves there too.
         prisma.$executeRaw(Prisma.sql`
           UPDATE transaction_notes SET transaction_id = ${targetId}
           WHERE transaction_id = ${id}
             AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${id} AND review_reason = 'pending_dropped')
+            AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${targetId} AND pending = false)`),
+        // Lines the chosen charge didn't take (it had its own) go with the row.
+        prisma.$executeRaw(Prisma.sql`
+          DELETE FROM transaction_splits WHERE transaction_id = ${id}
             AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${targetId} AND pending = false)`),
         prisma.$executeRaw(Prisma.sql`
           DELETE FROM plaid_transactions

@@ -6,8 +6,8 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 import { sanitizeAnnotationPatch } from "@/lib/transactions-view";
-import { resolveCategoryForSave } from "@/lib/transaction-categories-db";
-import { unitBelongsToProperty } from "@/lib/rentvine-units";
+import { checkAnnotationPatch } from "@/lib/annotation-checks";
+import { ARCHIVABLE_SQL } from "@/lib/archive-rules";
 
 // Saves the hand-entered annotations on one transaction (reimbursable?, your
 // own category, recorded in QuickBooks / Rentvine, notes) from the Transactions
@@ -38,7 +38,8 @@ export async function PATCH(
   // Archive / unarchive is its own action, not a normal annotation edit. A row
   // can be archived once it's recorded in QuickBooks AND either also in Rentvine
   // or marked not reimbursable — the not-reimbursable items are the ones that
-  // never go to Rentvine. Unarchiving (undoing a mistake) is always allowed.
+  // never go to Rentvine (for a split charge: every line). Unarchiving (undoing
+  // a mistake) is always allowed.
   if (typeof (body as { archived?: unknown }).archived === "boolean") {
     const archived = (body as { archived: boolean }).archived;
     try {
@@ -48,8 +49,7 @@ export async function PATCH(
           UPDATE plaid_transactions
           SET archived = true, archived_at = now(), archived_by = ${user?.email ?? "operator"}
           WHERE transaction_id = ${transactionId} AND pending = false
-            AND recorded_quickbooks = true
-            AND (recorded_rentvine = true OR reimbursable = 'no')`);
+            AND ${ARCHIVABLE_SQL}`);
         if (n === 0) {
           return NextResponse.json(
             {
@@ -75,37 +75,13 @@ export async function PATCH(
 
   const patch = sanitizeAnnotationPatch(body);
 
-  // A typed category is checked against the shared list: look-alikes save under
-  // the list's spelling, new ones are added while the list is open, and a locked
-  // list refuses unknown ones (admins excepted).
-  if (patch.categoryOverride) {
-    try {
-      const decision = await resolveCategoryForSave(patch.categoryOverride, {
-        isAdmin: !user || user.role === "admin", // basic-auth operator = admin
-        by: user?.email ?? "operator",
-      });
-      if ("error" in decision) return NextResponse.json({ error: decision.error }, { status: 400 });
-      patch.categoryOverride = decision.name;
-    } catch (e) {
-      console.error(`[plaid] category check failed for ${transactionId}:`, e);
-      return NextResponse.json({ error: "Could not save." }, { status: 500 });
-    }
-  }
-
-  // Only an existing property can be linked (the page's typeahead offers just
-  // those; this guards against stale or hand-crafted requests).
-  // A unit always travels with its property: changing the property without a
-  // unit clears the unit, and a unit must belong to that property.
-  if (patch.propertyId !== undefined && patch.unitId === undefined) patch.unitId = null;
-  if (patch.unitId && !patch.propertyId) {
-    return NextResponse.json({ error: "Pick a property from the list." }, { status: 400 });
-  }
-  if (patch.propertyId) {
-    const exists = await prisma.property.findFirst({ where: { externalId: patch.propertyId }, select: { id: true } });
-    if (!exists) return NextResponse.json({ error: "Pick a property from the list." }, { status: 400 });
-    if (patch.unitId && !(await unitBelongsToProperty(prisma, patch.unitId, patch.propertyId))) {
-      return NextResponse.json({ error: "That unit isn't part of the property — pick from the list." }, { status: 400 });
-    }
+  // Category spelling/lock + property/unit checks (shared with split lines).
+  try {
+    const checked = await checkAnnotationPatch(patch, user);
+    if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: checked.status });
+  } catch (e) {
+    console.error(`[plaid] annotation check failed for ${transactionId}:`, e);
+    return NextResponse.json({ error: "Could not save." }, { status: 500 });
   }
 
   // Build the SET clause from exactly the fields the user changed.

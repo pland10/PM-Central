@@ -128,7 +128,8 @@ describe("fetchPlaidTransactions", () => {
     queryRaw.mockResolvedValueOnce([raw()]).mockResolvedValueOnce([{ n: 1 }]);
     const res = await fetchPlaidTransactions();
     expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).not.toMatch(/ILIKE/);
-    expect(queryRaw).toHaveBeenCalledTimes(2);
+    // no hidden-count query either (the other calls: linked count, split lines)
+    expect(queryRaw.mock.calls.some((c) => /ILIKE/.test((c[0] as { sql: string }).sql))).toBe(false);
     expect(res.hiddenCount).toBe(0);
   });
 
@@ -149,5 +150,25 @@ describe("fetchPlaidTransactions", () => {
     expect(res.rows[1]).toMatchObject({ reviewReason: null, reviewDetail: "" });
     expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).toMatch(/review_reason/);
   });
-});
 
+  it("shows a split charge as one row per line, each with its own amount and fields", async () => {
+    queryRaw
+      .mockResolvedValueOnce([raw({ amount: 200 }), raw({ transaction_id: "t2", amount: 12 })])
+      .mockResolvedValueOnce([{ n: 1 }])
+      .mockResolvedValueOnce([
+        { id: 7, transaction_id: "t1", amount: "120.00", reimbursable: "yes", category_override: "Repairs", recorded_quickbooks: true, recorded_rentvine: false, property_external_id: "rentvine:12", unit_external_id: null },
+        { id: 8, transaction_id: "t1", amount: "80.00", reimbursable: "no", category_override: null, recorded_quickbooks: false, recorded_rentvine: false, property_external_id: null, unit_external_id: null },
+      ]);
+
+    const res = await fetchPlaidTransactions();
+
+    expect(res.rows.map((r) => [r.rowId ?? r.transactionId, r.amount])).toEqual([
+      ["t1#7", 120],
+      ["t1#8", 80],
+      ["t2", 12],
+    ]);
+    expect(res.rows[0]).toMatchObject({ reimbursable: "yes", propertyId: "rentvine:12", split: { lineNo: 1, count: 2, total: 200 } });
+    const splitQuery = queryRaw.mock.calls.find((c) => /transaction_splits/.test(JSON.stringify(c[0])));
+    expect(splitQuery).toBeTruthy();
+  });
+});
