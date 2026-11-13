@@ -91,10 +91,14 @@ export function DataTable<T>({
   wide = false,
   dense = false,
   scrollBox = false,
+  rowClassName,
 }: {
   rows: T[];
   columns: Column<T>[];
   rowKey: (row: T) => string;
+  // Extra classes per data row (e.g. to tint/group related rows). Appended to
+  // the base row classes.
+  rowClassName?: (row: T) => string | undefined;
   search?: (row: T) => string;
   searchPlaceholder?: string;
   facets?: Facet<T>[];
@@ -463,7 +467,7 @@ export function DataTable<T>({
             {filtered.map((row) => (
               <tr
                 key={rowKey(row)}
-                className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${rowClassName?.(row) ?? ""}`}
               >
                 {columns.map((c) => (
                   <td

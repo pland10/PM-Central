@@ -993,6 +993,9 @@ export function TransactionsTable({
         wide
         dense
         rowKey={(r) => rowIdOf(r)}
+        // Tint split lines and give them a brand accent stripe so the lines of
+        // one charge read as a linked group.
+        rowClassName={(r) => (r.split ? "bg-brand-50/60 shadow-[inset_3px_0_0_0_var(--brand-primary)]" : undefined)}
         search={(r) => `${r.merchantName} ${r.name} ${r.accountName} ${r.categoryOverride} ${notes[r.transactionId]?.latest ?? ""}`}
         searchPlaceholder="Search merchant, notes…"
         facets={facets}
