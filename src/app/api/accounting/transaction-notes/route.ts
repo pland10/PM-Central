@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
 import { listAccountingStaff } from "@/lib/staff";
 import { sendEmail } from "@/lib/email";
-import { normalizeNoteBody } from "@/lib/work-order-notes";
+import { normalizeNoteBody, resolveRecipients } from "@/lib/work-order-notes";
 import { transactionNoteEmail } from "@/lib/transaction-notes";
 import {
   addTransactionNote,
@@ -19,8 +19,9 @@ import {
 // Notes on a bank/card transaction (Accounting → Bank Transactions → Notes),
 // like the work-order notes. Accounting users only.
 //   GET    ?txn=<transaction id>              → notes (newest first) + who can be emailed
-//   POST   { transactionId, body, emailTo? }  → save; email only if emailTo is given,
-//                                               and only to someone with Accounting access
+//   POST   { transactionId, body, emailTo? }  → save; email only if emailTo is given
+//                                               (one address or a list), and only to
+//                                               people with Accounting access
 //   PATCH  { id, body }                       → edit a note (author or an admin)
 //   DELETE ?id=<id>                           → delete a note (author or an admin)
 export const dynamic = "force-dynamic";
@@ -105,26 +106,27 @@ export async function POST(req: NextRequest) {
   const body = normalizeNoteBody(b?.body);
   if (!transactionId || !body) return NextResponse.json({ error: "Write a note first." }, { status: 400 });
 
-  const emailTo = typeof b?.emailTo === "string" ? b.emailTo.trim().toLowerCase() : "";
   // Only people with Accounting access — never an arbitrary address.
-  const staff = emailTo ? await listAccountingStaff() : [];
-  const recipient = emailTo ? staff.find((s) => s.email.toLowerCase() === emailTo) : undefined;
-  if (emailTo && !recipient) {
-    return NextResponse.json({ error: "Pick someone with Accounting access to email." }, { status: 400 });
+  const wantsEmail = b?.emailTo !== undefined && b?.emailTo !== null;
+  const picked = resolveRecipients(b?.emailTo, wantsEmail ? await listAccountingStaff() : []);
+  if ("error" in picked) {
+    return NextResponse.json({ error: "Pick people with Accounting access to email." }, { status: 400 });
   }
+  const recipients = picked.emails;
 
   try {
     const txn = await transactionForNote(transactionId);
     if (!txn) return NextResponse.json({ error: "Transaction not found." }, { status: 404 });
     const author = user?.name || user?.email || "PM Central";
     const note = await addTransactionNote({ transactionId, body, authorEmail: user?.email ?? "", authorName: author });
-    if (!recipient) return NextResponse.json({ note, emailed: false }, { status: 201 });
+    if (recipients.length === 0) return NextResponse.json({ note, emailed: false }, { status: 201 });
 
     const mail = transactionNoteEmail({ ...txn, author, body, appUrl: `${req.nextUrl.origin}/accounting` });
-    const sent = await sendEmail({ to: recipient.email, ...mail, replyTo: user?.email ?? undefined });
+    const sent = await sendEmail({ to: recipients, ...mail, replyTo: user?.email ?? undefined });
     if (!sent.ok) return NextResponse.json({ note, emailed: false, emailError: sent.error }, { status: 201 });
-    await markTransactionNoteEmailed(note.id, recipient.email);
-    return NextResponse.json({ note: { ...note, emailedTo: recipient.email }, emailed: true }, { status: 201 });
+    const emailedTo = recipients.join(", ");
+    await markTransactionNoteEmailed(note.id, emailedTo);
+    return NextResponse.json({ note: { ...note, emailedTo }, emailed: true }, { status: 201 });
   } catch (e) {
     console.error("[txn-notes] save failed:", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "Could not save the note." }, { status: 500 });

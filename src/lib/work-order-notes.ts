@@ -26,6 +26,32 @@ export function normalizeNoteBody(input: unknown): string | null {
 const nameKey = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 // The work order's assignee (a LeadSimple user name) → their PM-Central email.
+// Who a note's email goes to. `raw` is the request's emailTo: one address or a
+// list (the notes panel sends a list). Every address must be on `staff` (never
+// an arbitrary address); any stranger rejects the whole request. Deduped,
+// case-insensitive, returned in the staff list's spelling. Capped at 20.
+export const MAX_NOTE_RECIPIENTS = 20;
+export function resolveRecipients(
+  raw: unknown,
+  staff: StaffMember[]
+): { emails: string[] } | { error: "invalid" | "unknown" } {
+  if (raw === undefined || raw === null) return { emails: [] };
+  const list = typeof raw === "string" ? [raw] : raw;
+  if (!Array.isArray(list) || list.length > MAX_NOTE_RECIPIENTS || !list.every((x) => typeof x === "string")) {
+    return { error: "invalid" };
+  }
+  const byEmail = new Map(staff.map((s) => [s.email.toLowerCase(), s.email]));
+  const emails: string[] = [];
+  for (const x of list as string[]) {
+    const key = x.trim().toLowerCase();
+    if (!key) continue;
+    const match = byEmail.get(key);
+    if (!match) return { error: "unknown" };
+    if (!emails.includes(match)) emails.push(match);
+  }
+  return { emails };
+}
+
 export function matchStaffEmail(assignee: string, staff: StaffMember[]): string {
   const key = nameKey(assignee);
   if (!key) return "";
