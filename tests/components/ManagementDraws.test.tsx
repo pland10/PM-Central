@@ -135,6 +135,27 @@ describe("ManagementDraws", () => {
     expect(await screen.findByRole("button", { name: /pay the management company/i })).not.toBeDisabled();
   });
 
+  it("takes the Chase transaction number on confirm and shows it on the batch", async () => {
+    const pending: BatchWithItems[] = [
+      { id: 7, createdAt: "2026-08-20T00:00:00Z", createdBy: "", note: "", count: 1, total: 100, confirmed: false, confirmedAt: null, items: [{ payoutId: "a", payee: "PMI Lighthouse", bankAccount: "Residential Trust", memo: "fees", postedDate: "2026-08-10", amount: 100 }] },
+    ];
+    const user = userEvent.setup();
+    render(<ManagementDraws initialRows={[rows[1]]} batches={pending} asOf="" rentvineAccount="pmilighthouse" />);
+
+    // The box is there before you click confirm.
+    await user.type(screen.getByLabelText(/chase transaction #/i), "CHS-881234");
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, batchId: 7 }) });
+    await user.click(screen.getByRole("button", { name: /confirm money moved/i }));
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ batchId: 7, bankReference: "CHS-881234" });
+    expect(within(screen.getByLabelText("batch-7")).getByText(/CHS-881234/)).toBeInTheDocument();
+  });
+
+  it("shows a confirmed batch's Chase transaction number", () => {
+    render(<ManagementDraws initialRows={rows} batches={[{ ...batches[0], bankReference: "CHS-1" }]} asOf="" rentvineAccount="pmilighthouse" />);
+    expect(within(screen.getByLabelText("batch-3")).getByText(/Chase # CHS-1/)).toBeInTheDocument();
+  });
+
   it("drills into a batch and pulls an item back out, telling you to move it back", async () => {
     const { user } = setup();
     await user.click(screen.getByLabelText("batch-3")); // expand

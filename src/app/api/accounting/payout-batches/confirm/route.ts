@@ -9,6 +9,8 @@ import { confirmPayoutBatch } from "@/lib/payout-batches";
 // Gated by the accounting feature + the per-user accounting entitlement.
 export const dynamic = "force-dynamic";
 
+const MAX_REFERENCE = 100;
+
 export async function POST(req: NextRequest) {
   if (!isFeatureEnabled("accounting")) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -18,14 +20,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { batchId?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { batchId?: unknown; bankReference?: unknown };
   const batchId = Number(body.batchId);
   if (!Number.isInteger(batchId) || batchId <= 0) {
     return NextResponse.json({ error: "Missing batchId." }, { status: 400 });
   }
+  // The bank's (Chase) transaction # for the transfer — optional.
+  const ref = typeof body.bankReference === "string" ? body.bankReference.trim() : "";
+  if (ref.length > MAX_REFERENCE) {
+    return NextResponse.json({ error: `The transaction # can be at most ${MAX_REFERENCE} characters.` }, { status: 400 });
+  }
 
   try {
-    const ok = await confirmPayoutBatch(prisma, batchId, user?.email ?? "operator");
+    const ok = await confirmPayoutBatch(prisma, batchId, user?.email ?? "operator", ref || null);
     if (!ok) {
       return NextResponse.json({ error: "That batch is already confirmed or no longer exists." }, { status: 409 });
     }
