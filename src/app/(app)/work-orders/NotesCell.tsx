@@ -2,20 +2,34 @@
 
 import type { NoteSummary } from "@/lib/work-order-notes-db";
 
-// The Notes cell on the work-order tables (Maintenance + Work Orders): the
+// The Notes cell on the work-order tables (Maintenance + Work Orders) and Bank
+// Transactions: the
 // latest note and a count, or "Add note". Clicking opens the notes panel.
-export function NotesCell({ summary, onOpen }: { summary?: NoteSummary; onOpen: () => void }) {
+export function NotesCell({
+  summary,
+  onOpen,
+  ariaLabel,
+}: {
+  summary?: NoteSummary;
+  onOpen: () => void;
+  ariaLabel?: string; // names the button (e.g. "notes-<id>") where the table needs it
+}) {
   return summary ? (
     <div className="max-w-[220px]">
       <div className="truncate text-slate-700" title={summary.latest}>
         {summary.latest}
       </div>
-      <button type="button" onClick={onOpen} className="text-xs font-medium text-brand-600 hover:underline">
+      <button type="button" onClick={onOpen} aria-label={ariaLabel} className="text-xs font-medium text-brand-600 hover:underline">
         {summary.count} note{summary.count === 1 ? "" : "s"}
       </button>
     </div>
   ) : (
-    <button type="button" onClick={onOpen} className="whitespace-nowrap text-xs font-medium text-brand-600 hover:underline">
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={ariaLabel}
+      className="whitespace-nowrap text-xs font-medium text-brand-600 hover:underline"
+    >
       Add note
     </button>
   );

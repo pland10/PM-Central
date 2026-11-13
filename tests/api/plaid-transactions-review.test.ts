@@ -40,6 +40,8 @@ describe("POST /api/plaid/transactions/:id/review", () => {
     expect(res.status).toBe(200);
     const del = sqls().find((s) => /DELETE FROM plaid_transactions/.test(s))!;
     expect(del).toMatch(/review_reason = 'pending_dropped'/);
+    // its notes thread goes with it
+    expect(sqls().some((s) => /DELETE FROM transaction_notes/.test(s))).toBe(true);
   });
 
   it("moves the edits onto the chosen posted charge, then removes the dropped one", async () => {
@@ -52,6 +54,10 @@ describe("POST /api/plaid/transactions/:id/review", () => {
     expect(all[copy]).toMatch(/t\.pending = false/); // never onto another pending row
     expect(all[copy]).toMatch(/p\.review_reason = 'pending_dropped'/);
     expect(del).toBeGreaterThan(copy);
+    // the notes thread moves to the chosen charge too, before the dropped row goes
+    const notes = all.findIndex((s) => /UPDATE transaction_notes SET transaction_id/.test(s));
+    expect(notes).toBeGreaterThan(-1);
+    expect(notes).toBeLessThan(del);
   });
 
   it("clears an amount-changed flag once someone has looked", async () => {

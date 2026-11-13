@@ -9,8 +9,9 @@ import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 // The Accounting tab's "Needs review" box (see src/lib/plaid-sync.ts):
 //   { action: "move", targetId } — an edited pending charge vanished with no
 //       posted replacement linked to it: copy its edits onto the posted charge
-//       the user picked (filling only fields still empty there), then remove it.
-//   { action: "dismiss" } — it was declined/reversed: remove it.
+//       the user picked (filling only fields still empty there), move its
+//       notes thread there too, then remove it.
+//   { action: "dismiss" } — it was declined/reversed: remove it and its notes.
 //   { action: "ok" } — edits carried over but the amount changed: looked at,
 //       clear the flag.
 export const dynamic = "force-dynamic";
@@ -41,6 +42,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tra
     } else if (action === "dismiss") {
       n = await prisma.$executeRaw(Prisma.sql`
         DELETE FROM plaid_transactions WHERE transaction_id = ${id} AND review_reason = 'pending_dropped'`);
+      // Its notes thread goes with it (only once the charge itself is gone).
+      if (n > 0) {
+        await prisma.$executeRaw(Prisma.sql`DELETE FROM transaction_notes WHERE transaction_id = ${id}`);
+      }
     } else {
       const [copied] = await prisma.$transaction([
         prisma.$executeRaw(Prisma.sql`
@@ -57,6 +62,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tra
           FROM plaid_transactions p
           WHERE t.transaction_id = ${targetId} AND t.pending = false
             AND p.transaction_id = ${id} AND p.review_reason = 'pending_dropped'`),
+        // The notes thread moves to the chosen charge too.
+        prisma.$executeRaw(Prisma.sql`
+          UPDATE transaction_notes SET transaction_id = ${targetId}
+          WHERE transaction_id = ${id}
+            AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${id} AND review_reason = 'pending_dropped')
+            AND EXISTS (SELECT 1 FROM plaid_transactions WHERE transaction_id = ${targetId} AND pending = false)`),
         prisma.$executeRaw(Prisma.sql`
           DELETE FROM plaid_transactions
           WHERE transaction_id = ${id} AND review_reason = 'pending_dropped'
