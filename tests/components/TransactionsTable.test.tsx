@@ -188,11 +188,15 @@ describe("TransactionsTable", () => {
   });
 
   describe("category search box", () => {
-    it("suggests the category list while typing", () => {
+    it("suggests the category list while typing", async () => {
+      const user = userEvent.setup();
       render(<TransactionsTable initialRows={rows} accounts={[]} categories={["Payroll", "Supplies"]} />);
       const input = screen.getByLabelText("category-t1");
-      const list = document.getElementById(input.getAttribute("list")!)!;
-      expect([...list.querySelectorAll("option")].map((o) => o.getAttribute("value"))).toEqual(["Payroll", "Supplies"]);
+      const shown = () => within(screen.getByRole("listbox", { name: "category-t1" })).getAllByRole("option").map((o) => o.textContent);
+      await user.click(input);
+      expect(shown()).toEqual(["Payroll", "Supplies"]);
+      await user.type(input, "sup");
+      expect(shown()).toEqual(["Supplies"]);
     });
 
     it("shows the server's reason and reverts when a category is refused", async () => {
@@ -274,15 +278,18 @@ describe("TransactionsTable", () => {
       return { user };
     };
 
-    it("suggests existing properties and units while typing", () => {
-      renderWith();
+    it("suggests existing properties and units while typing", async () => {
+      const { user } = renderWith();
       const input = screen.getByLabelText("property-t1");
-      const list = document.getElementById(input.getAttribute("list")!)!;
-      expect([...list.querySelectorAll("option")].map((o) => o.getAttribute("value"))).toEqual([
+      const shown = () => within(screen.getByRole("listbox", { name: "property-t1" })).getAllByRole("option").map((o) => o.textContent);
+      await user.click(input);
+      expect(shown()).toEqual([
         "66 Francis Court · Elmont",
         "8204 138th Street · Jamaica",
         "8204 138th Street · Jamaica — Unit 2",
       ]);
+      await user.type(input, "jamaica 2");
+      expect(shown()).toEqual(["8204 138th Street · Jamaica — Unit 2"]);
     });
 
     it("shows the linked property, or property and unit", () => {
