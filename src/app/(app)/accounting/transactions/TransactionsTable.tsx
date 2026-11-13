@@ -473,6 +473,9 @@ export function TransactionsTable({
         header: "Merchant",
         sortable: true,
         sortValue: (r) => r.merchantName.toLowerCase(),
+        exportValue: (r) => r.merchantName,
+        // Matches the merchant or the raw bank description.
+        filter: { type: "text", value: (r) => `${r.merchantName} ${r.name}` },
         render: (r) => (
           // Raw bank descriptions can be very long; wrap them in a narrow
           // column instead of pushing the editable columns off screen.
@@ -573,6 +576,7 @@ export function TransactionsTable({
         sortable: true,
         sortValue: (r) => r.categoryOverride.toLowerCase(),
         exportValue: (r) => r.categoryOverride,
+        filter: { type: "select", value: (r) => r.categoryOverride || "(none)" },
         render: (r) => (
           <input
             key={`cat-${rowIdOf(r)}-${r.categoryOverride}`}
@@ -678,6 +682,7 @@ export function TransactionsTable({
       {
         key: "notes",
         header: "Notes",
+        filter: { type: "text", value: (r) => notes[r.transactionId]?.latest ?? "" },
         sortValue: (r) => notes[r.transactionId]?.latestAt ?? "",
         exportValue: (r) => notes[r.transactionId]?.latest ?? "",
         render: (r) => (
