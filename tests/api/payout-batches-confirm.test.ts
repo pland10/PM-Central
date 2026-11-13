@@ -27,7 +27,17 @@ describe("POST /api/accounting/payout-batches/confirm", () => {
     const res = await post({ batchId: 7 });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, batchId: 7 });
-    expect(confirm).toHaveBeenCalledWith({}, 7, "admin@pmi.com");
+    expect(confirm).toHaveBeenCalledWith({}, 7, "admin@pmi.com", null);
+  });
+
+  it("passes the Chase transaction number along, trimmed", async () => {
+    await post({ batchId: 7, bankReference: "  CHS-881234 " });
+    expect(confirm).toHaveBeenCalledWith({}, 7, "admin@pmi.com", "CHS-881234");
+  });
+
+  it("400s on a transaction number that's too long", async () => {
+    expect((await post({ batchId: 7, bankReference: "x".repeat(101) })).status).toBe(400);
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it("400s without a batchId, 409 when already confirmed / gone", async () => {

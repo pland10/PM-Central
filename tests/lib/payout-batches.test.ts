@@ -125,6 +125,23 @@ describe("confirmPayoutBatch", () => {
     executeRaw.mockResolvedValue(0);
     expect(await confirmPayoutBatch(prisma, 7, "admin@pmi.com")).toBe(false);
   });
+
+  it("saves the bank's transaction number with the confirmation", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const prisma = { $executeRaw: executeRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0) } as unknown as PrismaClient;
+    await confirmPayoutBatch(prisma, 7, "admin@pmi.com", "CHS-881234");
+    const q = executeRaw.mock.calls[0][0] as { values: unknown[] };
+    expect(sqlOf(q)).toMatch(/bank_reference = /);
+    expect(q.values).toContain("CHS-881234");
+  });
+
+  it("adds the bank_reference column for tables created before it", async () => {
+    vi.resetModules();
+    const { ensurePayoutBatchTables } = await import("@/lib/payout-batches");
+    const unsafe = vi.fn().mockResolvedValue(0);
+    await ensurePayoutBatchTables({ $executeRawUnsafe: unsafe } as unknown as PrismaClient);
+    expect(unsafe.mock.calls.map((c) => c[0]).join("\n")).toMatch(/ADD COLUMN IF NOT EXISTS bank_reference TEXT/);
+  });
 });
 
 describe("removeBatchItem", () => {

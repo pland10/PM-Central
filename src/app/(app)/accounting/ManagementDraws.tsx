@@ -46,6 +46,7 @@ export function ManagementDraws({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmedMsg, setConfirmedMsg] = useState("");
+  const [bankRef, setBankRef] = useState(""); // Chase transaction # for the pending batch's transfer
   const [error, setError] = useState("");
   const [undo, setUndo] = useState<{ amount: number; bankAccount: string; batchId: number } | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -186,22 +187,27 @@ export function ManagementDraws({
   async function confirmMoved(batchId: number) {
     setError("");
     setUndo(null);
+    const bankReference = bankRef.trim();
     // Unlock immediately (the save can take a few seconds against a cold DB);
     // revert if it actually fails.
-    setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: true, confirmedAt: new Date().toISOString() } : b)));
+    setBatches((prev) =>
+      prev.map((b) => (b.id === batchId ? { ...b, confirmed: true, confirmedAt: new Date().toISOString(), bankReference } : b))
+    );
     setConfirmedMsg(`✓ Batch #${batchId} confirmed — the screen is unlocked.`);
+    setBankRef("");
     try {
       const res = await fetch("/api/accounting/payout-batches/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batchId }),
+        body: JSON.stringify({ batchId, bankReference }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(`${typeof data?.error === "string" ? data.error : "Couldn't confirm"} (${res.status})`);
       }
     } catch (e) {
-      setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: false, confirmedAt: null } : b)));
+      setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, confirmed: false, confirmedAt: null, bankReference: "" } : b)));
+      setBankRef(bankReference);
       setConfirmedMsg("");
       setError(e instanceof Error ? e.message : "Couldn't confirm — try again.");
     }
@@ -238,6 +244,17 @@ export function ManagementDraws({
             ))}
           </ul>
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              aria-label="Chase transaction #"
+              value={bankRef}
+              maxLength={100}
+              onChange={(e) => setBankRef(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmMoved(pending.id);
+              }}
+              placeholder="Chase transaction #"
+              className="w-48 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-emerald-500"
+            />
             <button
               type="button"
               onClick={() => confirmMoved(pending.id)}
@@ -375,6 +392,7 @@ export function ManagementDraws({
                     <span className="font-medium text-slate-700">#{b.id}</span>
                     <span className="text-slate-500">{fmtDate(b.createdAt)}</span>
                     {b.note && <span className="truncate text-slate-500">— {b.note}</span>}
+                    {b.bankReference && <span className="whitespace-nowrap text-xs text-slate-500">Chase # {b.bankReference}</span>}
                     <span className="ml-auto whitespace-nowrap text-slate-500">{b.count} payment{b.count === 1 ? "" : "s"}</span>
                     <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrencyCents(b.total)}</span>
                   </button>
