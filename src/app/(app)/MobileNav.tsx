@@ -137,6 +137,27 @@ export function MobileNav({
 
               {isAdmin && (
                 <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+                  <Link
+                    href="/management"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <NavIcon
+                      icon={
+                        <>
+                          <path d="M3 3v18h18" />
+                          <rect x="7" y="12" width="3" height="6" rx="0.5" />
+                          <rect x="12" y="8" width="3" height="10" rx="0.5" />
+                          <rect x="17" y="4" width="3" height="14" rx="0.5" />
+                        </>
+                      }
+                    />
+                    Management
+                  </Link>
+                </div>
+              )}
+              {isAdmin && (
+                <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
                   <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                     Admin
                   </div>

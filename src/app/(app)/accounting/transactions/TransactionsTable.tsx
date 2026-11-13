@@ -491,7 +491,7 @@ export function TransactionsTable({
         sortable: true,
         sortValue: (r) => propertyLabel(r).toLowerCase(),
         exportValue: (r) => propertyLabel(r),
-        filter: { type: "select", value: (r) => propertyLabel(r) },
+        filter: { type: "select", value: (r) => propertyLabel(r) || "(none)" },
         render: (r) => {
           const current = propertyLabel(r);
           return (
@@ -655,6 +655,10 @@ export function TransactionsTable({
             type="checkbox"
             aria-label={`rentvine-${rowIdOf(r)}`}
             checked={r.recordedRentvine}
+            // Not reimbursable = nothing to charge the owner in Rentvine. A box
+            // ticked before it was marked "no" stays clickable so it can be cleared.
+            disabled={r.reimbursable === "no" && !r.recordedRentvine}
+            title={r.reimbursable === "no" ? "Not reimbursable — nothing to charge in Rentvine" : undefined}
             onChange={(e) => save(rowIdOf(r), { recordedRentvine: e.target.checked })}
             className="h-4 w-4 accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           />
