@@ -10,6 +10,9 @@ import { IdleLogout } from "@/components/IdleLogout";
 import { MobileNav, type MobileNavSection } from "./MobileNav";
 import { SidebarFooter } from "@/components/SidebarFooter";
 import { appVersion } from "@/config/version";
+import { PmCentralMark, PM_CENTRAL_NAME } from "@/components/PmCentralMark";
+import { PageTitle } from "@/components/PageTitle";
+import { initialsOf } from "@/lib/header";
 
 // Orange icons live next to each item. Paths are Lucide-style (24x24 stroke);
 // color comes from the brand config so a re-skin recolors them automatically.
@@ -248,6 +251,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const canSee = (feature: FeatureKey) =>
     isFeatureEnabled(feature) && (feature !== "accounting" || canAccessAccounting(user));
 
+  // Names for the top bar's "/ Page" (menu items + the admin pages).
+  const pageLinks = [
+    ...nav.filter((n) => canSee(n.feature)).map((n) => ({ href: n.href, label: n.label })),
+    { href: "/admin/data", label: "Data sources" },
+    { href: "/admin/transaction-filters", label: "Transaction filters" },
+    { href: "/admin/transaction-categories", label: "Transaction categories" },
+    { href: "/admin/preventive", label: "Preventive maintenance" },
+    { href: "/admin/reminder-template", label: "Rent reminder email" },
+  ];
+
   // Same visible nav the desktop sidebar renders, flattened for the mobile drawer.
   const mobileSections = navLayout
     .map((entry): MobileNavSection | null => {
@@ -431,21 +444,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* Top bar: dark like the sidebar so the app reads as one frame (the
+            env indicator still recolors it on dev/staging). Left: the product
+            mark + name and the current page; right: who's signed in. */}
         <header
           className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-6"
           style={
             ENV_INDICATOR
               ? { backgroundColor: ENV_INDICATOR.bg, borderColor: ENV_INDICATOR.bg }
-              : { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+              : { backgroundColor: BRAND.colors.ink, borderColor: "rgba(255,255,255,0.10)" }
           }
         >
-          <div className="flex items-center gap-3">
-            <MobileNav
-              sections={mobileSections}
-              isAdmin={user?.role === "admin"}
-              version={appVersion()}
-              light={!!ENV_INDICATOR}
-            />
+          <div className="flex min-w-0 items-center gap-3">
+            <MobileNav sections={mobileSections} isAdmin={user?.role === "admin"} version={appVersion()} light />
             {ENV_INDICATOR && (
               <span
                 className="rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider"
@@ -454,41 +465,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 {ENV_INDICATOR.label}
               </span>
             )}
-            {/* Hidden on phones so the user's name and Sign out fit the bar. */}
-            <span
-              className={`hidden sm:inline ${ENV_INDICATOR ? "text-sm text-white/90" : "text-sm text-slate-500"}`}
-            >
-              {BRAND.tagline}
-            </span>
+            <Link href="/" className="flex shrink-0 items-center gap-2" aria-label={`${PM_CENTRAL_NAME} home`}>
+              <PmCentralMark size={28} decorative houseColor="#FFFFFF" />
+              {/* Hidden on phones so the user's name and Sign out fit the bar. */}
+              <span className="hidden text-[17px] tracking-tight text-white sm:inline">
+                <span className="font-bold">PM</span> Central
+              </span>
+            </Link>
+            <div className="hidden min-w-0 items-center gap-2 md:flex">
+              <PageTitle pages={pageLinks} />
+            </div>
           </div>
           {user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3">
               <div className="text-right leading-tight">
-                <div
-                  className={`text-sm font-medium ${
-                    ENV_INDICATOR ? "text-white" : "text-slate-700"
-                  }`}
-                >
-                  {user.name}
-                </div>
+                <div className="text-sm font-medium text-white">{user.name}</div>
                 {user.role !== "user" && (
-                  <div
-                    className={`text-[11px] uppercase tracking-wide ${
-                      ENV_INDICATOR ? "text-white/80" : "text-slate-400"
-                    }`}
-                  >
-                    {user.role}
-                  </div>
+                  <div className="text-[11px] uppercase tracking-wide text-white/60">{user.role}</div>
                 )}
               </div>
-              <SignOutButton />
+              <div
+                className="hidden h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[13px] font-semibold text-white sm:flex"
+                aria-hidden="true"
+              >
+                {initialsOf(user.name ?? user.email ?? "")}
+              </div>
+              <SignOutButton dark />
             </div>
           ) : (
-            <div
-              className={`text-sm font-medium ${ENV_INDICATOR ? "text-white" : "text-slate-700"}`}
-            >
-              pland10
-            </div>
+            <div className="text-sm font-medium text-white">pland10</div>
           )}
         </header>
         {/* Padding lives inside the scroller (not on it) so sticky table headers
