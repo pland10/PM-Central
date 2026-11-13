@@ -783,4 +783,44 @@ describe("TransactionsTable — column filters", () => {
     expect(merchants()).toHaveLength(1);
     expect(merchants()[0]).toMatch(/Lowe's/);
   });
+
+  it("filters by property, including charges with no property yet", async () => {
+    const user = userEvent.setup();
+    const properties = [{ label: "66 Francis Court · Elmont", propertyId: "p1", unitId: null }];
+    render(
+      <TransactionsTable initialRows={[{ ...rows[0], propertyId: "p1" }, rows[1]]} accounts={[]} properties={properties} />
+    );
+    await user.click(filterBtn(/^property/i));
+    await user.click(screen.getByRole("button", { name: "(none)" }));
+    expect(merchants()).toHaveLength(1);
+    expect(merchants()[0]).toMatch(/Lowe's/);
+
+    await user.click(screen.getByRole("button", { name: /\(none\)$/ })); // untick (now "✓(none)")
+    await user.click(screen.getByRole("button", { name: "66 Francis Court · Elmont" }));
+    expect(merchants()).toHaveLength(1);
+    expect(merchants()[0]).not.toMatch(/Lowe's/);
+  });
+});
+
+describe("TransactionsTable — In Rentvine vs reimbursable", () => {
+  it("disables the In Rentvine box when the charge isn't reimbursable", () => {
+    render(
+      <TransactionsTable
+        initialRows={[
+          { ...rows[0], reimbursable: "no" },
+          { ...rows[1], reimbursable: "yes" },
+        ]}
+        accounts={[]}
+      />
+    );
+    const no = screen.getByLabelText(`rentvine-${rows[0].transactionId}`);
+    expect(no).toBeDisabled();
+    expect(no).toHaveAttribute("title", expect.stringMatching(/not reimbursable/i));
+    expect(screen.getByLabelText(`rentvine-${rows[1].transactionId}`)).toBeEnabled();
+  });
+
+  it("still lets you untick a box that was ticked before it was marked not reimbursable", () => {
+    render(<TransactionsTable initialRows={[{ ...rows[0], reimbursable: "no", recordedRentvine: true }]} accounts={[]} />);
+    expect(screen.getByLabelText(`rentvine-${rows[0].transactionId}`)).toBeEnabled();
+  });
 });
