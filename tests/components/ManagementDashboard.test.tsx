@@ -42,7 +42,7 @@ const data: ManagementKpis = {
   accounting: {
     archivedByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 5 }],
     archivedThisWeek: 5,
-    recorded: { total: 40, both: 25, qbOnly: 6, rvOnly: 4, neither: 5 },
+    recorded: { total: 40, both: 25, qbOnly: 6, rvOnly: 4, neither: 5, notInRentvine: 7 },
   },
   collections: {
     headline: { collectedThisWeek: 48250, pendingTotal: 3100, returnedThisWeek: 1, returnedTotalWindow: 3 },
@@ -95,9 +95,10 @@ describe("ManagementDashboard", () => {
 
   it("derives Not-in-QuickBooks / Not-in-Rentvine from the recorded breakdown", () => {
     render(<ManagementDashboard data={data} />);
-    // not in QB = rvOnly(4) + neither(5) = 9; not in RV = qbOnly(6) + neither(5) = 11
+    // not in QB = rvOnly(4) + neither(5) = 9. Not in RV comes from the loader's
+    // notInRentvine (7), which excludes not-reimbursable rows — not qbOnly + neither (11).
     expect(within(screen.getByText("Not in QuickBooks").parentElement!).getByText("9")).toBeInTheDocument();
-    expect(within(screen.getByText("Not in Rentvine").parentElement!).getByText("11")).toBeInTheDocument();
+    expect(within(screen.getByText("Not in Rentvine").parentElement!).getByText("7")).toBeInTheDocument();
     expect(within(screen.getByText("Archived this week").parentElement!).getByText("5")).toBeInTheDocument();
   });
 
