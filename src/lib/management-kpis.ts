@@ -189,6 +189,70 @@ export type CollectionsHeadline = {
   returnedTotalWindow: number; // # returned across the loaded window
 };
 
+// ---- Portfolio & Leasing (bundle D) ----
+
+// Generic "count timestamps per week" for simple event series (inspections,
+// showings), aligned + 0-filled to the recent window.
+export function countByWeek(dates: (string | null)[], weeks: number, now: Date): CountWeekPoint[] {
+  const counts = tallyByWeek(dates, weeks, now);
+  return recentWeekStarts(now, weeks).map((week) => ({ week, label: weekLabel(week), count: counts.get(week) ?? 0 }));
+}
+
+export type Occupancy = { total: number; occupied: number; vacant: number; unavailable: number; occupancyPct: number };
+
+// Occupancy from unit statuses. The percentage is of rentable units
+// (occupied + vacant), so off-market "unavailable" units don't drag it down.
+export function occupancy(statuses: string[]): Occupancy {
+  let occupied = 0;
+  let vacant = 0;
+  let unavailable = 0;
+  for (const s of statuses) {
+    if (s === "occupied") occupied++;
+    else if (s === "unavailable") unavailable++;
+    else vacant++; // default status is vacant
+  }
+  const rentable = occupied + vacant;
+  return {
+    total: statuses.length,
+    occupied,
+    vacant,
+    unavailable,
+    occupancyPct: rentable > 0 ? Math.round((occupied / rentable) * 100) : 0,
+  };
+}
+
+export type LeaseTerm = { unitId: string; startDate: string | null; endDate: string | null };
+
+// Median days a unit sat between leases (prior lease end → next lease start),
+// over leases that STARTED within the last `sinceDays`. Overlaps/renewals count
+// as 0 (filled immediately). null when none qualify. This is "time to fill".
+export function medianDaysToFill(leases: LeaseTerm[], sinceDays: number, now: Date): number | null {
+  const cutoff = now.getTime() - sinceDays * DAY;
+  const byUnit = new Map<string, LeaseTerm[]>();
+  for (const l of leases) {
+    if (!l.unitId || !l.startDate) continue;
+    const list = byUnit.get(l.unitId);
+    if (list) list.push(l);
+    else byUnit.set(l.unitId, [l]);
+  }
+  const gaps: number[] = [];
+  for (const list of byUnit.values()) {
+    const sorted = list.slice().sort((a, b) => Date.parse(a.startDate!) - Date.parse(b.startDate!));
+    for (let i = 1; i < sorted.length; i++) {
+      const start = Date.parse(sorted[i].startDate!);
+      const prevEnd = sorted[i - 1].endDate ? Date.parse(sorted[i - 1].endDate!) : NaN;
+      if (Number.isNaN(start) || Number.isNaN(prevEnd) || start < cutoff) continue;
+      const gap = (start - prevEnd) / DAY;
+      gaps.push(gap < 0 ? 0 : gap);
+    }
+  }
+  if (gaps.length === 0) return null;
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  const median = gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+  return Math.round(median * 10) / 10;
+}
+
 export function collectionsHeadline(payments: PaymentRow[], now: Date): CollectionsHeadline {
   const thisWeek = weekStart(now);
   const inThisWeek = (d: string | null) => !!d && !Number.isNaN(Date.parse(d)) && weekStart(new Date(Date.parse(d))) === thisWeek;

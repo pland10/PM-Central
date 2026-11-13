@@ -4,7 +4,10 @@ import {
   archivedByWeek,
   backlogByStage,
   collectionsHeadline,
+  countByWeek,
   medianDaysToClose,
+  medianDaysToFill,
+  occupancy,
   openedClosedByWeek,
   preventiveSplit,
   recentWeekStarts,
@@ -12,6 +15,7 @@ import {
   returnsByWeek,
   weekStart,
   workOrderHeadline,
+  type LeaseTerm,
   type PaymentRow,
 } from "@/lib/management-kpis";
 
@@ -176,5 +180,43 @@ describe("collections (rent)", () => {
       returnedThisWeek: 1,
       returnedTotalWindow: 1,
     });
+  });
+});
+
+describe("portfolio & leasing", () => {
+  it("computes occupancy of rentable units (unavailable excluded from %)", () => {
+    expect(occupancy(["occupied", "occupied", "vacant", "unavailable"])).toEqual({
+      total: 4,
+      occupied: 2,
+      vacant: 1,
+      unavailable: 1,
+      occupancyPct: 67, // 2 of (2 occupied + 1 vacant)
+    });
+  });
+
+  it("counts simple event series per week", () => {
+    const series = countByWeek(["2026-11-10T00:00:00Z", "2026-11-11T00:00:00Z", "2026-11-03T00:00:00Z"], 3, NOW);
+    expect(series.find((p) => p.week === "2026-11-09")?.count).toBe(2);
+    expect(series.find((p) => p.week === "2026-11-02")?.count).toBe(1);
+  });
+
+  it("medianDaysToFill is the median gap between consecutive leases on a unit", () => {
+    const leases: LeaseTerm[] = [
+      { unitId: "A", startDate: "2026-07-01", endDate: "2026-10-01" },
+      { unitId: "A", startDate: "2026-10-11", endDate: null }, // gap 10 days
+      { unitId: "B", startDate: "2026-07-01", endDate: "2026-10-20" },
+      { unitId: "B", startDate: "2026-10-25", endDate: null }, // gap 5 days
+      { unitId: "C", startDate: "2026-08-01", endDate: "2026-11-05" },
+      { unitId: "C", startDate: "2026-11-03", endDate: null }, // overlap → 0
+    ];
+    expect(medianDaysToFill(leases, 180, NOW)).toBe(5); // median of [0, 5, 10]
+  });
+
+  it("returns null when no unit was re-leased in the window", () => {
+    const leases: LeaseTerm[] = [
+      { unitId: "A", startDate: "2025-01-01", endDate: "2025-12-31" },
+      { unitId: "A", startDate: "2026-01-05", endDate: null }, // started long before the window
+    ];
+    expect(medianDaysToFill(leases, 90, NOW)).toBeNull();
   });
 });

@@ -231,6 +231,55 @@ export function ManagementDashboard({ data }: { data: ManagementKpis }) {
           </ChartCard>
         </div>
       </section>
+
+      {/* ---- Portfolio & Leasing ---- */}
+      <section>
+        <SectionTitle>Portfolio &amp; Leasing</SectionTitle>
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Tile label="Occupancy" value={`${data.leasing.occupancy.occupancyPct}%`} tone="emerald" hint={`${data.leasing.occupancy.occupied} of ${data.leasing.occupancy.occupied + data.leasing.occupancy.vacant} rentable`} />
+          <Tile label="Active leases" value={data.leasing.activeLeases} />
+          <Tile label="Vacant units" value={data.leasing.occupancy.vacant} tone={data.leasing.occupancy.vacant > 0 ? "amber" : "slate"} />
+          <Tile
+            label="Median days to fill"
+            value={data.leasing.medianDaysToFill ?? "—"}
+            hint="turnaround, last 180 days"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ChartCard title="Inspections completed" subtitle={`Per week · last ${data.weeks} weeks`}>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={data.leasing.inspectionsByWeek} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={C.grid} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} width={32} />
+                  <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                  <Bar dataKey="count" name="Completed" fill={C.violet} radius={[3, 3, 0, 0]}>
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#334155" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+
+          <ChartCard title="Showings" subtitle={`Per week · last ${data.weeks} weeks`}>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={data.leasing.showingsByWeek} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={C.grid} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} width={32} />
+                  <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                  <Bar dataKey="count" name="Showings" fill={C.blue} radius={[3, 3, 0, 0]}>
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#334155" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+      </section>
     </div>
   );
 }

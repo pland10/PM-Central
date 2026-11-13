@@ -49,6 +49,14 @@ const data: ManagementKpis = {
     collectedByWeek: [{ week: "2026-11-09", label: "Nov 9", amount: 48250 }],
     returnsByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 1 }],
   },
+  leasing: {
+    occupancy: { total: 48, occupied: 44, vacant: 3, unavailable: 1, occupancyPct: 94 },
+    activeLeases: 34,
+    medianDaysToFill: 18,
+    inspectionsByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 7 }],
+    inspectionsThisWeek: 7,
+    showingsByWeek: [{ week: "2026-11-09", label: "Nov 9", count: 12 }],
+  },
 };
 
 describe("ManagementDashboard", () => {
@@ -57,6 +65,16 @@ describe("ManagementDashboard", () => {
     expect(screen.getByText("Collections & Rent")).toBeInTheDocument();
     expect(screen.getByText("Work Orders")).toBeInTheDocument();
     expect(screen.getByText("Accounting Ops")).toBeInTheDocument();
+    expect(screen.getByText("Portfolio & Leasing")).toBeInTheDocument();
+  });
+
+  it("shows leasing tiles (occupancy, active leases, time-to-fill) and charts", () => {
+    render(<ManagementDashboard data={data} />);
+    expect(within(screen.getByText("Occupancy").parentElement!).getByText("94%")).toBeInTheDocument();
+    expect(within(screen.getByText("Active leases").parentElement!).getByText("34")).toBeInTheDocument();
+    expect(within(screen.getByText("Median days to fill").parentElement!).getByText("18")).toBeInTheDocument();
+    expect(screen.getByText("Inspections completed")).toBeInTheDocument();
+    expect(screen.getByText("Showings")).toBeInTheDocument();
   });
 
   it("shows collections tiles with formatted money and chart cards", () => {
