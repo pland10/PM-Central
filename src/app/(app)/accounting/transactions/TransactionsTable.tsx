@@ -13,6 +13,7 @@ import { summarizeTransactions, type AnnotationPatch, type Reimbursable } from "
 import type { NoteSummary } from "@/lib/work-order-notes-db";
 import { NotesCell } from "../../work-orders/NotesCell";
 import { NotesPanel } from "@/components/NotesPanel";
+import { Combobox } from "@/components/Combobox";
 import { expandSplitRows, parseRowId, rowIdOf } from "@/lib/transaction-splits";
 import { SplitEditor, type EditorLine } from "./SplitEditor";
 
@@ -435,6 +436,7 @@ export function TransactionsTable({
     }
     return { byKey, byLabel, byRvId };
   }, [properties]);
+  const propertyLabels = useMemo(() => properties.map((c) => c.label), [properties]);
   const propertyLabel = useCallback(
     (r: Pick<TxnRow, "propertyId" | "unitId">) => {
       if (!r.propertyId) return "";
@@ -495,15 +497,14 @@ export function TransactionsTable({
         render: (r) => {
           const current = propertyLabel(r);
           return (
-            <input
+            <CellCombobox
               key={`prop-${rowIdOf(r)}-${r.propertyId ?? ""}-${r.unitId ?? ""}`}
-              aria-label={`property-${rowIdOf(r)}`}
-              onKeyDown={blurOnEnter}
-              defaultValue={current}
-              list={PROPERTY_LIST_ID}
-              placeholder="Search…"
-              onBlur={(e) => {
-                const v = e.target.value.trim();
+              ariaLabel={`property-${rowIdOf(r)}`}
+              initial={current}
+              options={propertyLabels}
+              strict
+              onCommit={(raw) => {
+                const v = raw.trim();
                 if (v === current) return;
                 if (!v) {
                   if (r.propertyId) save(rowIdOf(r), { propertyId: null, unitId: null });
@@ -511,15 +512,14 @@ export function TransactionsTable({
                 }
                 const choice = propertyLookup.byLabel.get(v.toLowerCase());
                 if (!choice) {
-                  e.target.value = current;
                   setError(`“${v}” isn't one of your properties — pick a property from the list.`);
-                  return;
+                  return current; // put the box back
                 }
                 if (choice.propertyId !== r.propertyId || choice.unitId !== r.unitId) {
                   save(rowIdOf(r), { propertyId: choice.propertyId, unitId: choice.unitId });
                 }
               }}
-              className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="w-48 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
             />
           );
         },
@@ -578,18 +578,16 @@ export function TransactionsTable({
         exportValue: (r) => r.categoryOverride,
         filter: { type: "select", value: (r) => r.categoryOverride || "(none)" },
         render: (r) => (
-          <input
+          <CellCombobox
             key={`cat-${rowIdOf(r)}-${r.categoryOverride}`}
-            aria-label={`category-${rowIdOf(r)}`}
-            onKeyDown={blurOnEnter}
-            defaultValue={r.categoryOverride}
-            list={CATEGORY_LIST_ID}
-            placeholder="Search…"
-            onBlur={(e) => {
-              const v = e.target.value.trim();
+            ariaLabel={`category-${rowIdOf(r)}`}
+            initial={r.categoryOverride}
+            options={categories}
+            onCommit={(raw) => {
+              const v = raw.trim();
               if (v !== r.categoryOverride) save(rowIdOf(r), { categoryOverride: v });
             }}
-            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
           />
         ),
       },
@@ -738,7 +736,7 @@ export function TransactionsTable({
           ),
       },
     ],
-    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, rentvineBillUrl, notes]
+    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, propertyLabels, categories, rentvineBillUrl, notes]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
@@ -923,20 +921,6 @@ export function TransactionsTable({
         )}
       </div>
 
-      {/* Suggestions for every Property box: existing properties only. */}
-      <datalist id={PROPERTY_LIST_ID}>
-        {properties.map((c) => (
-          <option key={c.label} value={c.label} />
-        ))}
-      </datalist>
-
-      {/* Suggestions for every "Category (yours)" box, shared by all rows. */}
-      <datalist id={CATEGORY_LIST_ID}>
-        {categories.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
-
       {reviewing && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span>
@@ -1015,8 +999,8 @@ export function TransactionsTable({
           isSplit={!!splitFor.split}
           initialLines={editorLinesFor(splitFor)}
           resolveProperty={(label) => propertyLookup.byLabel.get(label.toLowerCase()) ?? null}
-          propertyListId={PROPERTY_LIST_ID}
-          categoryListId={CATEGORY_LIST_ID}
+          propertyOptions={propertyLabels}
+          categoryOptions={categories}
           onClose={() => setSplitFor(null)}
           onSaved={(lines) => {
             replaceCharge(splitFor.transactionId, (header) => expandSplitRows([header], { [header.transactionId]: lines }));
@@ -1059,12 +1043,41 @@ export function TransactionsTable({
   );
 }
 
-const CATEGORY_LIST_ID = "txn-category-options";
-const PROPERTY_LIST_ID = "txn-property-options";
 
 // Enter saves a text box: blurring it runs the same onBlur save as clicking away.
-function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-  if (e.key === "Enter") e.currentTarget.blur();
+// A table cell's type-ahead box. Holds its own text; `onCommit` runs once per
+// change (pick / Enter / blur) and can return a value to put the box back to
+// (e.g. an unknown property), which remounts it.
+function CellCombobox({
+  initial,
+  onCommit,
+  ...rest
+}: {
+  initial: string;
+  options: string[];
+  onCommit: (v: string) => string | void;
+  ariaLabel: string;
+  strict?: boolean;
+  className?: string;
+}) {
+  const [value, setValue] = useState(initial);
+  const [gen, setGen] = useState(0);
+  return (
+    <Combobox
+      key={gen}
+      {...rest}
+      placeholder="Search…"
+      value={value}
+      onChange={setValue}
+      onCommit={(v) => {
+        const reset = onCommit(v);
+        if (typeof reset === "string") {
+          setValue(reset);
+          setGen((g) => g + 1);
+        }
+      }}
+    />
+  );
 }
 
 const BTN =

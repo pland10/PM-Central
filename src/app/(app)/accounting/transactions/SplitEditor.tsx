@@ -6,6 +6,7 @@ import { formatCurrencyCents } from "@/lib/format";
 import type { PropertyChoice } from "@/lib/property-options";
 import type { Reimbursable } from "@/lib/transactions-view";
 import type { SplitLine, StoredSplitLine } from "@/lib/transaction-splits";
+import { Combobox } from "@/components/Combobox";
 
 // Split one bank/card charge into lines (like a GL entry): each line gets its
 // own amount, property/unit, category and reimbursable flag; the lines must add
@@ -32,8 +33,8 @@ export function SplitEditor({
   initialLines,
   isSplit,
   resolveProperty,
-  propertyListId,
-  categoryListId,
+  propertyOptions,
+  categoryOptions,
   onClose,
   onSaved,
   onUnsplit,
@@ -42,8 +43,8 @@ export function SplitEditor({
   initialLines: EditorLine[];
   isSplit: boolean;
   resolveProperty: (label: string) => PropertyChoice | null;
-  propertyListId: string; // the page's property <datalist>
-  categoryListId: string; // the page's category <datalist>
+  propertyOptions: string[]; // property / unit labels to pick from
+  categoryOptions: string[]; // category suggestions (free text allowed)
   onClose: () => void;
   onSaved: (lines: StoredSplitLine[]) => void;
   onUnsplit: (header: Partial<SplitLine>) => void;
@@ -168,21 +169,22 @@ export function SplitEditor({
               onChange={(e) => set(i, { amount: e.target.value })}
               className={`${input} text-right tabular-nums`}
             />
-            <input
-              aria-label={`split-property-${i + 1}`}
+            <Combobox
+              ariaLabel={`split-property-${i + 1}`}
               value={l.property}
-              list={propertyListId}
+              options={propertyOptions}
+              strict
               placeholder="Property…"
-              onChange={(e) => set(i, { property: e.target.value })}
-              className={input}
+              onChange={(v) => set(i, { property: v })}
+              className={`${input} w-full`}
             />
-            <input
-              aria-label={`split-category-${i + 1}`}
+            <Combobox
+              ariaLabel={`split-category-${i + 1}`}
               value={l.categoryOverride}
-              list={categoryListId}
+              options={categoryOptions}
               placeholder="Category…"
-              onChange={(e) => set(i, { categoryOverride: e.target.value })}
-              className={input}
+              onChange={(v) => set(i, { categoryOverride: v })}
+              className={`${input} w-full`}
             />
             <select
               aria-label={`split-reimbursable-${i + 1}`}
