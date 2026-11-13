@@ -6,6 +6,9 @@ import {
   archivedByWeek,
   backlogByStage,
   collectionsHeadline,
+  countByWeek,
+  medianDaysToFill,
+  occupancy,
   openedClosedByWeek,
   preventiveSplit,
   recentWeekStarts,
@@ -15,7 +18,9 @@ import {
   type ArchivePoint,
   type CollectionsHeadline,
   type CountWeekPoint,
+  type LeaseTerm,
   type MoneyWeekPoint,
+  type Occupancy,
   type PaymentRow,
   type StageCount,
   type WeekPoint,
@@ -52,6 +57,14 @@ export type ManagementKpis = {
     headline: CollectionsHeadline;
     collectedByWeek: MoneyWeekPoint[];
     returnsByWeek: CountWeekPoint[];
+  };
+  leasing: {
+    occupancy: Occupancy;
+    activeLeases: number;
+    medianDaysToFill: number | null;
+    inspectionsByWeek: CountWeekPoint[];
+    inspectionsThisWeek: number;
+    showingsByWeek: CountWeekPoint[];
   };
 };
 
@@ -131,11 +144,51 @@ async function fetchCollections(
   }
 }
 
+type LeasingData = ManagementKpis["leasing"];
+
+async function fetchLeasing(weeks: number, now: Date): Promise<LeasingData> {
+  const empty: LeasingData = {
+    occupancy: occupancy([]),
+    activeLeases: 0,
+    medianDaysToFill: null,
+    inspectionsByWeek: countByWeek([], weeks, now),
+    inspectionsThisWeek: 0,
+    showingsByWeek: countByWeek([], weeks, now),
+  };
+  try {
+    const cutoff = new Date(recentWeekStarts(now, weeks)[0] + "T00:00:00Z");
+    const [units, activeLeases, leaseRows, inspections, showings] = await Promise.all([
+      prisma.unit.findMany({ select: { status: true } }),
+      prisma.lease.count({ where: { status: "active" } }),
+      prisma.lease.findMany({ select: { unitId: true, startDate: true, endDate: true } }),
+      prisma.inspection.findMany({ where: { completedAt: { gte: cutoff } }, select: { completedAt: true } }),
+      prisma.showing.findMany({ where: { startTime: { gte: cutoff } }, select: { startTime: true } }),
+    ]);
+    const terms: LeaseTerm[] = leaseRows.map((l) => ({
+      unitId: l.unitId,
+      startDate: l.startDate ? l.startDate.toISOString() : null,
+      endDate: l.endDate ? l.endDate.toISOString() : null,
+    }));
+    const inspectionsByWeek = countByWeek(inspections.map((i) => i.completedAt?.toISOString() ?? null), weeks, now);
+    return {
+      occupancy: occupancy(units.map((u) => u.status)),
+      activeLeases,
+      medianDaysToFill: medianDaysToFill(terms, 180, now),
+      inspectionsByWeek,
+      inspectionsThisWeek: inspectionsByWeek.length ? inspectionsByWeek[inspectionsByWeek.length - 1].count : 0,
+      showingsByWeek: countByWeek(showings.map((s) => s.startTime?.toISOString() ?? null), weeks, now),
+    };
+  } catch {
+    return empty; // leasing tables not present / not reachable
+  }
+}
+
 export async function loadManagementKpis(weeks = 12, now: Date = new Date()): Promise<ManagementKpis> {
-  const [wos, accounting, collections] = await Promise.all([
+  const [wos, accounting, collections, leasing] = await Promise.all([
     listWorkOrders(),
     fetchAccounting(weeks, now),
     fetchCollections(weeks, now),
+    fetchLeasing(weeks, now),
   ]);
   const orders = wos ?? [];
   return {
@@ -149,5 +202,6 @@ export async function loadManagementKpis(weeks = 12, now: Date = new Date()): Pr
     },
     accounting,
     collections,
+    leasing,
   };
 }
