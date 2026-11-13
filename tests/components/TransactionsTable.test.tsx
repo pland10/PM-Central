@@ -753,3 +753,34 @@ describe("TransactionsTable — split a charge into lines", () => {
     expect(screen.getAllByRole("button", { name: /^archive-/ })).toHaveLength(1);
   });
 });
+
+describe("TransactionsTable — column filters", () => {
+  const filterBtn = (header: RegExp) => within(screen.getByRole("columnheader", { name: header })).getByTitle("Filter");
+  const merchants = () => [...document.querySelectorAll("tbody tr")].map((tr) => tr.textContent ?? "");
+
+  it("has a filter on Merchant, Category and Notes (as well as Date, Account, Property, Amount)", () => {
+    render(<TransactionsTable initialRows={rows} accounts={[]} />);
+    for (const h of [/^merchant/i, /^category \(yours\)/i, /^notes/i, /^date/i, /^account/i, /^property/i, /^amount/i]) {
+      expect(filterBtn(h)).toBeInTheDocument();
+    }
+  });
+
+  it("filters by merchant text", async () => {
+    const user = userEvent.setup();
+    render(<TransactionsTable initialRows={rows} accounts={[]} />);
+    await user.click(filterBtn(/^merchant/i));
+    await user.type(screen.getByPlaceholderText("Contains…"), "lowe");
+    expect(merchants()).toHaveLength(1);
+    expect(merchants()[0]).toMatch(/Lowe's/);
+  });
+
+  it("filters by the latest note's text", async () => {
+    const user = userEvent.setup();
+    const summaries = { t2: { count: 1, latest: "owner to repay", latestAt: "2026-11-13T12:00:00.000Z", latestBy: "Ann" } };
+    render(<TransactionsTable initialRows={rows} accounts={[]} noteSummaries={summaries} />);
+    await user.click(filterBtn(/^notes/i));
+    await user.type(screen.getByPlaceholderText("Contains…"), "repay");
+    expect(merchants()).toHaveLength(1);
+    expect(merchants()[0]).toMatch(/Lowe's/);
+  });
+});
