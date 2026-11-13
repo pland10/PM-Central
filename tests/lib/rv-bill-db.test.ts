@@ -61,8 +61,10 @@ describe("attachBillCandidates", () => {
     expect(out[0].rvCandidates).toBeUndefined();
   });
 
-  it("builds the bill link base from the Rentvine subdomain", () => {
+  it("builds the bill link base from the Rentvine subdomain (the web app's payables/bills page)", () => {
+    // Verified Nov 2026: a bill opens at https://<sub>.rentvine.com/accounting/payables/bills/<id>
+    // (/accounting/bills/<id> is the API path and shows "not found" in the web app).
     vi.stubEnv("RENTVINE_SUBDOMAIN", "acme");
-    expect(rentvineBillUrl()).toBe("https://acme.rentvine.com/accounting/bills/");
+    expect(rentvineBillUrl()).toBe("https://acme.rentvine.com/accounting/payables/bills/");
   });
 });

@@ -107,7 +107,7 @@ export function TransactionsTable({
   canManageFilters = false,
   categories: initialCategories = [],
   properties = [],
-  rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/bills/",
+  rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/payables/bills/",
   noteSummaries = NO_NOTES,
 }: {
   initialRows: TxnRow[];
@@ -117,7 +117,7 @@ export function TransactionsTable({
   canManageFilters?: boolean; // admins get a link to the filters page
   categories?: string[]; // the shared category list (suggestions while typing)
   properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
-  rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/bills/
+  rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/payables/bills/
   noteSummaries?: Record<string, NoteSummary>; // notes thread per transaction: count + latest
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
