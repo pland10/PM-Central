@@ -139,3 +139,76 @@ export function archivedByWeek(archivedAt: (string | null)[], weeks: number, now
   const counts = tallyByWeek(archivedAt, weeks, now);
   return recentWeekStarts(now, weeks).map((week) => ({ week, label: weekLabel(week), count: counts.get(week) ?? 0 }));
 }
+
+// ---- Collections & Rent (bundle A) ----
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// A tenant rent payment (payments table, source_id rvpay_*): the status, the
+// dollar amount, and when the tenant paid (date_posted).
+export type PaymentRow = { datePosted: string | null; amount: number; status: string };
+
+// Statuses that count as money received (vs returned / voided).
+const RECEIVED = new Set(["cleared", "pending", "non_ach"]);
+
+export type MoneyWeekPoint = { week: string; label: string; amount: number };
+
+// Rent collected per week — sum of received payment amounts by the week the
+// tenant paid (date_posted). Answers "when did rent come in?".
+export function rentCollectedByWeek(payments: PaymentRow[], weeks: number, now: Date): MoneyWeekPoint[] {
+  const keys = recentWeekStarts(now, weeks);
+  const first = keys[0];
+  const sums = new Map<string, number>(keys.map((k) => [k, 0]));
+  for (const p of payments) {
+    if (!RECEIVED.has(p.status) || !p.datePosted) continue;
+    const t = Date.parse(p.datePosted);
+    if (Number.isNaN(t)) continue;
+    const k = weekStart(new Date(t));
+    if (k < first || !sums.has(k)) continue;
+    sums.set(k, (sums.get(k) ?? 0) + (Number(p.amount) || 0));
+  }
+  return keys.map((week) => ({ week, label: weekLabel(week), amount: round2(sums.get(week) ?? 0) }));
+}
+
+export type CountWeekPoint = { week: string; label: string; count: number };
+
+// Returned / NSF payments per week, by the week the tenant paid.
+export function returnsByWeek(payments: PaymentRow[], weeks: number, now: Date): CountWeekPoint[] {
+  const counts = tallyByWeek(
+    payments.filter((p) => p.status === "returned").map((p) => p.datePosted),
+    weeks,
+    now
+  );
+  return recentWeekStarts(now, weeks).map((week) => ({ week, label: weekLabel(week), count: counts.get(week) ?? 0 }));
+}
+
+export type CollectionsHeadline = {
+  collectedThisWeek: number; // $ received, date_posted this week
+  pendingTotal: number; // $ currently in flight (status = pending)
+  returnedThisWeek: number; // # returned, date_posted this week
+  returnedTotalWindow: number; // # returned across the loaded window
+};
+
+export function collectionsHeadline(payments: PaymentRow[], now: Date): CollectionsHeadline {
+  const thisWeek = weekStart(now);
+  const inThisWeek = (d: string | null) => !!d && !Number.isNaN(Date.parse(d)) && weekStart(new Date(Date.parse(d))) === thisWeek;
+  let collectedThisWeek = 0;
+  let pendingTotal = 0;
+  let returnedThisWeek = 0;
+  let returnedTotalWindow = 0;
+  for (const p of payments) {
+    const amt = Number(p.amount) || 0;
+    if (RECEIVED.has(p.status) && inThisWeek(p.datePosted)) collectedThisWeek += amt;
+    if (p.status === "pending") pendingTotal += amt;
+    if (p.status === "returned") {
+      returnedTotalWindow++;
+      if (inThisWeek(p.datePosted)) returnedThisWeek++;
+    }
+  }
+  return {
+    collectedThisWeek: round2(collectedThisWeek),
+    pendingTotal: round2(pendingTotal),
+    returnedThisWeek,
+    returnedTotalWindow,
+  };
+}

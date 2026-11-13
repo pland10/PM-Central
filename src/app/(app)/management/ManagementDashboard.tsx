@@ -26,9 +26,13 @@ const C = {
   orange: "#FF6F00",
   teal: "#0D9488",
   violet: "#7C3AED",
+  amber: "#D97706", // status: returns / NSF (warning) — always with a label
   grid: "#E2E8F0",
   axis: "#64748B",
 };
+
+const fmtMoney = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const fmtMoneyAxis = (n: number) => (Math.abs(n) >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`);
 
 export function ManagementDashboard({ data }: { data: ManagementKpis }) {
   // Recharts measures the DOM, so only draw once mounted (keeps SSR clean and
@@ -50,8 +54,63 @@ export function ManagementDashboard({ data }: { data: ManagementKpis }) {
     { name: "Reactive", value: wo.preventive.reactive, fill: C.blue },
   ];
 
+  const col = data.collections;
+
   return (
     <div className="space-y-8">
+      {/* ---- Collections & Rent ---- */}
+      <section>
+        <SectionTitle>Collections &amp; Rent</SectionTitle>
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Tile label="Collected this week" value={fmtMoney(col.headline.collectedThisWeek)} tone="emerald" />
+          <Tile label="In-flight (pending)" value={fmtMoney(col.headline.pendingTotal)} hint="ACH not yet cleared" />
+          <Tile
+            label="Returned this week"
+            value={col.headline.returnedThisWeek}
+            tone={col.headline.returnedThisWeek > 0 ? "amber" : "slate"}
+          />
+          <Tile label={`Returned · last ${data.weeks}w`} value={col.headline.returnedTotalWindow} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ChartCard title="Rent collected" subtitle={`Per week · last ${data.weeks} weeks`}>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={col.collectedByWeek} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={C.grid} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tickFormatter={fmtMoneyAxis}
+                    tick={{ fontSize: 11, fill: C.axis }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                  />
+                  <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} formatter={(v: number) => [fmtMoney(v), "Collected"]} />
+                  <Bar dataKey="amount" name="Collected" fill={C.teal} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+
+          <ChartCard title="Returned / NSF" subtitle={`Per week · last ${data.weeks} weeks`}>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={col.returnsByWeek} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={C.grid} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.axis }} tickLine={false} axisLine={false} width={32} />
+                  <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                  <Bar dataKey="count" name="Returned" fill={C.amber} radius={[3, 3, 0, 0]}>
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#334155" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+      </section>
+
       {/* ---- Work Orders ---- */}
       <section>
         <SectionTitle>Work Orders</SectionTitle>
