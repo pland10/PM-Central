@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
-vi.mock("@/lib/payout-batches", () => ({ confirmPayoutBatch: vi.fn() }));
+vi.mock("@/lib/payout-batches", async (orig) => ({
+  ...(await orig<typeof import("@/lib/payout-batches")>()),
+  confirmPayoutBatch: vi.fn(),
+}));
 
 import { isFeatureEnabled } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";

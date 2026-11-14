@@ -156,6 +156,41 @@ describe("ManagementDraws", () => {
     expect(within(screen.getByLabelText("batch-3")).getByText(/Chase # CHS-1/)).toBeInTheDocument();
   });
 
+  it("edits the Chase transaction # on a confirmed batch", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDraws initialRows={rows} batches={[{ ...batches[0], bankReference: "CHS-1" }]} asOf="" rentvineAccount="pmilighthouse" />);
+    await user.click(screen.getByRole("button", { name: "edit-chase-3" }));
+    const box = screen.getByLabelText("chase-3");
+    expect(box).toHaveValue("CHS-1");
+    await user.clear(box);
+    await user.type(box, "CHS-9");
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, batchId: 3, bankReference: "CHS-9" }) });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/accounting/payout-batches/reference");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ batchId: 3, bankReference: "CHS-9" });
+    expect(await within(screen.getByLabelText("batch-3")).findByText(/Chase # CHS-9/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("chase-3")).not.toBeInTheDocument();
+  });
+
+  it("offers to add a Chase # to a confirmed batch that has none, and keeps the box open on a failed save", async () => {
+    const user = userEvent.setup();
+    render(<ManagementDraws initialRows={rows} batches={batches} asOf="" rentvineAccount="pmilighthouse" />);
+    await user.click(screen.getByRole("button", { name: "edit-chase-3" }));
+    await user.type(screen.getByLabelText("chase-3"), "CHS-5");
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: "Could not save the transaction #." }) });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/could not save the transaction #/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("chase-3")).toHaveValue("CHS-5");
+    expect(within(screen.getByLabelText("batch-3")).queryByText(/Chase #/)).not.toBeInTheDocument();
+  });
+
+  it("doesn't offer the edit on a batch that isn't confirmed yet (the banner box is for that)", () => {
+    const pending: BatchWithItems[] = [{ ...batches[0], id: 7, confirmed: false, confirmedAt: null }];
+    render(<ManagementDraws initialRows={rows} batches={pending} asOf="" rentvineAccount="pmilighthouse" />);
+    expect(screen.queryByRole("button", { name: "edit-chase-7" })).not.toBeInTheDocument();
+  });
+
   it("drills into a batch and pulls an item back out, telling you to move it back", async () => {
     const { user } = setup();
     await user.click(screen.getByLabelText("batch-3")); // expand

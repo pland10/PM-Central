@@ -3,13 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { isFeatureEnabled } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting } from "@/lib/accounting-access";
-import { confirmPayoutBatch } from "@/lib/payout-batches";
+import { cleanBankReference, confirmPayoutBatch } from "@/lib/payout-batches";
 
 // Confirm a batch's money actually moved at the bank — unlocks the screen.
 // Gated by the accounting feature + the per-user accounting entitlement.
 export const dynamic = "force-dynamic";
-
-const MAX_REFERENCE = 100;
 
 export async function POST(req: NextRequest) {
   if (!isFeatureEnabled("accounting")) {
@@ -26,13 +24,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing batchId." }, { status: 400 });
   }
   // The bank's (Chase) transaction # for the transfer — optional.
-  const ref = typeof body.bankReference === "string" ? body.bankReference.trim() : "";
-  if (ref.length > MAX_REFERENCE) {
-    return NextResponse.json({ error: `The transaction # can be at most ${MAX_REFERENCE} characters.` }, { status: 400 });
-  }
+  const ref = cleanBankReference(body.bankReference);
+  if (!ref.ok) return NextResponse.json({ error: ref.error }, { status: 400 });
 
   try {
-    const ok = await confirmPayoutBatch(prisma, batchId, user?.email ?? "operator", ref || null);
+    const ok = await confirmPayoutBatch(prisma, batchId, user?.email ?? "operator", ref.value);
     if (!ok) {
       return NextResponse.json({ error: "That batch is already confirmed or no longer exists." }, { status: 409 });
     }

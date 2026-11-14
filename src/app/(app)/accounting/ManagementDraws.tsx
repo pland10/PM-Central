@@ -50,6 +50,8 @@ export function ManagementDraws({
   const [error, setError] = useState("");
   const [undo, setUndo] = useState<{ amount: number; bankAccount: string; batchId: number } | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Editing the Chase transaction # on a confirmed batch (one at a time).
+  const [refEdit, setRefEdit] = useState<{ id: number; value: string; busy: boolean; error: string } | null>(null);
 
   // A batch whose money hasn't been confirmed moved yet locks the screen: the
   // only thing allowed is removing a payment from that batch, until you confirm.
@@ -92,6 +94,26 @@ export function ManagementDraws({
     setSelected(new Set());
     setNote("");
   }
+  async function saveRef() {
+    if (!refEdit || refEdit.busy) return;
+    const { id, value } = refEdit;
+    setRefEdit({ ...refEdit, busy: true, error: "" });
+    try {
+      const res = await fetch("/api/accounting/payout-batches/reference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId: id, bankReference: value.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't save the transaction #.");
+      const saved = typeof data?.bankReference === "string" ? data.bankReference : value.trim();
+      setBatches((prev) => prev.map((b) => (b.id === id ? { ...b, bankReference: saved } : b)));
+      setRefEdit(null);
+    } catch (e) {
+      setRefEdit((cur) => (cur && cur.id === id ? { ...cur, busy: false, error: e instanceof Error ? e.message : "Couldn't save." } : cur));
+    }
+  }
+
   function toggleExpand(id: number) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -382,20 +404,62 @@ export function ManagementDraws({
               const open = expanded.has(b.id);
               return (
                 <div key={b.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(b.id)}
-                    aria-label={`batch-${b.id}`}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
-                  >
-                    <span className="text-slate-400">{open ? "▾" : "▸"}</span>
-                    <span className="font-medium text-slate-700">#{b.id}</span>
-                    <span className="text-slate-500">{fmtDate(b.createdAt)}</span>
-                    {b.note && <span className="truncate text-slate-500">— {b.note}</span>}
-                    {b.bankReference && <span className="whitespace-nowrap text-xs text-slate-500">Chase # {b.bankReference}</span>}
-                    <span className="ml-auto whitespace-nowrap text-slate-500">{b.count} payment{b.count === 1 ? "" : "s"}</span>
-                    <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrencyCents(b.total)}</span>
-                  </button>
+                  <div className="flex items-center hover:bg-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(b.id)}
+                      aria-label={`batch-${b.id}`}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left text-sm"
+                    >
+                      <span className="text-slate-400">{open ? "▾" : "▸"}</span>
+                      <span className="font-medium text-slate-700">#{b.id}</span>
+                      <span className="text-slate-500">{fmtDate(b.createdAt)}</span>
+                      {b.note && <span className="truncate text-slate-500">— {b.note}</span>}
+                      {b.bankReference && <span className="whitespace-nowrap text-xs text-slate-500">Chase # {b.bankReference}</span>}
+                      <span className="ml-auto whitespace-nowrap text-slate-500">{b.count} payment{b.count === 1 ? "" : "s"}</span>
+                      <span className="w-24 whitespace-nowrap text-right font-semibold tabular-nums text-slate-800">{formatCurrencyCents(b.total)}</span>
+                    </button>
+                    {b.confirmed && refEdit?.id !== b.id && (
+                      <button
+                        type="button"
+                        aria-label={`edit-chase-${b.id}`}
+                        onClick={() => setRefEdit({ id: b.id, value: b.bankReference ?? "", busy: false, error: "" })}
+                        className="mr-3 whitespace-nowrap text-xs font-medium text-brand-600 hover:underline"
+                        title="Edit the Chase transaction #"
+                      >
+                        {b.bankReference ? "Edit #" : "+ Chase #"}
+                      </button>
+                    )}
+                  </div>
+                  {refEdit?.id === b.id && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-3 py-2 text-xs">
+                      <input
+                        aria-label={`chase-${b.id}`}
+                        autoFocus
+                        value={refEdit.value}
+                        maxLength={100}
+                        placeholder="Chase transaction #"
+                        onChange={(e) => setRefEdit({ ...refEdit, value: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRef();
+                          if (e.key === "Escape") setRefEdit(null);
+                        }}
+                        className="w-48 rounded-md border border-slate-300 bg-white px-2 py-1 text-slate-800 outline-none focus:border-brand-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={refEdit.busy}
+                        onClick={saveRef}
+                        className="rounded-md bg-brand-600 px-2.5 py-1 font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setRefEdit(null)} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-slate-600 hover:bg-slate-50">
+                        Cancel
+                      </button>
+                      {refEdit.error && <span className="text-red-600">{refEdit.error}</span>}
+                    </div>
+                  )}
                   {open && (
                     <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50 px-3 py-2">
                       <table className="w-full text-sm">
