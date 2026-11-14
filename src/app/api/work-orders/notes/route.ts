@@ -6,6 +6,7 @@ import { listStaff } from "@/lib/staff";
 import { sendEmail } from "@/lib/email";
 import { matchStaffEmail, noteEmail, normalizeNoteBody, resolveRecipients } from "@/lib/work-order-notes";
 import { addNote, deleteNote, listNotes, markEmailed, noteAuthor, updateNote } from "@/lib/work-order-notes-db";
+import { pendingNumber, resolveWorkOrderId } from "@/lib/created-work-orders";
 
 // Work-order notes (Work Orders list → Notes). Any signed-in user.
 //   GET    ?wo=<id>                     → notes (newest first) + who can be emailed
@@ -38,13 +39,40 @@ async function workOrder(id: string): Promise<WoRow | null> {
   return rows[0] ?? null;
 }
 
+// The id notes are kept under, plus the work order's details. A just-created
+// work order ("pmc:<number>") uses its stand-in until LeadSimple has it, then
+// the LeadSimple row (src/lib/created-work-orders.ts).
+async function resolveWorkOrder(id: string): Promise<{ id: string; wo: WoRow } | null> {
+  if (pendingNumber(id) === null) {
+    const wo = await workOrder(id);
+    return wo ? { id, wo } : null;
+  }
+  const target = await resolveWorkOrderId(prisma, id);
+  if (!target) return null;
+  if (target !== id) {
+    const wo = await workOrder(target);
+    return wo ? { id: target, wo } : null;
+  }
+  const [c] = await prisma.$queryRaw<{ wo_number: string; description: string | null; property_label: string | null }[]>(
+    Prisma.sql`SELECT wo_number, description, property_label FROM pm_created_work_orders WHERE wo_number = ${pendingNumber(id)}`
+  );
+  if (!c) return null;
+  const title = (c.description ?? "").split("\n")[0].trim() || "Work order";
+  return {
+    id,
+    wo: { wo_number: c.wo_number, title, name: null, property_address: c.property_label, link: null, assignee_name: null },
+  };
+}
+
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const woId = req.nextUrl.searchParams.get("wo") ?? "";
   if (!woId) return NextResponse.json({ error: "Missing wo." }, { status: 400 });
   try {
-    const [notes, staff, wo] = await Promise.all([listNotes(woId), listStaff(), workOrder(woId)]);
+    const found = await resolveWorkOrder(woId);
+    const [notes, staff] = await Promise.all([listNotes(found?.id ?? woId), listStaff()]);
+    const wo = found?.wo ?? null;
     return NextResponse.json({
       notes,
       staff,
@@ -122,11 +150,12 @@ export async function POST(req: NextRequest) {
   const recipients = picked.emails;
 
   try {
-    const wo = await workOrder(woId);
-    if (!wo) return NextResponse.json({ error: "Work order not found." }, { status: 404 });
+    const found = await resolveWorkOrder(woId);
+    if (!found) return NextResponse.json({ error: "Work order not found." }, { status: 404 });
+    const { wo } = found;
     const number = wo.wo_number ?? "—";
     const author = user.name || user.email || "PM-Central";
-    const note = await addNote({ woId, woNumber: number, body, authorEmail: user.email ?? "", authorName: author });
+    const note = await addNote({ woId: found.id, woNumber: number, body, authorEmail: user.email ?? "", authorName: author });
 
     if (recipients.length === 0) return NextResponse.json({ note, emailed: false }, { status: 201 });
 

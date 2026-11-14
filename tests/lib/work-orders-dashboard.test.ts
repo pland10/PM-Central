@@ -5,7 +5,14 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRaw: vi.fn(), property: { findMany: vi.fn() } },
 }));
 
+vi.mock("@/lib/created-work-orders", async (orig) => ({
+  ...(await orig<typeof import("@/lib/created-work-orders")>()),
+  listCreatedWorkOrders: vi.fn(async () => []),
+  adoptCreatedWorkOrder: vi.fn(async () => undefined),
+}));
+
 import { prisma } from "@/lib/prisma";
+import { adoptCreatedWorkOrder, listCreatedWorkOrders, type CreatedWorkOrder } from "@/lib/created-work-orders";
 import {
   attentionList,
   listWorkOrders,
@@ -376,5 +383,55 @@ describe("listWorkOrders", () => {
       ["101", "prop-a", true],
       ["102", null, false],
     ]);
+  });
+});
+
+describe("listWorkOrders — work orders just created from PM-Central", () => {
+  const created = (over: Partial<CreatedWorkOrder> = {}): CreatedWorkOrder => ({
+    number: "100412",
+    rvId: "412",
+    propertyExternalId: "pmilighthouse:property:12",
+    propertyLabel: "66 Francis Court, Elmont, NY 11003",
+    unitId: null,
+    priority: "High",
+    description: "No heat",
+    createdBy: "meg@pmi.com",
+    createdAt: "2026-11-14T15:00:00.000Z",
+    ...over,
+  });
+  const routes = (lsRows: unknown[]) =>
+    routeQueries([
+      [/FROM rv_work_orders/, []],
+      [/FROM activities/, []],
+      [/FROM work_orders/, lsRows],
+    ]) as never;
+
+  beforeEach(() => {
+    findMany.mockResolvedValue([{ id: "prop-a", externalId: "pmilighthouse:property:12" }] as never);
+  });
+
+  it("shows one LeadSimple doesn't have yet, right away, as pending", async () => {
+    queryRaw.mockImplementation(routes([woRow({ source_id: "a", wo_number: "100" })]));
+    vi.mocked(listCreatedWorkOrders).mockResolvedValueOnce([created()]);
+    const rows = await listWorkOrders();
+    expect(rows).toHaveLength(2);
+    expect(rows![1]).toMatchObject({ id: "pmc:100412", number: "100412", stage: "New WO", priority: "High", propertyId: "prop-a", pending: true });
+    expect(adoptCreatedWorkOrder).not.toHaveBeenCalled();
+  });
+
+  it("once LeadSimple has it, shows only the LeadSimple row and moves the edits onto it", async () => {
+    queryRaw.mockImplementation(routes([woRow({ source_id: "ls-9", wo_number: "100412" })]));
+    vi.mocked(listCreatedWorkOrders).mockResolvedValueOnce([created()]);
+    const rows = await listWorkOrders();
+    expect(rows!.map((r) => r.id)).toEqual(["ls-9"]);
+    expect(adoptCreatedWorkOrder).toHaveBeenCalledWith(prisma, "100412", "ls-9");
+  });
+
+  it("still lists everything if moving the edits fails (it retries on the next load)", async () => {
+    queryRaw.mockImplementation(routes([woRow({ source_id: "ls-9", wo_number: "100412" })]));
+    vi.mocked(listCreatedWorkOrders).mockResolvedValueOnce([created()]);
+    vi.mocked(adoptCreatedWorkOrder).mockRejectedValueOnce(new Error("db busy"));
+    const rows = await listWorkOrders();
+    expect(rows!.map((r) => r.id)).toEqual(["ls-9"]);
   });
 });

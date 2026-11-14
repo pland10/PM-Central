@@ -64,3 +64,28 @@ describe("POST /api/work-orders/tech", () => {
     expect(writes(/work_order_techs/)).toHaveLength(0);
   });
 });
+
+describe("POST /api/work-orders/tech — a work order just created from PM-Central", () => {
+  it("sets the tech on the stand-in until LeadSimple has it", async () => {
+    vi.mocked(prisma.$queryRaw).mockImplementation(
+      routeQueries([
+        [/FROM work_orders WHERE wo_number/, []],
+        [/FROM pm_created_work_orders/, [{ n: 1 }]],
+      ]) as never
+    );
+    const res = await post({ woId: "pmc:100412", techEmail: "ari@pmi.com" });
+    expect(res.status).toBe(200);
+    const ins = writes(/INSERT INTO work_order_techs/)[0][0] as { values: unknown[] };
+    expect(ins.values[0]).toBe("pmc:100412");
+  });
+
+  it("404s for an unknown stand-in", async () => {
+    vi.mocked(prisma.$queryRaw).mockImplementation(
+      routeQueries([
+        [/FROM work_orders WHERE wo_number/, []],
+        [/FROM pm_created_work_orders/, [{ n: 0 }]],
+      ]) as never
+    );
+    expect((await post({ woId: "pmc:999", techEmail: "ari@pmi.com" })).status).toBe(404);
+  });
+});
