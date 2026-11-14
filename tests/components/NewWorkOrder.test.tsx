@@ -2,6 +2,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 import { NewWorkOrder } from "@/app/(app)/maintenance/NewWorkOrder";
 
 const choices = [
@@ -79,5 +81,18 @@ describe("NewWorkOrder", () => {
     await user.click(screen.getByRole("option", { name: "8204 138th Street · Jamaica — Unit 2" }));
     expect(screen.getByRole("dialog", { name: "New work order" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Property" })).toHaveValue("8204 138th Street · Jamaica — Unit 2");
+  });
+});
+
+describe("NewWorkOrder — shows on the list right away", () => {
+  it("refreshes the page after creating so the new work order appears", async () => {
+    const user = userEvent.setup();
+    render(<NewWorkOrder choices={choices} />);
+    await user.click(screen.getByRole("button", { name: "+ New work order" }));
+    await user.type(screen.getByPlaceholderText(/Start typing an address/), "8204 138th Street · Jamaica");
+    await user.type(screen.getByPlaceholderText(/Kitchen sink/), "No heat");
+    await user.click(screen.getByRole("button", { name: "Create in Rentvine" }));
+    await screen.findByText(/Created WO #100412/);
+    expect(refresh).toHaveBeenCalled();
   });
 });

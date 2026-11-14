@@ -233,3 +233,11 @@ describe("MaintenanceView", () => {
     });
   });
 });
+
+describe("MaintenanceView — a work order just created from PM-Central", () => {
+  it("marks it as syncing (not yet in LeadSimple)", () => {
+    render(<MaintenanceView rows={[...rows, wo({ id: "pmc:100412", number: "100412", issue: "No heat", stage: "New WO", link: "", pending: true })]} now={NOW} />);
+    const badge = screen.getByText("Syncing");
+    expect(badge).toHaveAttribute("title", expect.stringMatching(/LeadSimple/));
+  });
+});

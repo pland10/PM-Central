@@ -71,3 +71,10 @@ describe("WorkOrdersTable", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("WorkOrdersTable — a work order just created from PM-Central", () => {
+  it("marks it as syncing (not yet in LeadSimple)", () => {
+    render(<WorkOrdersTable rows={[wo({ id: "pmc:100412", number: "100412", link: "", pending: true })]} />);
+    expect(within(rowOf("100412")).getByText("Syncing")).toBeInTheDocument();
+  });
+});

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeQueries, sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $queryRaw: vi.fn(), $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn() },
+  prisma: { $queryRaw: vi.fn(), $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn(), $transaction: vi.fn(async (ops: unknown[]) => Promise.all(ops)) },
 }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/staff", () => ({ listStaff: vi.fn() }));
@@ -187,5 +187,55 @@ describe("/api/work-orders/notes", () => {
     it("400s a missing id", async () => {
       expect((await DELETE(new NextRequest(URL, { method: "DELETE" }))).status).toBe(400);
     });
+  });
+});
+
+describe("/api/work-orders/notes — a work order just created from PM-Central", () => {
+  const CREATED = { wo_number: "100412", description: "No heat\nsince last night", property_label: "8204 138th Street, Jamaica, NY 11435" };
+  const NOTE = { id: 9, created_at: new Date("2026-11-14T15:00:00Z") };
+
+  it("saves a note on the stand-in while LeadSimple doesn't have it yet", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [/FROM work_orders WHERE wo_number/, []],
+        [/COUNT\(\*\)::int AS n FROM pm_created_work_orders/, [{ n: 1 }]],
+        [/FROM pm_created_work_orders WHERE wo_number/, [CREATED]],
+        [/INSERT INTO work_order_notes/, [NOTE]],
+      ]) as never
+    );
+    const res = await post({ woId: "pmc:100412", body: "Tenant home after 3" });
+    expect(res.status).toBe(201);
+    const insert = queryRaw.mock.calls.find((c) => /INSERT INTO work_order_notes/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(insert.values.slice(0, 3)).toEqual(["pmc:100412", "100412", "Tenant home after 3"]);
+  });
+
+  it("saves onto the LeadSimple row once it has arrived (moving the earlier notes over first)", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [/FROM work_orders WHERE wo_number/, [{ source_id: "ls-9" }]],
+        [/to_regclass/, [{ notes: true, techs: true }]],
+        [/FROM work_orders WHERE source_id/, [WO]],
+        [/INSERT INTO work_order_notes/, [NOTE]],
+      ]) as never
+    );
+    await post({ woId: "pmc:100412", body: "Tenant home after 3" });
+    expect(executeRaw.mock.calls.some((c) => /UPDATE work_order_notes SET wo_id/.test(sqlOf(c[0])))).toBe(true);
+    const insert = queryRaw.mock.calls.find((c) => /INSERT INTO work_order_notes/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(insert.values[0]).toBe("ls-9");
+  });
+
+  it("lists the stand-in's notes", async () => {
+    queryRaw.mockImplementation(
+      routeQueries([
+        [/FROM work_orders WHERE wo_number/, []],
+        [/COUNT\(\*\)::int AS n FROM pm_created_work_orders/, [{ n: 1 }]],
+        [/FROM pm_created_work_orders WHERE wo_number/, [CREATED]],
+        [/FROM work_order_notes WHERE wo_id/, []],
+      ]) as never
+    );
+    const res = await GET(new NextRequest(`${URL}?wo=pmc:100412`));
+    expect(res.status).toBe(200);
+    const list = queryRaw.mock.calls.find((c) => /FROM work_order_notes WHERE wo_id/.test(sqlOf(c[0])))![0] as { values: unknown[] };
+    expect(list.values[0]).toBe("pmc:100412");
   });
 });

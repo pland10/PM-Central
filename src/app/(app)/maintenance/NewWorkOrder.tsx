@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Combobox } from "@/components/Combobox";
 import type { PropertyChoice } from "@/lib/property-options";
 
 const input = "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm";
 
-// "+ New work order": creates it straight in Rentvine (nothing stored here).
+// "+ New work order": creates it straight in Rentvine, then refreshes the page so
+// it shows on the list right away (as "Syncing" until LeadSimple has it).
 // Just a property (or unit) and a description; priority defaults to Medium.
 export function NewWorkOrder({ choices }: { choices: PropertyChoice[] }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [property, setProperty] = useState("");
   const [description, setDescription] = useState("");
@@ -43,6 +46,7 @@ export function NewWorkOrder({ choices }: { choices: PropertyChoice[] }) {
       if (!res.ok) throw new Error(d.error || `Failed (${res.status})`);
       setCreated({ number: d.number, url: d.url ?? null });
       reset();
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
