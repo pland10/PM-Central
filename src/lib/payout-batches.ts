@@ -253,6 +253,28 @@ export async function confirmPayoutBatch(
   return n > 0;
 }
 
+// The bank's (Chase) transaction # for a batch's transfer: optional free text
+// (several transfer numbers can go in one), trimmed, blank = none.
+export const MAX_BANK_REFERENCE = 100;
+export function cleanBankReference(v: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (s.length > MAX_BANK_REFERENCE) {
+    return { ok: false, error: `The transaction # can be at most ${MAX_BANK_REFERENCE} characters.` };
+  }
+  return { ok: true, value: s || null };
+}
+
+// Change (or clear) the transaction # on an already-confirmed batch — fixing a
+// typo, or adding one to a batch confirmed without it. A pending batch takes it
+// on confirm instead. Returns false if the batch is gone or not confirmed.
+export async function setBatchReference(prisma: PrismaClient, batchId: number, bankReference: string | null): Promise<boolean> {
+  await ensurePayoutBatchTables(prisma);
+  const n = await prisma.$executeRaw(
+    Prisma.sql`UPDATE payout_batches SET bank_reference = ${bankReference} WHERE id = ${batchId} AND confirmed_at IS NOT NULL`
+  );
+  return n > 0;
+}
+
 export type RemoveResult = {
   removed: { payoutId: string; amount: number; bankAccount: string; batchId: number } | null;
   batchEmptied: boolean;
