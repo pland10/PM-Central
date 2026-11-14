@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { confirmPayoutBatch, createPayoutBatch, mergeBatched, removeBatchItem, summarizeByAccount } from "@/lib/payout-batches";
+import { cleanBankReference, confirmPayoutBatch, createPayoutBatch, mergeBatched, removeBatchItem, setBatchReference, summarizeByAccount } from "@/lib/payout-batches";
 import type { MoneyOutRow } from "@/lib/accounting";
 import { sqlOf } from "../helpers/sql";
 
@@ -141,6 +141,30 @@ describe("confirmPayoutBatch", () => {
     const unsafe = vi.fn().mockResolvedValue(0);
     await ensurePayoutBatchTables({ $executeRawUnsafe: unsafe } as unknown as PrismaClient);
     expect(unsafe.mock.calls.map((c) => c[0]).join("\n")).toMatch(/ADD COLUMN IF NOT EXISTS bank_reference TEXT/);
+  });
+});
+
+describe("setBatchReference", () => {
+  it("updates only a confirmed batch's bank_reference, reporting whether it changed a row", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const prisma = { $executeRaw: executeRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0) } as unknown as PrismaClient;
+    expect(await setBatchReference(prisma, 7, "CHS-2")).toBe(true);
+    const q = executeRaw.mock.calls[0][0] as { values: unknown[] };
+    expect(sqlOf(q)).toMatch(/UPDATE payout_batches SET bank_reference = /);
+    expect(sqlOf(q)).toMatch(/confirmed_at IS NOT NULL/);
+    expect(q.values).toEqual(expect.arrayContaining(["CHS-2", 7]));
+    executeRaw.mockResolvedValue(0);
+    expect(await setBatchReference(prisma, 7, null)).toBe(false);
+  });
+});
+
+describe("cleanBankReference", () => {
+  it("trims, turns blank/missing into null, and rejects over 100 characters", () => {
+    expect(cleanBankReference("  CHS-1 ")).toEqual({ ok: true, value: "CHS-1" });
+    expect(cleanBankReference("   ")).toEqual({ ok: true, value: null });
+    expect(cleanBankReference(undefined)).toEqual({ ok: true, value: null });
+    expect(cleanBankReference("x".repeat(100))).toMatchObject({ ok: true });
+    expect(cleanBankReference("x".repeat(101))).toMatchObject({ ok: false });
   });
 });
 
