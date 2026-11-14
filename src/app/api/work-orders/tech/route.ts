@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { listStaff } from "@/lib/staff";
 import { setTech } from "@/lib/work-order-tech-db";
+import { resolveWorkOrderId } from "@/lib/created-work-orders";
 
 // Assign (or clear) the in-house tech on a work order: { woId, techEmail|null }.
 // Any signed-in user; the tech must be a PM-Central user. No notification.
@@ -25,11 +25,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const [found] = await prisma.$queryRaw<{ n: number }[]>(
-      Prisma.sql`SELECT COUNT(*)::int AS n FROM work_orders WHERE source_id = ${woId}`
-    );
-    if (!found?.n) return NextResponse.json({ error: "Work order not found." }, { status: 404 });
-    await setTech(woId, tech, user.email ?? "operator");
+    // A just-created work order ("pmc:<number>") saves on its stand-in until
+    // LeadSimple has it, then on the LeadSimple row.
+    const target = await resolveWorkOrderId(prisma, woId);
+    if (!target) return NextResponse.json({ error: "Work order not found." }, { status: 404 });
+    await setTech(target, tech, user.email ?? "operator");
     return NextResponse.json({ ok: true, tech });
   } catch (e) {
     console.error("[wo-tech] save failed:", e);

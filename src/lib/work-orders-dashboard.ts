@@ -4,6 +4,7 @@ import { matchesPreventive } from "@/lib/preventive";
 import { listPreventivePatternsSafe } from "@/lib/preventive-patterns-db";
 import { prisma } from "@/lib/prisma";
 import { isTerminal, pipelineRank, type WorkOrderRow } from "@/lib/work-orders";
+import { adoptCreatedWorkOrder, createdToRow, listCreatedWorkOrders, splitCreated } from "@/lib/created-work-orders";
 
 // Work-order summary for the dashboard, read from the Neon `work_orders` table
 // that work_order_sync.py (LeadSimple) populates. Server-only. Returns null if
@@ -280,7 +281,7 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
     ]);
     const preventiveKeywords = preventivePatterns.map((p) => p.pattern);
 
-    return rows.map((r) => {
+    const listed: WorkOrderRow[] = rows.map((r) => {
       const stage = r.stage ?? "—";
       const number = r.wo_number ?? "—";
       const enrich = rv.get(number);
@@ -307,7 +308,46 @@ export async function listWorkOrders(): Promise<WorkOrderRow[] | null> {
         preventive: !!enrich?.recurring || matchesPreventive(r.title || r.name, preventiveKeywords),
       };
     });
+
+    return [...listed, ...(await createdStandIns(rows, rv))];
   } catch {
     return null;
   }
+}
+
+// Work orders just created from PM-Central that LeadSimple doesn't have yet,
+// shown right away (src/lib/created-work-orders.ts). Ones LeadSimple now has are
+// adopted — their notes / tech moved onto the LeadSimple row — and not shown
+// twice. Best-effort: a failed adoption is retried on the next load.
+async function createdStandIns(
+  lsRows: { source_id: string; wo_number: string | null }[],
+  rv: Map<string, { priority: string; propertyId: string | null }>
+): Promise<WorkOrderRow[]> {
+  const created = await listCreatedWorkOrders(prisma);
+  if (created.length === 0) return [];
+  const lsByNumber = new Map<string, string>();
+  for (const r of lsRows) if (r.wo_number) lsByNumber.set(r.wo_number, r.source_id);
+  const { pending, arrived } = splitCreated(created, lsByNumber);
+
+  for (const a of arrived) {
+    try {
+      await adoptCreatedWorkOrder(prisma, a.number, a.lsId);
+    } catch (e) {
+      console.error(`[work-orders] couldn't hand WO ${a.number} over to its LeadSimple row:`, e);
+    }
+  }
+  if (pending.length === 0) return [];
+
+  const ext = [...new Set(pending.map((c) => c.propertyExternalId).filter((x): x is string => !!x))];
+  const props = ext.length
+    ? await prisma.property.findMany({ where: { externalId: { in: ext } }, select: { id: true, externalId: true } }).catch(() => [])
+    : [];
+  const propByExt = new Map(props.map((p) => [p.externalId, p.id]));
+  return pending.map((c) => {
+    const enrich = rv.get(c.number);
+    return createdToRow(c, {
+      propertyId: enrich?.propertyId ?? (c.propertyExternalId ? propByExt.get(c.propertyExternalId) ?? null : null),
+      priority: enrich?.priority,
+    });
+  });
 }

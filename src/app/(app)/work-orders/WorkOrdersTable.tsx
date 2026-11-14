@@ -7,6 +7,7 @@ import { WorkOrderNotes } from "./WorkOrderNotes";
 import { NotesCell } from "./NotesCell";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { STAGE_ORDER, pipelineRank, priorityRank, type WorkOrderRow } from "@/lib/work-orders";
+import { SyncingBadge } from "@/components/SyncingBadge";
 
 export type { WorkOrderRow };
 
@@ -86,19 +87,23 @@ export function WorkOrdersTable({
       sortable: true,
       sortValue: (r) => Number(r.number) || 0,
       filter: { type: "text", value: (r) => r.number },
-      render: (r) =>
-        r.link ? (
-          <a
-            href={r.link}
-            target="_blank"
-            rel="noreferrer"
-            className="font-mono text-xs text-brand-600 hover:underline"
-          >
-            {r.number}
-          </a>
-        ) : (
-          <span className="font-mono text-xs text-slate-400">{r.number}</span>
-        ),
+      render: (r) => (
+        <span className="inline-flex items-center gap-1">
+          {r.link ? (
+            <a
+              href={r.link}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-xs text-brand-600 hover:underline"
+            >
+              {r.number}
+            </a>
+          ) : (
+            <span className="font-mono text-xs text-slate-400">{r.number}</span>
+          )}
+          {r.pending && <SyncingBadge />}
+        </span>
+      ),
     },
     {
       key: "issue",

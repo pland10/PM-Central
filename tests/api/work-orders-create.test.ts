@@ -5,11 +5,13 @@ vi.mock("@/lib/prisma", () => ({ prisma: { property: { findFirst: vi.fn() } } })
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/rentvine-units", () => ({ unitBelongsToProperty: vi.fn() }));
 vi.mock("@/lib/inspections/rentvine-wo", () => ({ createRentvineWorkOrder: vi.fn(), isRentvineConfigured: vi.fn(() => true) }));
+vi.mock("@/lib/created-work-orders", () => ({ recordCreatedWorkOrder: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { unitBelongsToProperty } from "@/lib/rentvine-units";
 import { createRentvineWorkOrder, isRentvineConfigured } from "@/lib/inspections/rentvine-wo";
+import { recordCreatedWorkOrder } from "@/lib/created-work-orders";
 import { POST } from "@/app/api/work-orders/create/route";
 
 const post = (body: unknown) =>
@@ -70,5 +72,42 @@ describe("POST /api/work-orders/create", () => {
     expect((await res.json()).error).toMatch(/HTTP 422/);
     vi.mocked(isRentvineConfigured).mockReturnValueOnce(false);
     expect((await post(good)).status).toBe(503);
+  });
+});
+
+describe("POST /api/work-orders/create — shows on the list right away", () => {
+  const record = vi.mocked(recordCreatedWorkOrder);
+  const addr = { id: "p1", street1: "8204 138th Street", street2: null, city: "Jamaica", state: "NY", zip: "11435" };
+
+  it("records the work order once Rentvine returns its number", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue(addr as never);
+    create.mockResolvedValue({ ok: true, ref: "100412", id: "412", number: "100412" });
+    const res = await post({ ...good, unitId: "46", priority: "High" });
+    expect(res.status).toBe(201);
+    expect(record).toHaveBeenCalledWith(prisma, {
+      number: "100412",
+      rvId: "412",
+      propertyExternalId: "pmilighthouse:property:48",
+      propertyLabel: "8204 138th Street, Jamaica, NY 11435",
+      unitId: "46",
+      priority: "High",
+      description: "Kitchen sink leaking",
+      createdBy: "meg@pmi.com",
+    });
+  });
+
+  it("doesn't record it when Rentvine didn't give a work-order number", async () => {
+    create.mockResolvedValue({ ok: true, ref: "412", id: "412", number: "" });
+    expect((await post(good)).status).toBe(201);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("still reports success when recording fails (the work order is in Rentvine)", async () => {
+    vi.mocked(prisma.property.findFirst).mockResolvedValue(addr as never);
+    create.mockResolvedValue({ ok: true, ref: "100412", id: "412", number: "100412" });
+    record.mockRejectedValueOnce(new Error("db down"));
+    const res = await post(good);
+    expect(res.status).toBe(201);
+    expect((await res.json()).number).toBe("100412");
   });
 });

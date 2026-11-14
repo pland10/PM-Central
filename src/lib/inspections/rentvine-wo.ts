@@ -18,7 +18,9 @@ export type CreateWorkOrderInput = {
 };
 
 export type CreateWorkOrderResult =
-  | { ok: true; ref: string; id: string }
+  // number: Rentvine's workOrderNumber ("" if the response didn't carry one —
+  // ref then falls back to the id).
+  | { ok: true; ref: string; id: string; number?: string }
   | { ok: false; status: number; error: string };
 
 const DEFAULT_PRIORITY = 2; // Medium
@@ -105,8 +107,9 @@ export async function createRentvineWorkOrder(
     }
     const wo = unwrapWorkOrder(json);
     const id = str(wo.workOrderID ?? wo.id);
-    const ref = str(wo.workOrderNumber) || id;
-    return { ok: true, ref: ref || "created", id };
+    const number = str(wo.workOrderNumber);
+    const ref = number || id;
+    return { ok: true, ref: ref || "created", id, number };
   } catch (e) {
     return { ok: false, status: 502, error: e instanceof Error ? e.message : "Rentvine request failed." };
   }

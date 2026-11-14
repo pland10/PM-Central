@@ -17,7 +17,7 @@ describe("createRentvineWorkOrder", () => {
   it("creates a Requested, Medium-priority work order on the property by default", async () => {
     const result = await createRentvineWorkOrder({ propertyId: "12", description: "Fix the drip" });
 
-    expect(result).toEqual({ ok: true, ref: "301", id: "812" });
+    expect(result).toEqual({ ok: true, ref: "301", id: "812", number: "301" });
     const [url, init] = rentvine.mock.calls[0];
     expect(url).toBe("https://acct.rentvine.com/api/manager/maintenance/work-orders");
     expect(init.method).toBe("POST");
@@ -31,12 +31,12 @@ describe("createRentvineWorkOrder", () => {
 
   it("reads an unwrapped response and falls back to the id for the ref", async () => {
     rentvine.mockResolvedValue(jsonResponse({ workOrderID: "900" }));
-    expect(await createRentvineWorkOrder({ propertyId: "12", description: "d" })).toEqual({ ok: true, ref: "900", id: "900" });
+    expect(await createRentvineWorkOrder({ propertyId: "12", description: "d" })).toEqual({ ok: true, ref: "900", id: "900", number: "" });
   });
 
   it("still reports success when Rentvine returns a non-JSON body", async () => {
     rentvine.mockResolvedValue(jsonResponse("Created"));
-    expect(await createRentvineWorkOrder({ propertyId: "12", description: "d" })).toEqual({ ok: true, ref: "created", id: "" });
+    expect(await createRentvineWorkOrder({ propertyId: "12", description: "d" })).toEqual({ ok: true, ref: "created", id: "", number: "" });
   });
 
   it("refuses without credentials or a linked property", async () => {

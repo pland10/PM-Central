@@ -70,6 +70,9 @@ export type WorkOrderRow = {
   // Preventive (routine/scheduled) work — a Rentvine recurring WO or a title
   // rule (src/lib/preventive.ts). Kept off the attention list unless overdue.
   preventive?: boolean;
+  // Just created from PM-Central and not in LeadSimple yet (a stand-in from
+  // src/lib/created-work-orders.ts; its id is "pmc:<number>").
+  pending?: boolean;
 };
 
 // Sort rank for priority (High first); unknown/none sorts last.

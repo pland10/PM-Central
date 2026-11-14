@@ -17,6 +17,7 @@ import type { NoteSummary } from "@/lib/work-order-notes-db";
 import type { StaffMember } from "@/lib/work-order-notes";
 import { NotesCell } from "../work-orders/NotesCell";
 import { WorkOrderNotes } from "../work-orders/WorkOrderNotes";
+import { SyncingBadge } from "@/components/SyncingBadge";
 
 // The new Maintenance screen (FEATURE_MAINTENANCE): KPI tiles up top, the
 // full work-order list below. Layout
@@ -48,12 +49,19 @@ function requiredAction(r: WorkOrderRow, now: number): { label: string; status: 
 }
 
 function WoNumber({ r }: { r: WorkOrderRow }) {
-  return r.link ? (
+  const num = r.link ? (
     <a href={r.link} target="_blank" rel="noopener noreferrer" className="font-mono text-xs font-semibold text-brand-600 hover:underline" title="Open in LeadSimple">
       {r.number}
     </a>
   ) : (
     <span className="font-mono text-xs text-slate-500">{r.number}</span>
+  );
+  if (!r.pending) return num;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {num}
+      <SyncingBadge />
+    </span>
   );
 }
 
