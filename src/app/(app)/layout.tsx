@@ -254,6 +254,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Names for the top bar's "/ Page" (menu items + the admin pages).
   const pageLinks = [
     ...nav.filter((n) => canSee(n.feature)).map((n) => ({ href: n.href, label: n.label })),
+    { href: "/notifications", label: "Notifications" },
     { href: "/management", label: "Management" },
     { href: "/admin/data", label: "Data sources" },
     { href: "/admin/transaction-filters", label: "Transaction filters" },
@@ -321,6 +322,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
             );
           })}
+          <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+            <Link
+              href="/notifications"
+              className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+                style={{ color: BRAND.colors.primary }}
+                aria-hidden="true"
+              >
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+              Notifications
+            </Link>
+          </div>
           {user?.role === "admin" && (
             <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
               <Link
