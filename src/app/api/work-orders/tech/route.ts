@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { listStaff } from "@/lib/staff";
-import { setTech } from "@/lib/work-order-tech-db";
+import { getTech, setTech } from "@/lib/work-order-tech-db";
 import { resolveWorkOrderId } from "@/lib/created-work-orders";
+import { notifyWorkOrderAssigned } from "@/lib/notify-wo-assigned";
 
-// Assign (or clear) the in-house tech on a work order: { woId, techEmail|null }.
-// Any signed-in user; the tech must be a PM-Central user. No notification.
+// Assign (or clear) the in-house tech on a work order: { woId, techEmail|null,
+// woNumber? }. Any signed-in user; the tech must be a PM-Central user. On a new
+// assignment the tech gets a push if they opted into "wo_assigned".
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -17,6 +19,7 @@ export async function POST(req: NextRequest) {
   const woId = typeof b?.woId === "string" ? b.woId : "";
   if (!woId) return NextResponse.json({ error: "Missing woId." }, { status: 400 });
   const email = typeof b?.techEmail === "string" ? b.techEmail.trim().toLowerCase() : "";
+  const woNumber = typeof b?.woNumber === "string" ? b.woNumber : null;
 
   let tech = null;
   if (email) {
@@ -29,7 +32,18 @@ export async function POST(req: NextRequest) {
     // LeadSimple has it, then on the LeadSimple row.
     const target = await resolveWorkOrderId(prisma, woId);
     if (!target) return NextResponse.json({ error: "Work order not found." }, { status: 404 });
+    const previous = await getTech(target);
     await setTech(target, tech, user.email ?? "operator");
+    // Notify the newly-assigned tech (best-effort; never blocks the save).
+    if (tech) {
+      await notifyWorkOrderAssigned({
+        tech,
+        woId: target,
+        woNumber,
+        byEmail: user.email ?? null,
+        previousTechEmail: previous?.email ?? null,
+      });
+    }
     return NextResponse.json({ ok: true, tech });
   } catch (e) {
     console.error("[wo-tech] save failed:", e);

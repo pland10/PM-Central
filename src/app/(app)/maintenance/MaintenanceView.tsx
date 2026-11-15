@@ -151,7 +151,7 @@ export function MaintenanceView({
       const res = await fetch("/api/work-orders/tech", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ woId: r.id, techEmail: email || null }),
+        body: JSON.stringify({ woId: r.id, techEmail: email || null, woNumber: r.number }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Failed (${res.status})`);
       setTechError("");
