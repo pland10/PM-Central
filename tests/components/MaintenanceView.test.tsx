@@ -218,7 +218,7 @@ describe("MaintenanceView", () => {
       await user.selectOptions(select103, "ari@pmi.com");
       const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("/api/work-orders/tech");
-      expect(JSON.parse(String(init.body))).toEqual({ woId: "103", techEmail: "ari@pmi.com" });
+      expect(JSON.parse(String(init.body))).toEqual({ woId: "103", techEmail: "ari@pmi.com", woNumber: "103" });
       expect((within(board()).getByLabelText("tech-103") as HTMLSelectElement).value).toBe("ari@pmi.com");
       vi.unstubAllGlobals();
     });
