@@ -38,7 +38,11 @@ describe("vercel.json crons", () => {
 
   it("checks for outbound-text alerts every 5 minutes", () => {
     expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "*/5 * * * *" });
-    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$)/.test(c.path))).toBe(true);
+    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$|push-alerts$)/.test(c.path))).toBe(true);
+  });
+
+  it("checks for admin push alerts (NSF / new work orders) every 15 minutes", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/push-alerts", schedule: "*/15 * * * *" });
   });
 
   // GitHub Actions minutes: each run of the leadsimple-search sync + backfill
