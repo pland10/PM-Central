@@ -42,6 +42,19 @@ export async function techAssignments(): Promise<Record<string, StaffMember>> {
   }
 }
 
+// The tech currently on one work order (null if none / table absent).
+export async function getTech(woId: string): Promise<StaffMember | null> {
+  try {
+    await ensureTable();
+    const rows = await prisma.$queryRaw<{ tech_email: string; tech_name: string }[]>(
+      Prisma.sql`SELECT tech_email, tech_name FROM work_order_techs WHERE wo_id = ${woId} LIMIT 1`
+    );
+    return rows[0] ? { email: rows[0].tech_email, name: rows[0].tech_name } : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function setTech(woId: string, tech: StaffMember | null, by: string): Promise<void> {
   await ensureTable();
   if (!tech) {
