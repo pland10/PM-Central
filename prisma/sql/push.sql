@@ -32,3 +32,16 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 
 CREATE INDEX IF NOT EXISTS push_subscriptions_email_idx ON push_subscriptions (user_email);
+
+-- Per-user notification preferences: which categories each person opted into.
+-- Absent row = off. Admin-only categories are enforced server-side at save time
+-- (see src/lib/notification-categories.ts).
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    user_email TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    enabled    BOOLEAN NOT NULL DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_email, category)
+);
+
+CREATE INDEX IF NOT EXISTS notification_prefs_category_idx ON notification_prefs (category) WHERE enabled;
