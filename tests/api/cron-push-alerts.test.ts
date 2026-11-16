@@ -12,7 +12,7 @@ const call = (auth?: string) =>
 
 beforeEach(() => {
   vi.stubEnv("CRON_SECRET", "s3cret");
-  vi.mocked(runPushAlerts).mockResolvedValue({ nsf: 1, wo: 2, sync: 0, updates: 0 });
+  vi.mocked(runPushAlerts).mockResolvedValue({ nsf: 1, wo: 2, sync: 0, updates: 0, draws: 1 });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -31,7 +31,7 @@ describe("GET /api/cron/push-alerts", () => {
   it("runs the alerts and reports counts", async () => {
     const res = await call("Bearer s3cret");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, nsf: 1, wo: 2, sync: 0, updates: 0 });
+    expect(await res.json()).toEqual({ ok: true, nsf: 1, wo: 2, sync: 0, updates: 0, draws: 1 });
   });
 
   it("reports a failure as 502", async () => {
