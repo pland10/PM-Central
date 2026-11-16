@@ -260,9 +260,9 @@ export default async function DashboardPage() {
         <Stat label="Outstanding" value={formatCurrency(totalBalanceDue)} href="/leases" accent={totalBalanceDue > 0} />
         <Stat label="Deposits held" value={formatCurrency(depositsHeld)} href="/security-deposits" />
         <Stat label="Active leases" value={String(activeLeases)} href="/leases" />
-        <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/work-orders" accent={(woSummary?.openTotal ?? 0) > 0} />
-        <Stat label="New WOs · 72h" value={String(newWoCount)} href="/work-orders" accent={newWoCount > 0} />
-        <Stat label="High priority WOs" value={String(highWoCount)} href="/work-orders" accent={highWoCount > 0} />
+        <Stat label="Open work orders" value={String(woSummary?.openTotal ?? 0)} href="/maintenance" accent={(woSummary?.openTotal ?? 0) > 0} />
+        <Stat label="New WOs · 72h" value={String(newWoCount)} href="/maintenance" accent={newWoCount > 0} />
+        <Stat label="High priority WOs" value={String(highWoCount)} href="/maintenance" accent={highWoCount > 0} />
         {todayShow && (
           <Stat label="Showings today" value={String(todayShow.count)} href="/showings" accent={todayShow.count > 0} />
         )}
@@ -410,7 +410,7 @@ export default async function DashboardPage() {
           ) },
 
           { id: "workorders", node: (
-        <Panel title="Work orders to review" href="/work-orders" linkLabel="All work orders" badge={woAttention.length}>
+        <Panel title="Work orders to review" href="/maintenance" linkLabel="All work orders" badge={woAttention.length}>
           {woAttention.length === 0 ? (
             <Empty>No new (72h) or high-priority work orders.</Empty>
           ) : (
@@ -418,7 +418,7 @@ export default async function DashboardPage() {
               {woAttention.map((w) => (
                 <Row
                   key={w.number}
-                  href={w.link || (w.propertyId ? `/properties/${w.propertyId}` : "/work-orders")}
+                  href={w.link || (w.propertyId ? `/properties/${w.propertyId}` : "/maintenance")}
                 >
                   <div className="min-w-0">
                     <div className="truncate font-medium text-slate-800">{w.property}</div>
