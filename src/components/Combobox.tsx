@@ -41,6 +41,11 @@ export function Combobox({
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const committed = useRef(value); // last value handed to onCommit (or the initial one)
+  // The box's current text, kept in a ref so the blur that follows an Enter-pick
+  // sees the picked option — the `value` prop is still the typed text until the
+  // parent re-renders, and committing that would save the stub as well.
+  const latest = useRef(value);
+  latest.current = value;
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [pos, setPos] = useState<{ left: number; top: number; minWidth: number } | null>(null);
@@ -77,6 +82,7 @@ export function Combobox({
   }
 
   function pick(v: string) {
+    latest.current = v;
     onChange(v);
     setOpen(false);
     commit(v);
@@ -124,7 +130,7 @@ export function Combobox({
         onFocus={() => setOpen(true)}
         onBlur={() => {
           setOpen(false);
-          commit(value);
+          commit(latest.current);
         }}
         onKeyDown={onKeyDown}
         className={className}
