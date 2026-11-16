@@ -19,6 +19,10 @@ self.addEventListener("push", (event) => {
     tag: data.tag,
     data: { url: data.url || "/" },
   };
+  // A notification with the same tag as one still in the notification center
+  // replaces it — silently, unless renotify is set. Pop up (and sound) again.
+  // (renotify without a tag is rejected by browsers, so only with one.)
+  if (data.tag) options.renotify = true;
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
