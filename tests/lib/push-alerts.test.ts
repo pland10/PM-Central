@@ -18,6 +18,7 @@ function makeDeps(over: Partial<PushAlertDeps> = {}): PushAlertDeps {
     attentionWorkOrders: vi.fn(async () => WOS),
     staleSyncs: vi.fn(async () => []),
     assignedWorkOrderStages: vi.fn(async () => []),
+    readyDraws: vi.fn(async () => null),
     recipientsFor: vi.fn(async () => ["admin@pmi.com"]),
     sendPush: vi.fn(async () => ({ sent: 1 })),
     ...over,
@@ -178,3 +179,74 @@ describe("runPushAlerts — assigned work order updated (stage change)", () => {
     expect(deps.sendPush).not.toHaveBeenCalled();
   });
 });
+
+describe("runPushAlerts — rent batch ready to draw (batch_ready)", () => {
+  const DRAWS = [
+    { id: "po_1", amount: 1200 },
+    { id: "po_2", amount: 300.5 },
+  ];
+  const onlyDraws = (over: Partial<PushAlertDeps> = {}) =>
+    makeDeps({ returnedPayments: vi.fn(async () => []), attentionWorkOrders: vi.fn(async () => []), ...over });
+  const saved = (deps: PushAlertDeps) => vi.mocked(deps.saveSentIds).mock.calls[0][0];
+
+  it("starts tracking silently the first time (no backlog blast)", async () => {
+    const deps = onlyDraws({ readyDraws: vi.fn(async () => DRAWS) });
+    const r = await runPushAlerts(deps);
+    expect(r.draws).toBe(0);
+    expect(deps.sendPush).not.toHaveBeenCalled();
+    expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_1", "draw:po_2"]));
+  });
+
+  it("sends one summary when new draws are ready to batch", async () => {
+    const deps = onlyDraws({
+      loadSentIds: vi.fn(async () => ["draws:tracking", "draw:po_1"]),
+      readyDraws: vi.fn(async () => [...DRAWS, { id: "po_3", amount: 99.5 }]),
+    });
+    const r = await runPushAlerts(deps);
+    expect(r.draws).toBe(1);
+    expect(deps.recipientsFor).toHaveBeenCalledWith("batch_ready");
+    expect(deps.sendPush).toHaveBeenCalledTimes(1);
+    const [, payload] = vi.mocked(deps.sendPush).mock.calls[0];
+    expect(payload.title).toMatch(/ready to batch/i);
+    expect(payload.body).toContain("2 new"); // po_2 + po_3
+    expect(payload.body).toContain("$400"); // 300.50 + 99.50
+    expect(payload.body).toContain("$1,600"); // all 3 ready
+    expect(payload.url).toBe("/accounting/rentvine");
+    expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_1", "draw:po_2", "draw:po_3"]));
+  });
+
+  it("doesn't re-notify draws already announced, and forgets ones that got batched", async () => {
+    const deps = onlyDraws({
+      loadSentIds: vi.fn(async () => ["draws:tracking", "draw:po_1", "draw:po_2"]),
+      readyDraws: vi.fn(async () => [DRAWS[1]]), // po_1 was batched
+    });
+    const r = await runPushAlerts(deps);
+    expect(r.draws).toBe(0);
+    expect(deps.sendPush).not.toHaveBeenCalled();
+    expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_2"]));
+    expect(saved(deps)).not.toContain("draw:po_1");
+  });
+
+  it("doesn't check Rentvine when nobody wants the alert, and keeps what it knew", async () => {
+    const readyDraws = vi.fn(async () => DRAWS);
+    const deps = onlyDraws({
+      loadSentIds: vi.fn(async () => ["draws:tracking", "draw:po_1"]),
+      readyDraws,
+      recipientsFor: vi.fn(async (c: string) => (c === "batch_ready" ? [] : ["admin@pmi.com"])),
+    });
+    await runPushAlerts(deps);
+    expect(readyDraws).not.toHaveBeenCalled();
+    expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_1"]));
+  });
+
+  it("keeps what it knew (no false alert later) when Rentvine can't be read", async () => {
+    const deps = onlyDraws({
+      loadSentIds: vi.fn(async () => ["draws:tracking", "draw:po_1"]),
+      readyDraws: vi.fn(async () => null),
+    });
+    const r = await runPushAlerts(deps);
+    expect(r.draws).toBe(0);
+    expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_1"]));
+  });
+});
+

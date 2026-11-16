@@ -4,7 +4,8 @@ import { runPushAlerts } from "@/lib/push-alerts";
 import { livePushAlertDeps } from "@/lib/push-alerts-live";
 
 // Vercel Cron: push an alert to opted-in admins for each new returned/NSF
-// payment and new/urgent work order (see src/lib/push-alerts.ts). Best-effort —
+// payment, new/urgent work order, stale sync and new draws ready to batch, and
+// to techs on stage changes (see src/lib/push-alerts.ts). Best-effort —
 // a delivery failure never fails the run.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

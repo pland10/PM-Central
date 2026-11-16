@@ -5,6 +5,8 @@ import type { PushPayload } from "@/lib/push-send";
 //  - wo_new      (admin broadcast): new / urgent work orders
 //  - sync_failure(admin broadcast): a sync that has gone stale
 //  - wo_assigned (personal): the stage of a work order you're the tech on changed
+//  - batch_ready (admin broadcast): new management-company draws (payments to
+//    PMI Lighthouse in Rentvine) not yet in a batch — one summary per run
 // A watermark of event keys (push-alerts-live.ts) dedups across runs; the key
 // set is pruned to what's still "current" each run, so it stays bounded and a
 // recovered condition re-arms. See src/app/api/cron/push-alerts/route.ts.
@@ -21,6 +23,8 @@ export type AttentionWorkOrder = {
 };
 export type StaleSync = { id: string; label: string; cadence: string; lastRun: string | null };
 export type AssignedWorkOrder = { woId: string; number: string; stage: string; issue: string; techEmail: string };
+// A management-company draw that isn't in a batch yet (Rentvine payoutID).
+export type ReadyDraw = { id: string; amount: number };
 
 export type PushAlertDeps = {
   // null = no state row yet (first run ever) — seed silently, don't backfill.
@@ -30,22 +34,31 @@ export type PushAlertDeps = {
   attentionWorkOrders(): Promise<AttentionWorkOrder[]>;
   staleSyncs(): Promise<StaleSync[]>;
   assignedWorkOrderStages(): Promise<AssignedWorkOrder[]>;
+  // Draws ready to batch, read live from Rentvine; null = couldn't tell (keep
+  // what we knew rather than guess). Only called when someone wants batch_ready.
+  readyDraws(): Promise<ReadyDraw[] | null>;
   recipientsFor(category: string): Promise<string[]>;
   sendPush(emails: string[], payload: PushPayload): Promise<{ sent: number }>;
 };
 
-export type PushAlertResult = { nsf: number; wo: number; sync: number; updates: number; seeded?: boolean; error?: string };
+export type PushAlertResult = { nsf: number; wo: number; sync: number; updates: number; draws: number; seeded?: boolean; error?: string };
+
+// Marks that draws are being tracked: until it's in the saved keys, the draws
+// currently ready are recorded silently (no backlog alert when the alert is
+// first switched on or deployed).
+const DRAWS_TRACKING = "draws:tracking";
 
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResult> {
-  const [prev, payments, workOrders, syncs, assigned] = await Promise.all([
+  const [prev, payments, workOrders, syncs, assigned, drawCheck] = await Promise.all([
     deps.loadSentIds(),
     deps.returnedPayments(),
     deps.attentionWorkOrders(),
     deps.staleSyncs(),
     deps.assignedWorkOrderStages(),
+    checkDraws(deps),
   ]);
 
   // Candidate event keys this run. Each detector contributes stable keys; the
@@ -55,18 +68,26 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
   const woItems = workOrders.map((w) => ({ key: `wo:${w.number}`, w }));
   const syncItems = syncs.map((s) => ({ key: `sync:${s.id}`, s }));
   const stageItems = assigned.map((a) => ({ key: `wostage:${a.woId}:${a.stage}`, prefix: `wostage:${a.woId}:`, a }));
+  // Draws: when they couldn't be read (or nobody wants the alert), carry the
+  // previous draw keys over unchanged so nothing re-fires later.
+  const { to: drawTo, draws } = drawCheck;
+  const drawKeys =
+    draws === null
+      ? (prev ?? []).filter((k) => k === DRAWS_TRACKING || k.startsWith("draw:"))
+      : [DRAWS_TRACKING, ...draws.map((d) => `draw:${d.id}`)];
   const currentKeys = [
     ...nsfItems.map((i) => i.key),
     ...woItems.map((i) => i.key),
     ...syncItems.map((i) => i.key),
     ...stageItems.map((i) => i.key),
+    ...drawKeys,
   ];
 
   // First run (no state row): record everything currently in-window so only
   // *future* events notify — avoids blasting people with the backlog on deploy.
   if (prev === null) {
     await deps.saveSentIds(currentKeys);
-    return { nsf: 0, wo: 0, sync: 0, updates: 0, seeded: true };
+    return { nsf: 0, wo: 0, sync: 0, updates: 0, draws: 0, seeded: true };
   }
 
   const seen = new Set(prev);
@@ -74,6 +95,7 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
   let wo = 0;
   let sync = 0;
   let updates = 0;
+  let drawAlerts = 0;
 
   // --- payment_nsf (broadcast) ---
   const newNsf = nsfItems.filter((i) => !seen.has(i.key));
@@ -127,8 +149,35 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
     }
   }
 
+  // --- batch_ready (broadcast): one summary of the new draws ready to batch ---
+  if (draws && seen.has(DRAWS_TRACKING)) {
+    const fresh = draws.filter((d) => !seen.has(`draw:${d.id}`));
+    if (fresh.length && drawTo.length) {
+      const sum = (xs: ReadyDraw[]) => Math.round(xs.reduce((s, d) => s + d.amount, 0) * 100) / 100;
+      const n = fresh.length;
+      const body =
+        `${n} new payment${n === 1 ? "" : "s"} to PMI Lighthouse (${money(sum(fresh))}) ` +
+        `— ${money(sum(draws))} ready to batch in total.`;
+      if (await sendSafe(deps, drawTo, { title: "Draws ready to batch", body, url: "/accounting/rentvine", tag: "batch_ready" })) {
+        drawAlerts++;
+      }
+    }
+  }
+
   await deps.saveSentIds(currentKeys);
-  return { nsf, wo, sync, updates };
+  return { nsf, wo, sync, updates, draws: drawAlerts };
+}
+
+// Who wants batch_ready, and (only if anyone does) the draws ready right now —
+// so Rentvine isn't queried every run for nobody.
+async function checkDraws(deps: PushAlertDeps): Promise<{ to: string[]; draws: ReadyDraw[] | null }> {
+  try {
+    const to = await deps.recipientsFor("batch_ready");
+    if (!to.length) return { to, draws: null };
+    return { to, draws: await deps.readyDraws() };
+  } catch {
+    return { to: [], draws: null };
+  }
 }
 
 async function sendSafe(deps: PushAlertDeps, to: string[], payload: PushPayload): Promise<boolean> {

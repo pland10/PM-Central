@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { cleanBankReference, confirmPayoutBatch, createPayoutBatch, mergeBatched, removeBatchItem, setBatchReference, summarizeByAccount } from "@/lib/payout-batches";
+import { batchedPayoutIds, cleanBankReference, confirmPayoutBatch, createPayoutBatch, mergeBatched, removeBatchItem, setBatchReference, summarizeByAccount } from "@/lib/payout-batches";
 import type { MoneyOutRow } from "@/lib/accounting";
 import { sqlOf } from "../helpers/sql";
 
@@ -188,3 +188,20 @@ describe("removeBatchItem", () => {
     expect(await removeBatchItem(prisma, "nope")).toEqual({ removed: null, batchEmptied: false });
   });
 });
+
+describe("batchedPayoutIds", () => {
+  it("returns which of the given payouts are already in a batch", async () => {
+    const queryRaw = vi.fn(async (_q: unknown) => [{ payout_id: "a" }]);
+    const prisma = { $queryRaw: queryRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0) } as unknown as PrismaClient;
+    expect(await batchedPayoutIds(prisma, ["a", "b"])).toEqual(new Set(["a"]));
+    expect(sqlOf(queryRaw.mock.calls[0][0])).toMatch(/FROM payout_batch_items WHERE payout_id IN/);
+  });
+
+  it("doesn't query for an empty list, and lets a DB error through (callers must not guess)", async () => {
+    const queryRaw = vi.fn(async () => { throw new Error("db busy"); });
+    const prisma = { $queryRaw: queryRaw, $executeRawUnsafe: vi.fn().mockResolvedValue(0) } as unknown as PrismaClient;
+    expect(await batchedPayoutIds(prisma, [])).toEqual(new Set());
+    await expect(batchedPayoutIds(prisma, ["a"])).rejects.toThrow("db busy");
+  });
+});
+
