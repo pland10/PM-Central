@@ -10,10 +10,17 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("feature flags", () => {
   it("keeps existing modules on unless switched off", async () => {
+    vi.stubEnv("FEATURE_LEASES", "");
+    expect((await load()).isFeatureEnabled("leases")).toBe(true);
+    vi.stubEnv("FEATURE_LEASES", "off");
+    expect((await load()).isFeatureEnabled("leases")).toBe(false);
+  });
+
+  it("hides the old Work Orders menu item (Maintenance replaces it) unless FEATURE_WORK_ORDERS is turned on", async () => {
     vi.stubEnv("FEATURE_WORK_ORDERS", "");
-    expect((await load()).isFeatureEnabled("workOrders")).toBe(true);
-    vi.stubEnv("FEATURE_WORK_ORDERS", "off");
     expect((await load()).isFeatureEnabled("workOrders")).toBe(false);
+    vi.stubEnv("FEATURE_WORK_ORDERS", "on");
+    expect((await load()).isFeatureEnabled("workOrders")).toBe(true);
   });
 
   it("keeps the new Maintenance screen off until FEATURE_MAINTENANCE is turned on", async () => {
