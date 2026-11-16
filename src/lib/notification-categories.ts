@@ -38,7 +38,7 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   {
     key: "batch_ready",
     label: "Rent batch ready to draw",
-    description: "Management-company draws are ready to batch.",
+    description: "New payments to PMI Lighthouse in Rentvine are ready to batch (checked every 15 minutes).",
     adminOnly: true,
     personal: false,
   },

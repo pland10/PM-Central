@@ -73,6 +73,19 @@ export async function fetchBatchedMap(
   }
 }
 
+// Which of these payouts are already in a batch. Unlike fetchBatchedMap this
+// lets a DB error through: the batch_ready alert must not mistake "couldn't
+// check" for "not batched" (src/lib/push-alerts-live.ts).
+export async function batchedPayoutIds(prisma: PrismaClient, payoutIds: string[]): Promise<Set<string>> {
+  const ids = payoutIds.filter((id) => id);
+  if (ids.length === 0) return new Set();
+  await ensurePayoutBatchTables(prisma);
+  const rows = await prisma.$queryRaw<{ payout_id: string }[]>(
+    Prisma.sql`SELECT payout_id FROM payout_batch_items WHERE payout_id IN (${Prisma.join(ids)})`
+  );
+  return new Set(rows.map((r) => r.payout_id));
+}
+
 export type ManagementDrawRow = MoneyOutRow & {
   batched: boolean;
   batchId: number | null;

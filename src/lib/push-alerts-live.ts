@@ -5,12 +5,15 @@ import { emailsForCategory } from "@/lib/notification-prefs-db";
 import { sendPushToUser, type PushPayload } from "@/lib/push-send";
 import { getSyncStatusMap } from "@/lib/sync-status";
 import { attentionList, workOrderAlerts } from "@/lib/work-orders-dashboard";
-import type { AssignedWorkOrder, AttentionWorkOrder, PushAlertDeps, ReturnedPayment, StaleSync } from "@/lib/push-alerts";
+import { fetchManagementDraws } from "@/lib/accounting";
+import { batchedPayoutIds } from "@/lib/payout-batches";
+import type { AssignedWorkOrder, AttentionWorkOrder, PushAlertDeps, ReadyDraw, ReturnedPayment, StaleSync } from "@/lib/push-alerts";
 
 // Real dependencies for runPushAlerts: Neon for the returned payments, new/urgent
 // work orders (reusing the dashboard's attention logic), stale syncs, assigned
 // work orders and the sent-key watermark (push_alert_state), plus Web Push for
-// delivery. The watermark table is created on first use.
+// delivery; live Rentvine (Check Register) for the draws ready to batch. The
+// watermark table is created on first use.
 
 const RETURNED_WINDOW_DAYS = 7; // how far back a returned payment can still alert
 const WO_WINDOW_HOURS = 72; // "new" work-order window (matches the dashboard)
@@ -127,6 +130,20 @@ export function livePushAlertDeps(): PushAlertDeps {
         }));
       } catch {
         return []; // one of the tables isn't present yet
+      }
+    },
+
+    // Management-company draws not in a batch yet — the same list as Accounting
+    // → Rentvine Transactions' "To draw". null when either side can't be read.
+    async readyDraws(): Promise<ReadyDraw[] | null> {
+      try {
+        const out = await fetchManagementDraws();
+        if (!out.ok) return null;
+        const rows = out.rows.filter((r) => r.payoutId);
+        const batched = await batchedPayoutIds(prisma, rows.map((r) => r.payoutId));
+        return rows.filter((r) => !batched.has(r.payoutId)).map((r) => ({ id: r.payoutId, amount: r.amount }));
+      } catch {
+        return null;
       }
     },
 
