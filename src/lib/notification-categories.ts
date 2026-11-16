@@ -17,7 +17,7 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   {
     key: "wo_assigned",
     label: "Work orders assigned to me",
-    description: "When a work order is assigned to you, or one of yours is updated.",
+    description: "When a work order is assigned to you, its stage changes, or a note is added to one of yours.",
     adminOnly: false,
     personal: true,
   },
