@@ -97,4 +97,23 @@ describe("Combobox", () => {
     await user.tab();
     expect(onCommit).not.toHaveBeenCalled();
   });
+
+  it("arrow + Enter commits only the picked option, never the typed stub as well", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(<Harness onCommit={onCommit} />); // free text, like Category
+    await user.type(screen.getByRole("combobox"), "8204");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(onCommit.mock.calls).toEqual([["8204 138th Street · Jamaica — Unit 2"]]);
+    expect(screen.getByRole("combobox")).toHaveValue("8204 138th Street · Jamaica — Unit 2");
+  });
+
+  it("strict: Enter on the highlighted match commits it once (no stub)", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(<Harness strict onCommit={onCommit} />);
+    await user.type(screen.getByRole("combobox"), "8204");
+    await user.keyboard("{Enter}");
+    expect(onCommit.mock.calls).toEqual([["8204 138th Street · Jamaica — Unit 1"]]);
+  });
 });
