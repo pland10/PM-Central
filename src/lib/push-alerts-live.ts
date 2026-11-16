@@ -1,17 +1,21 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { DATA_SOURCES } from "@/config/data-sources";
 import { emailsForCategory } from "@/lib/notification-prefs-db";
 import { sendPushToUser, type PushPayload } from "@/lib/push-send";
+import { getSyncStatusMap } from "@/lib/sync-status";
 import { attentionList, workOrderAlerts } from "@/lib/work-orders-dashboard";
-import type { AttentionWorkOrder, PushAlertDeps, ReturnedPayment } from "@/lib/push-alerts";
+import type { AssignedWorkOrder, AttentionWorkOrder, PushAlertDeps, ReturnedPayment, StaleSync } from "@/lib/push-alerts";
 
 // Real dependencies for runPushAlerts: Neon for the returned payments, new/urgent
-// work orders (reusing the dashboard's attention logic) and the sent-key
-// watermark (push_alert_state), plus Web Push for delivery. The watermark table
-// is created on first use.
+// work orders (reusing the dashboard's attention logic), stale syncs, assigned
+// work orders and the sent-key watermark (push_alert_state), plus Web Push for
+// delivery. The watermark table is created on first use.
 
 const RETURNED_WINDOW_DAYS = 7; // how far back a returned payment can still alert
 const WO_WINDOW_HOURS = 72; // "new" work-order window (matches the dashboard)
+const STALE_HOURLY_H = 6; // an hourly-tier sync is "stale" after this many hours
+const STALE_DAILY_H = 30; // a daily-tier sync is "stale" after this many hours (matches the health check)
 
 let table: Promise<void> | null = null;
 function ensureStateTable(): Promise<void> {
@@ -80,6 +84,50 @@ export function livePushAlertDeps(): PushAlertDeps {
           isNew: w.isNew,
           isHigh: w.isHigh,
         }));
+    },
+
+    async staleSyncs(): Promise<StaleSync[]> {
+      try {
+        const map = await getSyncStatusMap();
+        const now = Date.now();
+        const out: StaleSync[] = [];
+        for (const s of DATA_SOURCES) {
+          if (s.comingSoon) continue;
+          // Freshness = the OLDEST of the source's jobs that have a heartbeat.
+          // No heartbeat at all => never ran / not configured => skip (we can't
+          // tell "broken" from "not set up yet").
+          const runs = s.jobs.map((j) => map[j]?.last_run_at ?? null).filter((d): d is Date => d != null);
+          if (!runs.length) continue;
+          const oldest = runs.reduce((a, b) => (a.getTime() < b.getTime() ? a : b));
+          const limitH = s.tier === "daily" ? STALE_DAILY_H : STALE_HOURLY_H;
+          if (now - oldest.getTime() > limitH * 3_600_000) {
+            out.push({ id: s.id, label: s.label, cadence: s.cadence, lastRun: oldest.toISOString() });
+          }
+        }
+        return out;
+      } catch {
+        return []; // sync_status not reachable — don't invent failures
+      }
+    },
+
+    async assignedWorkOrderStages(): Promise<AssignedWorkOrder[]> {
+      try {
+        const rows = await prisma.$queryRaw<
+          { wo_id: string; wo_number: string | null; stage: string | null; title: string | null; name: string | null; tech_email: string }[]
+        >(Prisma.sql`
+          SELECT t.wo_id, w.wo_number, w.stage, w.title, w.name, t.tech_email
+          FROM work_order_techs t
+          JOIN work_orders w ON w.source_id = t.wo_id`);
+        return rows.map((r) => ({
+          woId: r.wo_id,
+          number: r.wo_number ?? "—",
+          stage: r.stage ?? "—",
+          issue: r.title || r.name || "Work order",
+          techEmail: r.tech_email,
+        }));
+      } catch {
+        return []; // one of the tables isn't present yet
+      }
     },
 
     recipientsFor(category: string) {

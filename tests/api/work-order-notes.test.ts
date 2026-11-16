@@ -8,11 +8,15 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/staff", () => ({ listStaff: vi.fn() }));
 vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/work-order-tech-db", () => ({ getTech: vi.fn(async () => null) }));
+vi.mock("@/lib/notify-wo-updated", () => ({ notifyWorkOrderNote: vi.fn(async () => ({ notified: false })) }));
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { listStaff } from "@/lib/staff";
 import { sendEmail } from "@/lib/email";
+import { getTech } from "@/lib/work-order-tech-db";
+import { notifyWorkOrderNote } from "@/lib/notify-wo-updated";
 import { DELETE, GET, PATCH, POST } from "@/app/api/work-orders/notes/route";
 
 const queryRaw = vi.mocked(prisma.$queryRaw);
@@ -72,6 +76,20 @@ describe("/api/work-orders/notes", () => {
     expect(insert.values).toEqual(["abc", "100480", "Call the plumber", "paul@pmi.com", "Paul Landman"]);
     expect(sendEmail).not.toHaveBeenCalled();
     expect((await res.json()).emailed).toBe(false);
+  });
+
+  it("pings the in-house tech of a new note (not the author)", async () => {
+    vi.mocked(getTech).mockResolvedValueOnce({ email: "ari@pmi.com", name: "Ari" });
+    const res = await post({ woId: "abc", body: "Call the plumber" });
+    expect(res.status).toBe(201);
+    expect(notifyWorkOrderNote).toHaveBeenCalledWith(
+      expect.objectContaining({ tech: { email: "ari@pmi.com", name: "Ari" }, woId: "abc", woNumber: "100480", byEmail: "paul@pmi.com", body: "Call the plumber" })
+    );
+  });
+
+  it("does not ping a tech when none is assigned", async () => {
+    await post({ woId: "abc", body: "Call the plumber" }); // getTech defaults to null
+    expect(notifyWorkOrderNote).not.toHaveBeenCalled();
   });
 
   it("emails the chosen staff member only when asked, and records it", async () => {

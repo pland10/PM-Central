@@ -7,6 +7,8 @@ import { sendEmail } from "@/lib/email";
 import { matchStaffEmail, noteEmail, normalizeNoteBody, resolveRecipients } from "@/lib/work-order-notes";
 import { addNote, deleteNote, listNotes, markEmailed, noteAuthor, updateNote } from "@/lib/work-order-notes-db";
 import { pendingNumber, resolveWorkOrderId } from "@/lib/created-work-orders";
+import { getTech } from "@/lib/work-order-tech-db";
+import { notifyWorkOrderNote } from "@/lib/notify-wo-updated";
 
 // Work-order notes (Work Orders list → Notes). Any signed-in user.
 //   GET    ?wo=<id>                     → notes (newest first) + who can be emailed
@@ -156,6 +158,11 @@ export async function POST(req: NextRequest) {
     const number = wo.wo_number ?? "—";
     const author = user.name || user.email || "PM-Central";
     const note = await addNote({ woId: found.id, woNumber: number, body, authorEmail: user.email ?? "", authorName: author });
+
+    // Ping the in-house tech on this WO (if any) that there's a new note — unless
+    // they wrote it. Best-effort; never blocks saving the note.
+    const tech = await getTech(found.id);
+    if (tech) await notifyWorkOrderNote({ tech, woId: found.id, woNumber: number, byEmail: user.email ?? null, body });
 
     if (recipients.length === 0) return NextResponse.json({ note, emailed: false }, { status: 201 });
 
