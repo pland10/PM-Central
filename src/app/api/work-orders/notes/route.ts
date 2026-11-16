@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
       property: wo.property_address ?? "",
       author,
       body,
-      appUrl: `${req.nextUrl.origin}/work-orders`,
+      appUrl: `${req.nextUrl.origin}/maintenance`,
       leadSimpleUrl: wo.link ?? undefined,
     });
     const sent = await sendEmail({ to: recipients, ...mail, replyTo: user.email ?? undefined });

@@ -92,6 +92,14 @@ describe("/api/work-orders/notes", () => {
     expect(notifyWorkOrderNote).not.toHaveBeenCalled();
   });
 
+  it("links the email to the Maintenance screen", async () => {
+    await post({ woId: "abc", body: "Call the plumber", emailTo: "jasper@pmi.com" });
+    const mail = vi.mocked(sendEmail).mock.calls[0][0] as { html?: string; text?: string };
+    const content = `${mail.html ?? ""} ${mail.text ?? ""}`;
+    expect(content).toContain("https://pmilighthouse.app/maintenance");
+    expect(content).not.toContain("/work-orders");
+  });
+
   it("emails the chosen staff member only when asked, and records it", async () => {
     const res = await post({ woId: "abc", body: "Call the plumber", emailTo: "jasper@pmi.com" });
     expect(res.status).toBe(201);

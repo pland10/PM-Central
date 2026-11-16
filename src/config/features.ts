@@ -36,8 +36,8 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   leases: flag("LEASES"),
   tenants: flag("TENANTS"),
   // The old Work Orders screen: hidden from the menu now that Maintenance covers
-  // it (user, Nov 2026). The page still opens by URL (dashboard links use it);
-  // FEATURE_WORK_ORDERS=on brings the menu item back.
+  // it (user, Nov 2026); links that used to open it now go to Maintenance. The
+  // page still opens by URL; FEATURE_WORK_ORDERS=on brings the menu item back.
   workOrders: flag("WORK_ORDERS", false),
   // The work-order screen that replaced Work Orders.
   maintenance: flag("MAINTENANCE", false),
