@@ -184,3 +184,31 @@ describe("CloseCalendar — editor layout", () => {
   });
 });
 
+describe("CloseCalendar — daily summary email (admins)", () => {
+  it("shows the recipients and saves a new list", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, digestTo: ["paul@pmi.com", "ari@pmi.com"] }) });
+    const { user } = setup({ canEdit: true, digestTo: ["paul@pmi.com"] });
+    const box = screen.getByLabelText("Daily summary email to");
+    expect(box).toHaveValue("paul@pmi.com");
+    await user.clear(box);
+    await user.type(box, "paul@pmi.com, ari@pmi.com");
+    await user.click(screen.getByRole("button", { name: "Save recipients" }));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/calendar/settings");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ digestTo: "paul@pmi.com, ari@pmi.com" });
+    expect(await screen.findByText(/Saved/)).toBeInTheDocument();
+  });
+
+  it("sends it now on request", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, sentTo: ["paul@pmi.com"] }) });
+    const { user } = setup({ canEdit: true, digestTo: ["paul@pmi.com"] });
+    await user.click(screen.getByRole("button", { name: "Send now" }));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/calendar/digest");
+    expect(await screen.findByText(/Sent to paul@pmi.com/)).toBeInTheDocument();
+  });
+
+  it("isn't shown to non-admins", () => {
+    setup({ digestTo: ["paul@pmi.com"] });
+    expect(screen.queryByLabelText("Daily summary email to")).not.toBeInTheDocument();
+  });
+});
+

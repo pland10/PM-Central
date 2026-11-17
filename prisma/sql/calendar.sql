@@ -41,3 +41,8 @@ CREATE TABLE IF NOT EXISTS calendar_settings (
     CONSTRAINT calendar_settings_single CHECK (id = 1)
 );
 INSERT INTO calendar_settings (id, seeded) VALUES (1, false) ON CONFLICT (id) DO NOTHING;
+
+-- Daily summary email: who gets it (comma-separated), and the last day it went
+-- out — claimed atomically so the 6am send happens once a day.
+ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_to TEXT NOT NULL DEFAULT '';
+ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_last_sent DATE;

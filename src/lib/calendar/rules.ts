@@ -55,6 +55,13 @@ export const formatWeekdays = (days: number[]) =>
   `WEEKLY:${[...new Set(days)].sort((a, b) => a - b).map((d) => WEEKDAY_CODES[d - 1]).join(",")}`;
 export const describeWeekdays = (days: number[]) => days.map((d) => WEEKDAY_NAMES[d - 1]).join(", ");
 
+// Short label for an event's schedule: "Daily", "Mon, Wed, Fri", or the rule.
+export function ruleLabel(frequency: Frequency, rule: string): string {
+  if (frequency === "daily") return "Daily";
+  if (frequency === "weekly") return describeWeekdays(parseWeekdays(rule) ?? []);
+  return rule;
+}
+
 export const RULE_HELP = "Use ME-5, ME-5BD, MS+3, D10, BD3 or BD-1.";
 
 const MAX_OFFSET = 31;

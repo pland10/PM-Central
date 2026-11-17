@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { routeQueries, sqlOf } from "../../helpers/sql";
 import {
+  claimDigestSend,
   createCalendarEvent,
+  getDigestRecipients,
+  releaseDigestSend,
+  setDigestRecipients,
   deleteCalendarEvent,
   listCalendarEvents,
   listTaskStatuses,
@@ -35,6 +39,8 @@ describe("listCalendarEvents", () => {
     expect(ddl).toMatch(/CREATE TABLE IF NOT EXISTS calendar_events/);
     expect(ddl).toMatch(/CREATE TABLE IF NOT EXISTS calendar_task_status/);
     expect(ddl).toMatch(/CREATE TABLE IF NOT EXISTS calendar_settings/);
+    expect(ddl).toMatch(/ADD COLUMN IF NOT EXISTS digest_to/);
+    expect(ddl).toMatch(/ADD COLUMN IF NOT EXISTS digest_last_sent/);
     const seed = f.executeRaw.mock.calls.map((c) => c[0] as { values: unknown[] }).find((q) => /INSERT INTO calendar_events/.test(sqlOf(q)))!;
     expect(sqlOf(seed)).toMatch(/UPDATE calendar_settings SET seeded = true WHERE id = 1 AND NOT seeded/);
     expect(seed.values).toEqual(expect.arrayContaining(STARTER_EVENTS.map((e) => e.title)));
@@ -95,5 +101,26 @@ describe("task check-offs", () => {
     const un = fake();
     expect(await setTaskStatus(un.prisma, 7, "2026-11", false, "a", "A")).toEqual({ ok: true, status: null });
     expect(sqlOf(un.executeRaw.mock.calls[0][0])).toMatch(/DELETE FROM calendar_task_status WHERE event_id = .* AND period = /);
+  });
+});
+
+describe("daily summary settings", () => {
+  it("adds the settings columns, reads and saves the recipients", async () => {
+    const f = fake([[/SELECT digest_to FROM calendar_settings/, [{ digest_to: "paul@pmi.com,ari@pmi.com" }]]]);
+    expect(await getDigestRecipients(f.prisma)).toEqual(["paul@pmi.com", "ari@pmi.com"]);
+    await setDigestRecipients(f.prisma, ["paul@pmi.com"]);
+    const save = f.executeRaw.mock.calls.map((c) => c[0] as { values: unknown[] }).find((q) => /UPDATE calendar_settings SET digest_to/.test(sqlOf(q)))!;
+    expect(save.values).toContain("paul@pmi.com");
+  });
+
+  it("claims a day's send once (atomic), and can release it after a failed send", async () => {
+    const f = fake([[/UPDATE calendar_settings SET digest_last_sent/, [{ id: 1 }]]]);
+    expect(await claimDigestSend(f.prisma, "2026-11-18")).toBe(true);
+    const claim = f.queryRaw.mock.calls.find((c) => /digest_last_sent/.test(sqlOf(c[0])))![0];
+    expect(sqlOf(claim)).toMatch(/digest_last_sent IS NULL OR digest_last_sent < /);
+    const g = fake([[/UPDATE calendar_settings SET digest_last_sent/, []]]);
+    expect(await claimDigestSend(g.prisma, "2026-11-18")).toBe(false);
+    await releaseDigestSend(g.prisma, "2026-11-18");
+    expect(sqlOf(g.executeRaw.mock.calls.at(-1)![0])).toMatch(/SET digest_last_sent = NULL WHERE id = 1 AND digest_last_sent = /);
   });
 });
