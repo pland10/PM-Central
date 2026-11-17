@@ -7,7 +7,18 @@ import { getSyncStatusMap } from "@/lib/sync-status";
 import { attentionList, workOrderAlerts } from "@/lib/work-orders-dashboard";
 import { fetchManagementDraws } from "@/lib/accounting";
 import { batchedPayoutIds } from "@/lib/payout-batches";
-import type { AssignedWorkOrder, AttentionWorkOrder, PushAlertDeps, ReadyDraw, ReturnedPayment, StaleSync } from "@/lib/push-alerts";
+import { listCalendarEvents, listTaskStatuses } from "@/lib/calendar/db";
+import { occurrencesBetween } from "@/lib/calendar/rules";
+import { hourInET, todayInET } from "@/lib/calendar/today";
+import type {
+  AssignedWorkOrder,
+  AttentionWorkOrder,
+  DueCalendarTask,
+  PushAlertDeps,
+  ReadyDraw,
+  ReturnedPayment,
+  StaleSync,
+} from "@/lib/push-alerts";
 
 // Real dependencies for runPushAlerts: Neon for the returned payments, new/urgent
 // work orders (reusing the dashboard's attention logic), stale syncs, assigned
@@ -19,6 +30,7 @@ const RETURNED_WINDOW_DAYS = 7; // how far back a returned payment can still ale
 const WO_WINDOW_HOURS = 72; // "new" work-order window (matches the dashboard)
 const STALE_HOURLY_H = 6; // an hourly-tier sync is "stale" after this many hours
 const STALE_DAILY_H = 30; // a daily-tier sync is "stale" after this many hours (matches the health check)
+const CALENDAR_ALERT_HOUR_ET = 7; // calendar "due today" alerts go out from 7am Eastern
 
 let table: Promise<void> | null = null;
 function ensureStateTable(): Promise<void> {
@@ -144,6 +156,29 @@ export function livePushAlertDeps(): PushAlertDeps {
         return rows.filter((r) => !batched.has(r.payoutId)).map((r) => ({ id: r.payoutId, amount: r.amount }));
       } catch {
         return null;
+      }
+    },
+
+    // Close-calendar tasks due today (Eastern) that have an owner and aren't
+    // checked off. Nothing before 7am, so no one gets a midnight alert.
+    async calendarDueToday(): Promise<DueCalendarTask[]> {
+      try {
+        const now = new Date();
+        if (hourInET(now) < CALENDAR_ALERT_HOUR_ET) return [];
+        const today = todayInET(now);
+        const events = (await listCalendarEvents(prisma)).filter((e) => e.active && e.ownerEmail);
+        const due = occurrencesBetween(events, today, today);
+        if (!due.length) return [];
+        const done = await listTaskStatuses(prisma, [...new Set(due.map((o) => o.period))]);
+        const byId = new Map(events.map((e) => [e.id, e]));
+        return due
+          .filter((o) => !done[`${o.eventId}:${o.period}`])
+          .map((o) => {
+            const e = byId.get(o.eventId)!;
+            return { eventId: o.eventId, period: o.period, title: e.title, rule: e.rule, ownerEmail: e.ownerEmail! };
+          });
+      } catch {
+        return []; // calendar not reachable — no alerts rather than wrong ones
       }
     },
 
