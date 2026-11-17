@@ -44,6 +44,7 @@ function stubAccount({
   groupList = null as unknown[] | null, // null → /properties/groups 404s
   memberships = {} as Record<string, unknown[]>, // propertyID → groupProperty rows; missing → 500
   rentRoll = null as { leaseID: string; expectedMonthlyRentAmount: string }[] | null, // null → report 404s
+  inactiveProperties = [] as unknown[], // only returned for ?isActive=all (as Rentvine does)
 } = {}) {
   return stubFetch([
     [/\/reports\/rent-roll/, rentRoll ? jsonResponse({ rows: rentRoll.map((d) => ({ rowTypeID: 3, data: d })) }) : jsonResponse({}, { status: 404 })],
@@ -55,7 +56,14 @@ function stubAccount({
         return memberships[id] ? onePage(memberships[id]) : jsonResponse({}, { status: 500 });
       },
     ],
-    [/\/properties$/, onePage([{ property: { propertyID: "12", address: "66 Francis Court", city: "Elmont", stateID: "NY", postalCode: "11003", propertyTypeID: "1", portfolioID: "3", isActive: "1" } }])],
+    [
+      /\/properties$/,
+      (url) => {
+        const active = [{ property: { propertyID: "12", address: "66 Francis Court", city: "Elmont", stateID: "NY", postalCode: "11003", propertyTypeID: "1", portfolioID: "3", isActive: "1" } }];
+        // Rentvine's default list leaves deactivated properties out (verified Nov 2026).
+        return onePage(url.searchParams.get("isActive") === "all" ? [...active, ...inactiveProperties] : active);
+      },
+    ],
     [/\/portfolios$/, onePage([{ portfolio: { portfolioID: "3", name: "Owner LLC" } }])],
     [/\/leases$/, onePage(leases)],
     [/\/leases\/\d+\/renewals$/, renewalsStatus === 200 ? onePage(renewals) : jsonResponse({}, { status: renewalsStatus })],
@@ -113,6 +121,19 @@ describe("liveRentvineSource.extract", () => {
       },
     ]);
     expect(out.workOrders).toEqual([]); // synced separately; never wiped here
+  });
+
+  it("includes deactivated properties (former clients), marked inactive", async () => {
+    stubAccount({
+      inactiveProperties: [
+        { property: { propertyID: "22", address: "10 Park CT", city: "Farmingdale", stateID: "NY", postalCode: "11735", propertyTypeID: "1", portfolioID: "3", isActive: "0" } },
+      ],
+    });
+    const out = await liveRentvineSource(config).extract();
+    expect(out.properties.map((p) => [p.id, p.status])).toEqual([
+      [12, "active"],
+      [22, "inactive"],
+    ]);
   });
 
   describe("property groups", () => {

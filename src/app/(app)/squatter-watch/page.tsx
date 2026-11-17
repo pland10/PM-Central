@@ -17,7 +17,9 @@ function ownerName(portfolio: {
 
 export default async function SquatterWatchPage() {
   const properties = await prisma.property.findMany({
-    where: { tags: { contains: SQUATTER_WATCH } },
+    // Active only, like the other property pages — deactivated (former-client)
+    // properties are imported too, for the Meetings page.
+    where: { status: "active", tags: { contains: SQUATTER_WATCH } },
     orderBy: { createdAt: "asc" },
     include: {
       portfolio: { include: { owners: { include: { contact: true } } } },
