@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { getDigestRecipients, listCalendarEvents, listTaskStatuses } from "@/lib/calendar/db";
 import { monthsAround, todayInET } from "@/lib/calendar/today";
 import { listStaff } from "@/lib/staff";
-import { listUserColors } from "@/lib/calendar/colors-db";
+import { assignMissingColors } from "@/lib/calendar/colors-db";
 import { CloseCalendar } from "./CloseCalendar";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +20,18 @@ export default async function CalendarPage() {
   const user = await getCurrentUser();
   try {
     const isAdmin = user?.role === "admin";
-    const [events, statuses, staff, digestTo, colors] = await Promise.all([
+    const [events, statuses, staff, digestTo] = await Promise.all([
       listCalendarEvents(prisma),
       listTaskStatuses(prisma, monthsAround(today, WINDOW_MONTHS + 1, WINDOW_MONTHS + 1)),
       listStaff().catch(() => []),
       isAdmin ? getDigestRecipients(prisma).catch(() => []) : Promise.resolve([] as string[]),
-      listUserColors(prisma).catch(() => ({}) as Record<string, string>),
     ]);
+    // Everyone gets a color: people who own tasks first, then everyone else
+    // alphabetically, until the colors run out. They can change it with My color.
+    const owners = events.map((e) => e.ownerEmail).filter((e): e is string => !!e);
+    const colors = await assignMissingColors(prisma, [...owners, ...staff.map((s) => s.email)]).catch(
+      () => ({}) as Record<string, string>
+    );
     return (
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-1 text-2xl font-bold tracking-tight">Calendar</h1>
