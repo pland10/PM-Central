@@ -19,6 +19,8 @@ import {
 //   D10           the 10th (capped at month end)
 //   BD3           3rd business day                BD-1    last business day
 //
+// A "daily" event has no rule (stored as DAILY): it falls on every business day.
+//
 // Calendar-day results that land on a weekend / bank holiday move per the
 // event's `adjust` (prior business day by default). Business-day results are
 // business days already.
@@ -29,7 +31,10 @@ export type Rule =
   | { kind: "bd"; n: number };
 
 export type Adjust = "prior" | "next" | "none";
-export type Frequency = "monthly" | "quarterly" | "yearly";
+export type Frequency = "daily" | "monthly" | "quarterly" | "yearly";
+
+// The stored rule for an every-business-day event (it needs no date rule).
+export const DAILY_RULE = "DAILY";
 
 export const RULE_HELP = "Use ME-5, ME-5BD, MS+3, D10, BD3 or BD-1.";
 
@@ -111,19 +116,29 @@ export function dateFor(r: Rule, year: number, month: number, adjust: Adjust = "
 // Does an event with this frequency run in month m (1–12)? `month` is the
 // month of the year (yearly) or of the quarter, 1–3 (quarterly).
 export function occursInMonth(frequency: Frequency, month: number | null, m: number): boolean {
+  if (frequency === "daily") return true;
   if (frequency === "yearly") return m === month;
   if (frequency === "quarterly") return ((m - 1) % 3) + 1 === month;
   return true;
 }
 
 export type CalendarEventRule = { id: number; rule: string; frequency: Frequency; month: number | null; adjust: Adjust };
-// One dated occurrence. `period` ("YYYY-MM") is the month the event belongs to —
-// the key it's checked off under — even when the date spills into another month.
+// One dated occurrence. `period` is the key it's checked off under: the month
+// ("YYYY-MM") it belongs to — even when the date spills into another month — or,
+// for a daily event, the day itself ("YYYY-MM-DD").
 export type Occurrence = { eventId: number; period: string; date: YMD };
 
 // Every occurrence dated within [from, to] (inclusive), sorted by date.
 export function occurrencesBetween(events: CalendarEventRule[], from: YMD, to: YMD): Occurrence[] {
   const out: Occurrence[] = [];
+  const daily = events.filter((e) => e.frequency === "daily");
+  if (daily.length) {
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      if (!isBusinessDay(d)) continue;
+      for (const e of daily) out.push({ eventId: e.id, period: d, date: d });
+    }
+  }
+  events = events.filter((e) => e.frequency !== "daily");
   const [fy, fm] = from.split("-").map(Number);
   const [ty, tm] = to.split("-").map(Number);
   // One month either side: an ME+3 / MS-5 rule can spill across a month boundary.

@@ -44,3 +44,12 @@ describe("STARTER_EVENTS", () => {
     expect(new Set(STARTER_EVENTS.map((e) => e.frequency))).toEqual(new Set(["monthly", "quarterly", "yearly"]));
   });
 });
+
+describe("sanitizeEvent — every business day", () => {
+  it("needs no rule; stores DAILY with no month", () => {
+    expect(sanitizeEvent({ ...good, frequency: "daily", rule: "", month: 5 })).toEqual({
+      ok: true,
+      value: { title: "Reconcile bank accounts", description: "Trust + operating", rule: "DAILY", frequency: "daily", month: null, adjust: "prior", ownerEmail: null },
+    });
+  });
+});

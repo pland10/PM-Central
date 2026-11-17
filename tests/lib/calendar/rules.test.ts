@@ -97,3 +97,19 @@ describe("occurrencesBetween", () => {
     ]); // event 4's rule doesn't parse, so it's left out
   });
 });
+
+describe("daily (every business day)", () => {
+  it("lists each business day in the window, skipping weekends and holidays, keyed by the date", () => {
+    const out = occurrencesBetween([{ id: 5, rule: "DAILY", frequency: "daily", month: null, adjust: "prior" }], "2026-11-23", "2026-11-29");
+    expect(out).toEqual([
+      { eventId: 5, period: "2026-11-23", date: "2026-11-23" },
+      { eventId: 5, period: "2026-11-24", date: "2026-11-24" },
+      { eventId: 5, period: "2026-11-25", date: "2026-11-25" },
+      { eventId: 5, period: "2026-11-27", date: "2026-11-27" }, // 26th is Thanksgiving; 28–29 weekend
+    ]);
+  });
+
+  it("occurs in every month", () => {
+    expect(occursInMonth("daily", null, 2)).toBe(true);
+  });
+});

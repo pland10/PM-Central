@@ -124,3 +124,28 @@ describe("CloseCalendar — managing events", () => {
     expect(await within(taskRow(1, "2026-11")).findByText("ME-3")).toBeInTheDocument();
   });
 });
+
+describe("CloseCalendar — every business day", () => {
+  const DAILY = ev({ id: 7, title: "Check bank feed", rule: "DAILY", frequency: "daily" });
+
+  it("lists only today's occurrence of a daily task, checked off by the day", async () => {
+    const { user } = setup({ initialEvents: [DAILY] });
+    expect(screen.getByLabelText("done-7-2026-11-17")).toBeInTheDocument();
+    expect(screen.queryByLabelText("done-7-2026-11-16")).not.toBeInTheDocument();
+    expect(taskRow(7, "2026-11-17")).toHaveTextContent("Daily");
+    await user.click(screen.getByLabelText("done-7-2026-11-17"));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ eventId: 7, period: "2026-11-17", done: true });
+  });
+
+  it("switching an event to every business day hides the date rule and saves DAILY", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ event: { ...EVENTS[0], rule: "DAILY", frequency: "daily" } }) });
+    const { user } = setup({ canEdit: true });
+    await user.click(screen.getByRole("button", { name: "edit-event-1" }));
+    await user.selectOptions(screen.getByLabelText("Repeats"), "daily");
+    expect(screen.queryByLabelText("Date rule")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Weekends & holidays")).not.toBeInTheDocument();
+    expect(screen.getByText(/Every business day · Next: Tue, Nov 17, Wed, Nov 18, Thu, Nov 19/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ frequency: "daily", rule: "DAILY", month: null });
+  });
+});

@@ -89,6 +89,13 @@ describe("POST /api/calendar/status", () => {
     expect((await res.json()).status).toMatchObject({ doneByName: "Ari" });
   });
 
+  it("accepts a day for a daily task", async () => {
+    vi.mocked(setTaskStatus).mockResolvedValue({ ok: true, status: null });
+    expect((await checkOff(req("/api/calendar/status", "POST", { eventId: 9, period: "2026-11-24", done: false }))).status).toBe(200);
+    expect(setTaskStatus).toHaveBeenCalledWith({}, 9, "2026-11-24", false, "ari@pmi.com", "Ari");
+    expect((await checkOff(req("/api/calendar/status", "POST", { eventId: 9, period: "2026-11-32", done: true }))).status).toBe(400);
+  });
+
   it("validates input, 404s an unknown event, 401s when signed out", async () => {
     expect((await checkOff(req("/api/calendar/status", "POST", { eventId: 9, period: "Nov", done: true }))).status).toBe(400);
     expect((await checkOff(req("/api/calendar/status", "POST", { eventId: "x", period: "2026-11", done: true }))).status).toBe(400);
