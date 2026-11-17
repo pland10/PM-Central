@@ -20,6 +20,7 @@ HTTP Basic `apiKey:apiSecret`. Helpers: `rvHttp()` in
 | Path | Notes |
 |---|---|
 | `/properties`, `/portfolios`, `/leases` | wraps `property` / `portfolio` / `lease`+`unit` |
+| `/properties?isActive=all` | **all** properties incl. deactivated (former clients): verified Nov 2026, 77 = 46 active + 31 inactive (`isActive` "0", `dateTimeDeactivated` set). Plain `/properties` returns **active only**; `?isActive=0` = inactive only. `includeInactive`, `showInactive`, `active`, `status`, `includeDeactivated`, `filters[isActive]` are ignored. The core sync uses `isActive=all`; app pages filter `status: "active"` except Meetings. |
 | `/leases/{id}/tenants` | rows `{ leaseTenant: {isPrimary}, contact: {name,email,phone} }` |
 | `/leases/{id}/renewals` | **ignores `{id}` — returns the whole renewals collection.** Rows `{ renewal: { leaseID, startDate, endDate, previousStartDate, previousEndDate, leaseRenewalStatusID } }`. Fetch once, index by `leaseID`. |
 | `/maintenance/work-orders` | wraps `workOrder`; `priorityID` 1/2/3 = Low/Medium/High |
