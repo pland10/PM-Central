@@ -38,3 +38,8 @@ aside[data-collapsed="true"] > a:first-child {
   padding-left: 0;
   padding-right: 0;
 }
+/* Folded sidebar sections (NavSection) — only while the sidebar shows labels;
+   the icon rail always shows every icon. */
+aside[data-collapsed="false"] .nav-section-closed {
+  display: none;
+}
