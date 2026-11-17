@@ -1,7 +1,7 @@
 // Outbound-text email alerts: whenever a text goes OUT of LeadSimple, email it
 // to the team (otherwise outbound texts are invisible unless someone opens
 // LeadSimple). Ported from leadsimple-search's text_notifier.py and run by
-// Vercel Cron every 5 minutes (/api/cron/text-alerts).
+// Vercel Cron every 3 hours (/api/cron/text-alerts).
 //
 // The watermark lives in Neon's text_notify_state (row id 1) — the same row the
 // Python version used — so the two never double-send while both exist.
