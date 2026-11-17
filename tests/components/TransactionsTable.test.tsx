@@ -233,6 +233,40 @@ describe("TransactionsTable", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Supplies" });
   });
 
+  describe("category guess from the same merchant", () => {
+    const hd = (id: string, categoryOverride: string, postedDate = "2026-10-01"): TxnRow => ({
+      ...rows[0],
+      transactionId: id,
+      categoryOverride,
+      postedDate,
+    });
+
+    it("shows the merchant's usual category under an empty box, and one click saves it", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[hd("t1", ""), hd("t3", "Repairs"), rows[1]]} accounts={[]} />);
+      const guess = screen.getByLabelText("suggest-category-t1");
+      expect(guess).toHaveTextContent("Repairs");
+      // Nothing to guess for a merchant with no categorized rows, or a row that has one.
+      expect(screen.queryByLabelText("suggest-category-t2")).toBeNull();
+      expect(screen.queryByLabelText("suggest-category-t3")).toBeNull();
+
+      await user.click(guess);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe("/api/plaid/transactions/t1");
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Repairs" });
+      expect((screen.getByLabelText("category-t1") as HTMLInputElement).value).toBe("Repairs");
+      expect(screen.queryByLabelText("suggest-category-t1")).toBeNull();
+    });
+
+    it("updates the guess as soon as another row of that merchant gets a category", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[hd("t1", ""), hd("t3", "")]} accounts={[]} />);
+      expect(screen.queryByLabelText("suggest-category-t1")).toBeNull();
+      await user.type(screen.getByLabelText("category-t3"), "Supplies{Enter}");
+      expect(await screen.findByLabelText("suggest-category-t1")).toHaveTextContent("Supplies");
+    });
+  });
+
   describe("notes thread", () => {
     const summaries = {
       t1: { count: 2, latest: "owner to repay", latestAt: "2026-11-13T12:00:00.000Z", latestBy: "Ann Admin" },

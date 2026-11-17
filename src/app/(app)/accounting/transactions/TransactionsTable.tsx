@@ -15,6 +15,7 @@ import { NotesCell } from "../../work-orders/NotesCell";
 import { NotesPanel } from "@/components/NotesPanel";
 import { Combobox } from "@/components/Combobox";
 import { expandSplitRows, parseRowId, rowIdOf } from "@/lib/transaction-splits";
+import { suggestCategories } from "@/lib/category-suggest";
 import { SplitEditor, type EditorLine } from "./SplitEditor";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -437,6 +438,8 @@ export function TransactionsTable({
     return { byKey, byLabel, byRvId };
   }, [properties]);
   const propertyLabels = useMemo(() => properties.map((c) => c.label), [properties]);
+  // Category guesses for uncategorized rows, from the same merchant's others.
+  const categoryGuesses = useMemo(() => suggestCategories(rows, rowIdOf), [rows]);
   const propertyLabel = useCallback(
     (r: Pick<TxnRow, "propertyId" | "unitId">) => {
       if (!r.propertyId) return "";
@@ -577,19 +580,36 @@ export function TransactionsTable({
         sortValue: (r) => r.categoryOverride.toLowerCase(),
         exportValue: (r) => r.categoryOverride,
         filter: { type: "select", value: (r) => r.categoryOverride || "(none)" },
-        render: (r) => (
-          <CellCombobox
-            key={`cat-${rowIdOf(r)}-${r.categoryOverride}`}
-            ariaLabel={`category-${rowIdOf(r)}`}
-            initial={r.categoryOverride}
-            options={categories}
-            onCommit={(raw) => {
-              const v = raw.trim();
-              if (v !== r.categoryOverride) save(rowIdOf(r), { categoryOverride: v });
-            }}
-            className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
-          />
-        ),
+        render: (r) => {
+          const id = rowIdOf(r);
+          const guess = categoryGuesses[id];
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <CellCombobox
+                key={`cat-${id}-${r.categoryOverride}`}
+                ariaLabel={`category-${id}`}
+                initial={r.categoryOverride}
+                options={categories}
+                onCommit={(raw) => {
+                  const v = raw.trim();
+                  if (v !== r.categoryOverride) save(id, { categoryOverride: v });
+                }}
+                className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
+              />
+              {guess && (
+                <button
+                  type="button"
+                  aria-label={`suggest-category-${id}`}
+                  title={`Used before for ${r.merchantName || "this merchant"} — click to use it`}
+                  onClick={() => save(id, { categoryOverride: guess })}
+                  className="max-w-32 truncate text-[11px] text-slate-400 hover:text-brand-600"
+                >
+                  Suggested: <span className="font-medium text-slate-500">{guess}</span>
+                </button>
+              )}
+            </div>
+          );
+        },
       },
       {
         key: "reimbursable",
@@ -736,7 +756,7 @@ export function TransactionsTable({
           ),
       },
     ],
-    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, propertyLabels, categories, rentvineBillUrl, notes]
+    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, propertyLabels, categories, categoryGuesses, rentvineBillUrl, notes]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(
