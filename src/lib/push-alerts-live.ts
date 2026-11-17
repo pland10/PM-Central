@@ -169,7 +169,7 @@ export function livePushAlertDeps(): PushAlertDeps {
         const events = (await listCalendarEvents(prisma)).filter((e) => e.active && e.ownerEmail);
         const due = occurrencesBetween(events, today, today);
         if (!due.length) return [];
-        const done = await listTaskStatuses(prisma, [...new Set(due.map((o) => o.period))]);
+        const done = await listTaskStatuses(prisma, [...new Set(due.map((o) => o.period.slice(0, 7)))]);
         const byId = new Map(events.map((e) => [e.id, e]));
         return due
           .filter((o) => !done[`${o.eventId}:${o.period}`])

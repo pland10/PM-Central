@@ -4,8 +4,9 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { setTaskStatus } from "@/lib/calendar/db";
 import { calendarOff, notFound } from "@/lib/calendar/api";
 
-// Check a calendar task off for a month (or un-check it): { eventId, period
-// "YYYY-MM", done }. Any signed-in user; recorded under their name.
+// Check a calendar task off (or un-check it): { eventId, period, done } — period
+// is the month "YYYY-MM", or the day "YYYY-MM-DD" for an every-business-day task.
+// Any signed-in user; recorded under their name.
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => null)) as { eventId?: unknown; period?: unknown; done?: unknown } | null;
   const eventId = Number(b?.eventId);
   const period = typeof b?.period === "string" ? b.period : "";
-  if (!Number.isInteger(eventId) || eventId <= 0 || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+  if (!Number.isInteger(eventId) || eventId <= 0 || !/^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/.test(period)) {
     return NextResponse.json({ error: "Missing event or month." }, { status: 400 });
   }
   const email = user.email ?? "operator";

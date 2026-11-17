@@ -4,7 +4,7 @@ import { useId, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { addDays, daysInMonth, weekday, ymd } from "@/lib/calendar/business-days";
 import type { CalendarEvent, TaskStatus } from "@/lib/calendar/events";
-import { describeRule, occurrencesBetween, parseRule, type Adjust, type Frequency, type Occurrence } from "@/lib/calendar/rules";
+import { DAILY_RULE, describeRule, occurrencesBetween, parseRule, type Adjust, type Frequency, type Occurrence } from "@/lib/calendar/rules";
 import type { StaffMember } from "@/lib/work-order-notes";
 
 // The close calendar: a month grid of deadlines plus the month's task list to
@@ -23,8 +23,12 @@ const fmtDay = (d: string) => {
 const fmtDoneAt = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
 const keyOf = (o: Occurrence) => `${o.eventId}:${o.period}`;
+const isDaily = (e: Pick<CalendarEvent, "frequency">) => e.frequency === "daily";
+const ruleBadge = (e: Pick<CalendarEvent, "frequency" | "rule">) => (isDaily(e) ? "Daily" : e.rule);
 const repeatsText = (e: Pick<CalendarEvent, "frequency" | "month">) =>
-  e.frequency === "yearly"
+  e.frequency === "daily"
+    ? "Every business day"
+    : e.frequency === "yearly"
     ? `Yearly · ${MONTHS[(e.month ?? 1) - 1]}`
     : e.frequency === "quarterly"
       ? `Quarterly · ${QUARTER_MONTHS[(e.month ?? 1) - 1].split(" (")[0]}`
@@ -66,6 +70,12 @@ export function CloseCalendar({
   const active = useMemo(() => events.filter((e) => e.active), [events]);
   const byId = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
   const occ = useMemo(() => occurrencesBetween(active, first, last), [active, first, last]);
+  // The task list shows an every-business-day task only for today (the grid shows
+  // every day); otherwise it would fill the list with ~21 copies a month.
+  const listed = useMemo(
+    () => occ.filter((o) => o.date === today || !isDaily(byId.get(o.eventId) ?? { frequency: "monthly" })),
+    [occ, byId, today]
+  );
 
   async function toggle(o: Occurrence) {
     setError("");
@@ -163,7 +173,7 @@ export function CloseCalendar({
                   .map((o) => {
                     const e = byId.get(o.eventId);
                     return (
-                      <div key={keyOf(o)} title={`${e?.title} (${e?.rule})`} className={`mb-0.5 truncate rounded px-1 py-0.5 text-[11px] ${tone(o)}`}>
+                      <div key={keyOf(o)} title={e ? `${e.title} (${ruleBadge(e)})` : ""} className={`mb-0.5 truncate rounded px-1 py-0.5 text-[11px] ${tone(o)}`}>
                         {e?.title}
                       </div>
                     );
@@ -174,11 +184,11 @@ export function CloseCalendar({
       </div>
 
       <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Tasks this month</h3>
-      {occ.length === 0 ? (
+      {listed.length === 0 ? (
         <p className="mb-6 rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">Nothing due this month.</p>
       ) : (
         <ul className="mb-6 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          {occ.map((o) => {
+          {listed.map((o) => {
             const e = byId.get(o.eventId);
             if (!e) return null;
             const s = statuses[keyOf(o)];
@@ -196,7 +206,7 @@ export function CloseCalendar({
                 <div className="min-w-0 flex-1">
                   <div className={`font-medium ${s ? "text-slate-400 line-through" : "text-slate-800"}`}>
                     {e.title}{" "}
-                    <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-normal text-slate-500 no-underline">{e.rule}</span>
+                    <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-normal text-slate-500 no-underline">{ruleBadge(e)}</span>
                     {overdue && <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Overdue</span>}
                   </div>
                   {e.description && <div className="mt-0.5 text-xs text-slate-500">{e.description}</div>}
@@ -218,9 +228,9 @@ export function CloseCalendar({
               return (
                 <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
                   <span className="font-medium text-slate-800">{e.title}</span>
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">{e.rule}</span>
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">{ruleBadge(e)}</span>
                   <span className="text-xs text-slate-500">
-                    {parsed.ok ? describeRule(parsed.rule) : "Unreadable rule"} · {repeatsText(e)}
+                    {isDaily(e) ? repeatsText(e) : `${parsed.ok ? describeRule(parsed.rule) : "Unreadable rule"} · ${repeatsText(e)}`}
                   </span>
                   <span className="ml-auto text-xs text-slate-500">{e.ownerName ?? "Unassigned"}</span>
                   <button
@@ -286,14 +296,17 @@ function EventEditor({
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const parsed = rule.trim() ? parseRule(rule) : null;
-  const monthNum = frequency === "monthly" ? null : Number(month) || null;
-  const monthOk = frequency === "monthly" || monthNum !== null;
+  const daily = frequency === "daily";
+  const parsed = !daily && rule.trim() ? parseRule(rule) : null;
+  const monthNum = frequency === "monthly" || daily ? null : Number(month) || null;
+  const monthOk = frequency === "monthly" || daily || monthNum !== null;
+  const ruleOk = daily || !!parsed?.ok;
   const next = useMemo(() => {
-    if (!parsed?.ok || !monthOk) return [];
-    return occurrencesBetween([{ id: -1, rule, frequency, month: monthNum, adjust }], today, addDays(today, 800)).slice(0, 3);
-  }, [parsed?.ok, monthOk, rule, frequency, monthNum, adjust, today]);
-  const canSave = !busy && !!title.trim() && !!parsed?.ok && monthOk;
+    if (!ruleOk || !monthOk) return [];
+    const r = daily ? DAILY_RULE : rule;
+    return occurrencesBetween([{ id: -1, rule: r, frequency, month: monthNum, adjust }], today, addDays(today, daily ? 14 : 800)).slice(0, 3);
+  }, [ruleOk, monthOk, daily, rule, frequency, monthNum, adjust, today]);
+  const canSave = !busy && !!title.trim() && ruleOk && monthOk;
 
   async function save() {
     setBusy(true);
@@ -302,7 +315,7 @@ function EventEditor({
       const res = await fetch(event ? `/api/calendar/events/${event.id}` : "/api/calendar/events", {
         method: event ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description, rule, frequency, month: monthNum, adjust, ownerEmail }),
+        body: JSON.stringify({ title, description, rule: daily ? DAILY_RULE : rule, frequency, month: monthNum, adjust, ownerEmail }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.event) throw new Error(typeof d?.error === "string" ? d.error : "Couldn't save the event.");
@@ -362,6 +375,12 @@ function EventEditor({
           <input id={`${ids}-title`} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={input} />
         </div>
 
+        {daily ? (
+          <div className="text-xs text-slate-600">
+            <p>Every business day · Next: {next.map((o) => fmtDay(o.date)).join(", ")}</p>
+            <p className="mt-0.5 text-slate-500">Skips weekends and bank holidays. Each day is checked off on its own.</p>
+          </div>
+        ) : (
         <div>
           <label htmlFor={`${ids}-rule`} className={label}>
             Date rule
@@ -395,6 +414,7 @@ function EventEditor({
             <p className="mt-1">Business days skip weekends and bank holidays.</p>
           </details>
         </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -407,15 +427,17 @@ function EventEditor({
               onChange={(e) => {
                 setFrequency(e.target.value as Frequency);
                 setMonth("");
+                if (rule.trim().toUpperCase() === DAILY_RULE) setRule(""); // leaving daily: ask for a real rule
               }}
               className={input}
             >
+              <option value="daily">Every business day</option>
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="yearly">Yearly</option>
             </select>
           </div>
-          {frequency !== "monthly" && (
+          {frequency !== "monthly" && !daily && (
             <div>
               <label htmlFor={`${ids}-month`} className={label}>
                 Month
@@ -432,6 +454,7 @@ function EventEditor({
           )}
         </div>
 
+        {!daily && (
         <div>
           <label htmlFor={`${ids}-adjust`} className={label}>
             Weekends &amp; holidays
@@ -443,6 +466,7 @@ function EventEditor({
           </select>
           <p className="mt-1 text-xs text-slate-500">Only matters for calendar-day rules; business-day rules always land on a business day.</p>
         </div>
+        )}
 
         <div>
           <label htmlFor={`${ids}-owner`} className={label}>

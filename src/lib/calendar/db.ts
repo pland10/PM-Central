@@ -140,13 +140,14 @@ const toStatus = (r: StatusRow): TaskStatus => ({
   doneAt: new Date(r.done_at).toISOString(),
 });
 
-// Check-offs for these months ("YYYY-MM"), keyed "<eventId>:<period>".
+// Check-offs in these months ("YYYY-MM") — monthly ones and the days of daily
+// ones ("YYYY-MM-DD") — keyed "<eventId>:<period>".
 export async function listTaskStatuses(prisma: PrismaClient, periods: string[]): Promise<Record<string, TaskStatus>> {
   if (periods.length === 0) return {};
   await ensureTables(prisma);
   const rows = await prisma.$queryRaw<StatusRow[]>(Prisma.sql`
     SELECT event_id, period, done_by, done_by_name, done_at FROM calendar_task_status
-    WHERE period IN (${Prisma.join(periods)})`);
+    WHERE left(period, 7) IN (${Prisma.join(periods)})`);
   return Object.fromEntries(rows.map((r) => [`${r.event_id}:${r.period}`, toStatus(r)]));
 }
 

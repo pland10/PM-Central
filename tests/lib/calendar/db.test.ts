@@ -76,6 +76,8 @@ describe("task check-offs", () => {
       "7:2026-11": { doneBy: "ari@pmi.com", doneByName: "Ari", doneAt: "2026-11-24T15:00:00.000Z" },
     });
     expect(await listTaskStatuses(fake().prisma, [])).toEqual({});
+    // matches by month, so daily check-offs ("2026-11-24") come back with the month too
+    expect(sqlOf(f.queryRaw.mock.calls[0][0])).toMatch(/WHERE left\(period, 7\) IN/);
   });
 
   it("checks off (upsert) only an existing event, and unchecks", async () => {
