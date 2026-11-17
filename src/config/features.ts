@@ -21,7 +21,8 @@ export type FeatureKey =
   | "invoicing"
   | "securityDeposits"
   | "accounting"
-  | "calendar";
+  | "calendar"
+  | "meetings";
 
 function flag(envName: string, defaultOn = true): boolean {
   const v = process.env[`FEATURE_${envName}`];
@@ -54,6 +55,8 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   accounting: flag("ACCOUNTING", false),
   // Close calendar: recurring month-end / financial deadlines with tasks.
   calendar: flag("CALENDAR"),
+  // Weekly meeting run-sheets (Monday tactical: dated per-house notes).
+  meetings: flag("MEETINGS"),
 };
 
 export function isFeatureEnabled(key: FeatureKey): boolean {
