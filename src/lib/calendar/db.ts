@@ -38,6 +38,9 @@ const DDL = [
      CONSTRAINT calendar_settings_single CHECK (id = 1)
    )`,
   `INSERT INTO calendar_settings (id, seeded) VALUES (1, false) ON CONFLICT (id) DO NOTHING`,
+  // Daily summary email: who gets it, and the last day it went out (sent once a day).
+  `ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_to TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_last_sent DATE`,
 ];
 
 let ready: Promise<void> | null = null;
@@ -172,4 +175,36 @@ export async function setTaskStatus(
     ON CONFLICT (event_id, period) DO UPDATE SET done_by = EXCLUDED.done_by, done_by_name = EXCLUDED.done_by_name, done_at = now()
     RETURNING done_by, done_by_name, done_at`);
   return rows[0] ? { ok: true, status: toStatus(rows[0]) } : { ok: false };
+}
+
+// --- Daily summary email settings -------------------------------------------
+
+export async function getDigestRecipients(prisma: PrismaClient): Promise<string[]> {
+  await ensureTables(prisma);
+  const [row] = await prisma.$queryRaw<{ digest_to: string | null }[]>(
+    Prisma.sql`SELECT digest_to FROM calendar_settings WHERE id = 1`
+  );
+  return (row?.digest_to ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+}
+
+export async function setDigestRecipients(prisma: PrismaClient, emails: string[]): Promise<void> {
+  await ensureTables(prisma);
+  await prisma.$executeRaw(Prisma.sql`UPDATE calendar_settings SET digest_to = ${emails.join(",")} WHERE id = 1`);
+}
+
+// Claim today's send (YYYY-MM-DD): true for the one caller that gets it, so the
+// email goes out once a day however many times the cron fires.
+export async function claimDigestSend(prisma: PrismaClient, date: string): Promise<boolean> {
+  await ensureTables(prisma);
+  const rows = await prisma.$queryRaw<{ id: number }[]>(Prisma.sql`
+    UPDATE calendar_settings SET digest_last_sent = ${date}::date
+    WHERE id = 1 AND (digest_last_sent IS NULL OR digest_last_sent < ${date}::date)
+    RETURNING id`);
+  return rows.length > 0;
+}
+
+// Undo a claim after a failed send, so a later run can try again.
+export async function releaseDigestSend(prisma: PrismaClient, date: string): Promise<void> {
+  await ensureTables(prisma);
+  await prisma.$executeRaw(Prisma.sql`UPDATE calendar_settings SET digest_last_sent = NULL WHERE id = 1 AND digest_last_sent = ${date}::date`);
 }

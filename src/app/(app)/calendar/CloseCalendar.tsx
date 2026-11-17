@@ -57,6 +57,7 @@ export function CloseCalendar({
   today,
   canEdit,
   windowMonths = 12,
+  digestTo = [],
 }: {
   initialEvents: CalendarEvent[];
   initialStatuses: Record<string, TaskStatus>;
@@ -64,6 +65,7 @@ export function CloseCalendar({
   today: string; // YYYY-MM-DD, Eastern time (from the server, so it doesn't shift on hydrate)
   canEdit: boolean;
   windowMonths?: number;
+  digestTo?: string[]; // daily summary recipients (admins only)
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [statuses, setStatuses] = useState(initialStatuses);
@@ -262,6 +264,7 @@ export function CloseCalendar({
             })}
             {events.length === 0 && <li className="px-3 py-4 text-center text-sm text-slate-400">No events yet.</li>}
           </ul>
+          <DigestSettings initial={digestTo} />
         </>
       )}
 
@@ -395,6 +398,46 @@ function EventEditor({
           <input id={`${ids}-title`} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={input} />
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor={`${ids}-freq`} className={label}>
+              Repeats
+            </label>
+            <select
+              id={`${ids}-freq`}
+              value={frequency}
+              onChange={(e) => {
+                setFrequency(e.target.value as Frequency);
+                setMonth("");
+                // Leaving a per-day schedule: ask for a real date rule.
+                if (rule.trim().toUpperCase() === DAILY_RULE || parseWeekdays(rule)) setRule("");
+              }}
+              className={input}
+            >
+              <option value="daily">Every business day</option>
+              <option value="weekly">Weekly on certain days</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          {frequency !== "monthly" && !perDay && (
+            <div>
+              <label htmlFor={`${ids}-month`} className={label}>
+                Month
+              </label>
+              <select id={`${ids}-month`} value={month} onChange={(e) => setMonth(e.target.value)} className={input}>
+                <option value="">Pick…</option>
+                {(frequency === "yearly" ? MONTHS : QUARTER_MONTHS).map((name, i) => (
+                  <option key={name} value={String(i + 1)}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
         {perDay ? (
           <div className="text-xs text-slate-600">
             {weekly && (
@@ -459,46 +502,6 @@ function EventEditor({
         </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`${ids}-freq`} className={label}>
-              Repeats
-            </label>
-            <select
-              id={`${ids}-freq`}
-              value={frequency}
-              onChange={(e) => {
-                setFrequency(e.target.value as Frequency);
-                setMonth("");
-                // Leaving a per-day schedule: ask for a real date rule.
-                if (rule.trim().toUpperCase() === DAILY_RULE || parseWeekdays(rule)) setRule("");
-              }}
-              className={input}
-            >
-              <option value="daily">Every business day</option>
-              <option value="weekly">Weekly on certain days</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
-          {frequency !== "monthly" && !perDay && (
-            <div>
-              <label htmlFor={`${ids}-month`} className={label}>
-                Month
-              </label>
-              <select id={`${ids}-month`} value={month} onChange={(e) => setMonth(e.target.value)} className={input}>
-                <option value="">Pick…</option>
-                {(frequency === "yearly" ? MONTHS : QUARTER_MONTHS).map((name, i) => (
-                  <option key={name} value={String(i + 1)}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
         {!perDay && (
         <div>
           <label htmlFor={`${ids}-adjust`} className={label}>
@@ -538,5 +541,67 @@ function EventEditor({
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
     </Modal>
+  );
+}
+
+// Admins: who gets the daily summary email (6am ET, business days), and a
+// "Send now" to check it.
+function DigestSettings({ initial }: { initial: string[] }) {
+  const id = useId();
+  const [value, setValue] = useState(initial.join(", "));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function call(url: string, init: RequestInit, done: (d: Record<string, unknown>) => string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(url, init);
+      const d = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof d.error === "string" ? d.error : "Something went wrong.");
+      setMsg({ ok: true, text: done(d) });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Something went wrong." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const save = () =>
+    call("/api/calendar/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digestTo: value }) }, (d) => {
+      const list = Array.isArray(d.digestTo) ? (d.digestTo as string[]) : [];
+      setValue(list.join(", "));
+      return list.length ? "Saved." : "Saved — no one will get the summary.";
+    });
+  const sendNow = () =>
+    call("/api/calendar/digest", { method: "POST" }, (d) => `Sent to ${Array.isArray(d.sentTo) ? (d.sentTo as string[]).join(", ") : "the list"}.`);
+
+  const btn = "rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+      <label htmlFor={`${id}-to`} className="block text-sm font-semibold text-slate-800">
+        Daily summary email to
+      </label>
+      <p className="mb-2 mt-0.5 text-xs text-slate-500">
+        6am Eastern on business days: today&apos;s calendar tasks, overdue ones still open, and alerts (new/urgent work orders,
+        returned payments, draws ready to batch, sync problems). Separate addresses with commas.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id={`${id}-to`}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="name@example.com"
+          className="min-w-[16rem] flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand-500"
+        />
+        <button type="button" disabled={busy} onClick={save} className={`${btn} border-brand-600 bg-brand-600 text-white hover:bg-brand-700`}>
+          Save recipients
+        </button>
+        <button type="button" disabled={busy} onClick={sendNow} className={`${btn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}>
+          Send now
+        </button>
+      </div>
+      {msg && <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
+    </div>
   );
 }

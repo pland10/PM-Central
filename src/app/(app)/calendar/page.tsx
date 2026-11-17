@@ -1,7 +1,7 @@
 import { requireFeature } from "@/config/features";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import { listCalendarEvents, listTaskStatuses } from "@/lib/calendar/db";
+import { getDigestRecipients, listCalendarEvents, listTaskStatuses } from "@/lib/calendar/db";
 import { monthsAround, todayInET } from "@/lib/calendar/today";
 import { listStaff } from "@/lib/staff";
 import { CloseCalendar } from "./CloseCalendar";
@@ -18,10 +18,12 @@ export default async function CalendarPage() {
   const today = todayInET();
   const user = await getCurrentUser();
   try {
-    const [events, statuses, staff] = await Promise.all([
+    const isAdmin = user?.role === "admin";
+    const [events, statuses, staff, digestTo] = await Promise.all([
       listCalendarEvents(prisma),
       listTaskStatuses(prisma, monthsAround(today, WINDOW_MONTHS + 1, WINDOW_MONTHS + 1)),
       listStaff().catch(() => []),
+      isAdmin ? getDigestRecipients(prisma).catch(() => []) : Promise.resolve([] as string[]),
     ]);
     return (
       <div className="mx-auto max-w-6xl">
@@ -32,8 +34,9 @@ export default async function CalendarPage() {
           initialStatuses={statuses}
           staff={staff}
           today={today}
-          canEdit={user?.role === "admin"}
+          canEdit={isAdmin}
           windowMonths={WINDOW_MONTHS}
+          digestTo={digestTo}
         />
       </div>
     );
