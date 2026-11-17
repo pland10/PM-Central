@@ -22,6 +22,13 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
     personal: true,
   },
   {
+    key: "calendar_tasks",
+    label: "Calendar tasks assigned to me",
+    description: "The morning a calendar task you own is due.",
+    adminOnly: false,
+    personal: true,
+  },
+  {
     key: "wo_new",
     label: "New / urgent work orders",
     description: "New work orders and ones flagged as needing attention.",

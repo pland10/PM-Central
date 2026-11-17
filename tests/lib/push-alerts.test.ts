@@ -19,6 +19,7 @@ function makeDeps(over: Partial<PushAlertDeps> = {}): PushAlertDeps {
     staleSyncs: vi.fn(async () => []),
     assignedWorkOrderStages: vi.fn(async () => []),
     readyDraws: vi.fn(async () => null),
+    calendarDueToday: vi.fn(async () => []),
     recipientsFor: vi.fn(async () => ["admin@pmi.com"]),
     sendPush: vi.fn(async () => ({ sent: 1 })),
     ...over,
@@ -247,6 +248,40 @@ describe("runPushAlerts — rent batch ready to draw (batch_ready)", () => {
     const r = await runPushAlerts(deps);
     expect(r.draws).toBe(0);
     expect(saved(deps)).toEqual(expect.arrayContaining(["draws:tracking", "draw:po_1"]));
+  });
+});
+
+describe("runPushAlerts — calendar tasks due today (calendar_tasks, personal)", () => {
+  const DUE = [
+    { eventId: 1, period: "2026-11", title: "Reimbursables review", rule: "ME-5", ownerEmail: "ari@pmi.com" },
+    { eventId: 2, period: "2026-11", title: "Reconcile bank accounts", rule: "BD3", ownerEmail: "paul@pmi.com" },
+  ];
+  const quiet = (over: Partial<PushAlertDeps> = {}) =>
+    makeDeps({ returnedPayments: vi.fn(async () => []), attentionWorkOrders: vi.fn(async () => []), ...over });
+
+  it("alerts each owner who has calendar alerts on, once per task", async () => {
+    const deps = quiet({
+      calendarDueToday: vi.fn(async () => DUE),
+      recipientsFor: vi.fn(async (c: string) => (c === "calendar_tasks" ? ["ARI@pmi.com"] : [])),
+    });
+    const r = await runPushAlerts(deps);
+    expect(r.calendar).toBe(1);
+    expect(deps.sendPush).toHaveBeenCalledTimes(1);
+    const [to, payload] = vi.mocked(deps.sendPush).mock.calls[0];
+    expect(to).toEqual(["ari@pmi.com"]);
+    expect(payload).toMatchObject({ title: "Due today: Reimbursables review", url: "/calendar", tag: "cal:1:2026-11" });
+    expect(payload.body).toContain("ME-5");
+    expect(vi.mocked(deps.saveSentIds).mock.calls[0][0]).toEqual(expect.arrayContaining(["cal:1:2026-11", "cal:2:2026-11"]));
+  });
+
+  it("doesn't repeat a task already alerted", async () => {
+    const deps = quiet({
+      loadSentIds: vi.fn(async () => ["cal:1:2026-11"]),
+      calendarDueToday: vi.fn(async () => [DUE[0]]),
+      recipientsFor: vi.fn(async () => ["ari@pmi.com"]),
+    });
+    expect((await runPushAlerts(deps)).calendar).toBe(0);
+    expect(deps.sendPush).not.toHaveBeenCalled();
   });
 });
 

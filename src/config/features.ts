@@ -20,7 +20,8 @@ export type FeatureKey =
   | "inspections"
   | "invoicing"
   | "securityDeposits"
-  | "accounting";
+  | "accounting"
+  | "calendar";
 
 function flag(envName: string, defaultOn = true): boolean {
   const v = process.env[`FEATURE_${envName}`];
@@ -51,6 +52,8 @@ export const FEATURES: Record<FeatureKey, boolean> = {
   // Defaults OFF — financial data stays dark until access is entitled properly;
   // turn on per environment with FEATURE_ACCOUNTING=on.
   accounting: flag("ACCOUNTING", false),
+  // Close calendar: recurring month-end / financial deadlines with tasks.
+  calendar: flag("CALENDAR"),
 };
 
 export function isFeatureEnabled(key: FeatureKey): boolean {
