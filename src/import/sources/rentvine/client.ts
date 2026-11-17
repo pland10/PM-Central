@@ -438,7 +438,10 @@ export function liveRentvineSource(config: RentvineAccountConfig): RentvineSourc
       }
 
       const [propRows, pfRows, leaseRows, typeNames, rentByLease] = await Promise.all([
-        rvGetAll("/properties"),
+        // isActive=all: the default list leaves deactivated properties (former
+        // clients) out; they come in as status "inactive" (verified Nov 2026:
+        // 46 active + 31 inactive = 77).
+        rvGetAll("/properties?isActive=all"),
         rvGetAll("/portfolios"),
         rvGetAll("/leases"),
         loadPropertyTypeNames(),
