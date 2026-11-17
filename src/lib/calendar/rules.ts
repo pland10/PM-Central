@@ -5,6 +5,7 @@ import {
   isBusinessDay,
   nextBusinessDay,
   priorBusinessDay,
+  weekday,
   ymd,
   type YMD,
 } from "@/lib/calendar/business-days";
@@ -20,6 +21,8 @@ import {
 //   BD3           3rd business day                BD-1    last business day
 //
 // A "daily" event has no rule (stored as DAILY): it falls on every business day.
+// A "weekly" event's rule lists its weekdays, e.g. WEEKLY:MO,WE,FR; a chosen day
+// that's a bank holiday is skipped that week.
 //
 // Calendar-day results that land on a weekend / bank holiday move per the
 // event's `adjust` (prior business day by default). Business-day results are
@@ -31,10 +34,26 @@ export type Rule =
   | { kind: "bd"; n: number };
 
 export type Adjust = "prior" | "next" | "none";
-export type Frequency = "daily" | "monthly" | "quarterly" | "yearly";
+export type Frequency = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 
 // The stored rule for an every-business-day event (it needs no date rule).
 export const DAILY_RULE = "DAILY";
+
+// Weekly events: weekdays as 1 = Mon … 5 = Fri (Date#getUTCDay numbering).
+const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR"];
+const WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+// "WEEKLY:MO,WE,FR" → [1, 3, 5] (sorted, unique); null if it isn't a valid list.
+export function parseWeekdays(rule: string): number[] | null {
+  const m = /^WEEKLY:(.*)$/.exec((rule ?? "").replace(/\s+/g, "").toUpperCase());
+  if (!m || !m[1]) return null;
+  const days = m[1].split(",").map((c) => WEEKDAY_CODES.indexOf(c) + 1);
+  if (days.some((d) => d < 1)) return null;
+  return [...new Set(days)].sort((a, b) => a - b);
+}
+export const formatWeekdays = (days: number[]) =>
+  `WEEKLY:${[...new Set(days)].sort((a, b) => a - b).map((d) => WEEKDAY_CODES[d - 1]).join(",")}`;
+export const describeWeekdays = (days: number[]) => days.map((d) => WEEKDAY_NAMES[d - 1]).join(", ");
 
 export const RULE_HELP = "Use ME-5, ME-5BD, MS+3, D10, BD3 or BD-1.";
 
@@ -116,7 +135,7 @@ export function dateFor(r: Rule, year: number, month: number, adjust: Adjust = "
 // Does an event with this frequency run in month m (1–12)? `month` is the
 // month of the year (yearly) or of the quarter, 1–3 (quarterly).
 export function occursInMonth(frequency: Frequency, month: number | null, m: number): boolean {
-  if (frequency === "daily") return true;
+  if (frequency === "daily" || frequency === "weekly") return true;
   if (frequency === "yearly") return m === month;
   if (frequency === "quarterly") return ((m - 1) % 3) + 1 === month;
   return true;
@@ -131,14 +150,20 @@ export type Occurrence = { eventId: number; period: string; date: YMD };
 // Every occurrence dated within [from, to] (inclusive), sorted by date.
 export function occurrencesBetween(events: CalendarEventRule[], from: YMD, to: YMD): Occurrence[] {
   const out: Occurrence[] = [];
-  const daily = events.filter((e) => e.frequency === "daily");
-  if (daily.length) {
+  // Per-day events (every business day, or chosen weekdays): one occurrence per
+  // matching business day, checked off under the day itself.
+  const perDay = events
+    .filter((e) => e.frequency === "daily" || e.frequency === "weekly")
+    .map((e) => ({ id: e.id, days: e.frequency === "weekly" ? parseWeekdays(e.rule) : null, weekly: e.frequency === "weekly" }))
+    .filter((e) => !e.weekly || e.days !== null);
+  if (perDay.length) {
     for (let d = from; d <= to; d = addDays(d, 1)) {
       if (!isBusinessDay(d)) continue;
-      for (const e of daily) out.push({ eventId: e.id, period: d, date: d });
+      const wd = weekday(d);
+      for (const e of perDay) if (!e.days || e.days.includes(wd)) out.push({ eventId: e.id, period: d, date: d });
     }
   }
-  events = events.filter((e) => e.frequency !== "daily");
+  events = events.filter((e) => e.frequency !== "daily" && e.frequency !== "weekly");
   const [fy, fm] = from.split("-").map(Number);
   const [ty, tm] = to.split("-").map(Number);
   // One month either side: an ME+3 / MS-5 rule can spill across a month boundary.

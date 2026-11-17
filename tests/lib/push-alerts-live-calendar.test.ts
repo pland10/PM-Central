@@ -50,6 +50,17 @@ describe("livePushAlertDeps().calendarDueToday", () => {
     expect(listTaskStatuses).toHaveBeenCalledWith({}, ["2026-11"]); // looked up by month
   });
 
+  it("includes a weekly task only on its days", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-24T14:00:00Z")); // 9am ET Tue Nov 24
+    vi.mocked(listCalendarEvents).mockResolvedValue([
+      ev({ id: 8, rule: "WEEKLY:TU,TH", frequency: "weekly" }),
+      ev({ id: 9, rule: "WEEKLY:MO,WE,FR", frequency: "weekly" }),
+    ] as never);
+    vi.mocked(listTaskStatuses).mockResolvedValue({});
+    expect((await livePushAlertDeps().calendarDueToday()).map((d) => d.eventId)).toEqual([8]);
+  });
+
   it("waits until 7am Eastern, and is empty if the calendar can't be read", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-25T10:00:00Z")); // 5am ET

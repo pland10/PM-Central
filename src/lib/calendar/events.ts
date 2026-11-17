@@ -1,4 +1,4 @@
-import { DAILY_RULE, formatRule, parseRule, type Adjust, type Frequency } from "@/lib/calendar/rules";
+import { DAILY_RULE, formatRule, formatWeekdays, parseRule, parseWeekdays, type Adjust, type Frequency } from "@/lib/calendar/rules";
 
 // Close-calendar events: what's due, when (a rule — see ./rules.ts), how often,
 // and who owns it. Pure validation + the starter set; storage is ./db.ts.
@@ -6,7 +6,7 @@ import { DAILY_RULE, formatRule, parseRule, type Adjust, type Frequency } from "
 export type CalendarEventInput = {
   title: string;
   description: string;
-  rule: string; // canonical, e.g. "ME-5BD"; "DAILY" for every business day
+  rule: string; // canonical, e.g. "ME-5BD"; "DAILY" for every business day; "WEEKLY:MO,WE,FR"
   frequency: Frequency;
   month: number | null; // yearly: 1–12; quarterly: month of the quarter, 1–3; daily / monthly: null
   adjust: Adjust;
@@ -23,7 +23,7 @@ export type CalendarEvent = Omit<CalendarEventInput, "ownerEmail"> & {
   active: boolean;
 };
 
-const FREQUENCIES: Frequency[] = ["daily", "monthly", "quarterly", "yearly"];
+const FREQUENCIES: Frequency[] = ["daily", "weekly", "monthly", "quarterly", "yearly"];
 const ADJUSTS: Adjust[] = ["prior", "next", "none"];
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 2000;
@@ -42,6 +42,15 @@ export function sanitizeEvent(raw: unknown): { ok: true; value: CalendarEventInp
   // Every business day: no date rule or month; weekends/holidays never apply.
   if (frequency === "daily") {
     return { ok: true, value: { title, description, rule: DAILY_RULE, frequency, month: null, adjust: "prior", ownerEmail } };
+  }
+  // Weekly on chosen weekdays: `weekdays` (1 = Mon … 5 = Fri), or a WEEKLY:… rule.
+  if (frequency === "weekly") {
+    const list = Array.isArray(b.weekdays)
+      ? b.weekdays.map(Number)
+      : parseWeekdays(typeof b.rule === "string" ? b.rule : "") ?? [];
+    if (list.length === 0) return { ok: false, error: "Pick at least one day of the week." };
+    if (list.some((d) => !Number.isInteger(d) || d < 1 || d > 5)) return { ok: false, error: "Days must be Monday to Friday." };
+    return { ok: true, value: { title, description, rule: formatWeekdays(list), frequency, month: null, adjust: "prior", ownerEmail } };
   }
 
   const parsed = parseRule(typeof b.rule === "string" ? b.rule : "");

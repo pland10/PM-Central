@@ -149,3 +149,26 @@ describe("CloseCalendar — every business day", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ frequency: "daily", rule: "DAILY", month: null });
   });
 });
+
+describe("CloseCalendar — weekly on chosen days", () => {
+  const TT = ev({ id: 8, title: "Check bank feed", rule: "WEEKLY:TU,TH", frequency: "weekly" });
+
+  it("lists today's occurrence only when today is one of the days", () => {
+    setup({ initialEvents: [TT] }); // today is Tue Nov 17
+    expect(taskRow(8, "2026-11-17")).toHaveTextContent("Tue, Thu");
+    expect(screen.queryByLabelText("done-8-2026-11-19")).not.toBeInTheDocument();
+  });
+
+  it("picks the days in the editor and saves them", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ event: { ...EVENTS[0], rule: "WEEKLY:MO,WE,FR", frequency: "weekly" } }) });
+    const { user } = setup({ canEdit: true });
+    await user.click(screen.getByRole("button", { name: "edit-event-1" }));
+    await user.selectOptions(screen.getByLabelText("Repeats"), "weekly");
+    expect(screen.queryByLabelText("Date rule")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save event" })).toBeDisabled(); // no days yet
+    for (const d of ["Mon", "Wed", "Fri"]) await user.click(screen.getByRole("checkbox", { name: d }));
+    expect(screen.getByText(/Mon, Wed, Fri · Next: Wed, Nov 18, Fri, Nov 20, Mon, Nov 23/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ frequency: "weekly", rule: "WEEKLY:MO,WE,FR", weekdays: [1, 3, 5] });
+  });
+});
