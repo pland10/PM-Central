@@ -36,13 +36,16 @@ describe("vercel.json crons", () => {
     for (const c of allCrons) expect(c.schedule.trim().split(/\s+/)).toHaveLength(5);
   });
 
-  it("checks for outbound-text alerts every 5 minutes", () => {
-    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "*/5 * * * *" });
+  // The text-alert poll touches Neon every run; at */5 (288×/day) it kept the
+  // compute awake 24/7 and burned the Free CU-hour allowance. Every 3h lets the
+  // DB scale to zero between runs.
+  it("checks for outbound-text alerts every 3 hours", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "0 */3 * * *" });
     expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$|push-alerts$)/.test(c.path))).toBe(true);
   });
 
-  it("checks for admin push alerts (NSF / new work orders) every 15 minutes", () => {
-    expect(allCrons).toContainEqual({ path: "/api/cron/push-alerts", schedule: "*/15 * * * *" });
+  it("checks for admin push alerts every 15 minutes during business hours only (not overnight)", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/push-alerts", schedule: "*/15 11-23 * * *" });
   });
 
   // GitHub Actions minutes: each run of the leadsimple-search sync + backfill
