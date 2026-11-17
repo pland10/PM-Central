@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     rule        TEXT NOT NULL,
-    frequency   TEXT NOT NULL DEFAULT 'monthly', -- daily (every business day; rule DAILY) | monthly | quarterly | yearly
+    frequency   TEXT NOT NULL DEFAULT 'monthly', -- daily (every business day; rule DAILY) | weekly (rule WEEKLY:MO,WE,FR) | monthly | quarterly | yearly
     month       INT,                             -- yearly: 1–12; quarterly: month of the quarter 1–3; monthly: NULL
     adjust      TEXT NOT NULL DEFAULT 'prior',   -- weekend/holiday: prior | next | none (calendar-day rules)
     owner_email TEXT,                            -- who the task is for (gets the alert)
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 );
 
 -- A task checked off: one row per event per month ("YYYY-MM"), or per day
--- ("YYYY-MM-DD") for a daily event.
+-- ("YYYY-MM-DD") for a daily or weekly event.
 CREATE TABLE IF NOT EXISTS calendar_task_status (
     event_id     INT NOT NULL,                   -- → calendar_events.id
     period       TEXT NOT NULL,

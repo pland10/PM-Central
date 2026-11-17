@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateFor, describeRule, formatRule, occurrencesBetween, occursInMonth, parseRule, type CalendarEventRule } from "@/lib/calendar/rules";
+import { dateFor, describeRule, describeWeekdays, formatRule, formatWeekdays, occurrencesBetween, occursInMonth, parseRule, parseWeekdays, type CalendarEventRule } from "@/lib/calendar/rules";
 
 const rule = (s: string) => {
   const r = parseRule(s);
@@ -111,5 +111,23 @@ describe("daily (every business day)", () => {
 
   it("occurs in every month", () => {
     expect(occursInMonth("daily", null, 2)).toBe(true);
+  });
+});
+
+describe("weekly on chosen weekdays", () => {
+  it("reads and writes the day list, in Mon–Fri order", () => {
+    expect(parseWeekdays("WEEKLY:FR,MO,WE")).toEqual([1, 3, 5]);
+    expect(parseWeekdays("weekly: tu , th")).toEqual([2, 4]);
+    expect(parseWeekdays("WEEKLY:")).toBeNull();
+    expect(parseWeekdays("WEEKLY:SA")).toBeNull();
+    expect(parseWeekdays("ME-5")).toBeNull();
+    expect(formatWeekdays([5, 1, 3, 3])).toBe("WEEKLY:MO,WE,FR");
+    expect(describeWeekdays([1, 3, 5])).toBe("Mon, Wed, Fri");
+  });
+
+  it("falls on the chosen weekdays, skipping bank holidays, keyed by the date", () => {
+    const out = occurrencesBetween([{ id: 6, rule: "WEEKLY:TU,TH", frequency: "weekly", month: null, adjust: "prior" }], "2026-11-23", "2026-12-04");
+    expect(out.map((o) => o.date)).toEqual(["2026-11-24", "2026-12-01", "2026-12-03"]); // Thu 26th is Thanksgiving
+    expect(out[0]).toEqual({ eventId: 6, period: "2026-11-24", date: "2026-11-24" });
   });
 });
