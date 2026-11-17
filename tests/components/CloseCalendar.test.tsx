@@ -172,3 +172,15 @@ describe("CloseCalendar — weekly on chosen days", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ frequency: "weekly", rule: "WEEKLY:MO,WE,FR", weekdays: [1, 3, 5] });
   });
 });
+
+describe("CloseCalendar — editor layout", () => {
+  it("puts Repeats before the days / date rule it controls", async () => {
+    const { user } = setup({ canEdit: true });
+    await user.click(screen.getByRole("button", { name: "+ Add event" }));
+    const repeats = screen.getByLabelText("Repeats");
+    expect(repeats.compareDocumentPosition(screen.getByLabelText("Date rule")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.selectOptions(repeats, "weekly");
+    expect(repeats.compareDocumentPosition(screen.getByRole("checkbox", { name: "Mon" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+

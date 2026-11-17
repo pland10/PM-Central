@@ -395,6 +395,46 @@ function EventEditor({
           <input id={`${ids}-title`} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={input} />
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor={`${ids}-freq`} className={label}>
+              Repeats
+            </label>
+            <select
+              id={`${ids}-freq`}
+              value={frequency}
+              onChange={(e) => {
+                setFrequency(e.target.value as Frequency);
+                setMonth("");
+                // Leaving a per-day schedule: ask for a real date rule.
+                if (rule.trim().toUpperCase() === DAILY_RULE || parseWeekdays(rule)) setRule("");
+              }}
+              className={input}
+            >
+              <option value="daily">Every business day</option>
+              <option value="weekly">Weekly on certain days</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          {frequency !== "monthly" && !perDay && (
+            <div>
+              <label htmlFor={`${ids}-month`} className={label}>
+                Month
+              </label>
+              <select id={`${ids}-month`} value={month} onChange={(e) => setMonth(e.target.value)} className={input}>
+                <option value="">Pick…</option>
+                {(frequency === "yearly" ? MONTHS : QUARTER_MONTHS).map((name, i) => (
+                  <option key={name} value={String(i + 1)}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
         {perDay ? (
           <div className="text-xs text-slate-600">
             {weekly && (
@@ -458,46 +498,6 @@ function EventEditor({
           </details>
         </div>
         )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`${ids}-freq`} className={label}>
-              Repeats
-            </label>
-            <select
-              id={`${ids}-freq`}
-              value={frequency}
-              onChange={(e) => {
-                setFrequency(e.target.value as Frequency);
-                setMonth("");
-                // Leaving a per-day schedule: ask for a real date rule.
-                if (rule.trim().toUpperCase() === DAILY_RULE || parseWeekdays(rule)) setRule("");
-              }}
-              className={input}
-            >
-              <option value="daily">Every business day</option>
-              <option value="weekly">Weekly on certain days</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
-          {frequency !== "monthly" && !perDay && (
-            <div>
-              <label htmlFor={`${ids}-month`} className={label}>
-                Month
-              </label>
-              <select id={`${ids}-month`} value={month} onChange={(e) => setMonth(e.target.value)} className={input}>
-                <option value="">Pick…</option>
-                {(frequency === "yearly" ? MONTHS : QUARTER_MONTHS).map((name, i) => (
-                  <option key={name} value={String(i + 1)}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
 
         {!perDay && (
         <div>
