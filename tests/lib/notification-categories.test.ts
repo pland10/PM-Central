@@ -17,4 +17,9 @@ describe("notification categories", () => {
     expect(canUseCategory("payment_nsf", true)).toBe(true);
     expect(canUseCategory("nope", true)).toBe(false);
   });
+
+  it("has a personal, non-admin calendar-tasks category", () => {
+    expect(canUseCategory("calendar_tasks", false)).toBe(true);
+    expect(NOTIFICATION_CATEGORIES.find((c) => c.key === "calendar_tasks")).toMatchObject({ adminOnly: false, personal: true });
+  });
 });

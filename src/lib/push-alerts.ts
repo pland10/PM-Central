@@ -5,6 +5,7 @@ import type { PushPayload } from "@/lib/push-send";
 //  - wo_new      (admin broadcast): new / urgent work orders
 //  - sync_failure(admin broadcast): a sync that has gone stale
 //  - wo_assigned (personal): the stage of a work order you're the tech on changed
+//  - calendar_tasks (personal): a close-calendar task you own is due today
 //  - batch_ready (admin broadcast): new management-company draws (payments to
 //    PMI Lighthouse in Rentvine) not yet in a batch — one summary per run
 // A watermark of event keys (push-alerts-live.ts) dedups across runs; the key
@@ -25,6 +26,8 @@ export type StaleSync = { id: string; label: string; cadence: string; lastRun: s
 export type AssignedWorkOrder = { woId: string; number: string; stage: string; issue: string; techEmail: string };
 // A management-company draw that isn't in a batch yet (Rentvine payoutID).
 export type ReadyDraw = { id: string; amount: number };
+// A close-calendar task due today that isn't done, with its owner.
+export type DueCalendarTask = { eventId: number; period: string; title: string; rule: string; ownerEmail: string };
 
 export type PushAlertDeps = {
   // null = no state row yet (first run ever) — seed silently, don't backfill.
@@ -37,11 +40,21 @@ export type PushAlertDeps = {
   // Draws ready to batch, read live from Rentvine; null = couldn't tell (keep
   // what we knew rather than guess). Only called when someone wants batch_ready.
   readyDraws(): Promise<ReadyDraw[] | null>;
+  calendarDueToday(): Promise<DueCalendarTask[]>;
   recipientsFor(category: string): Promise<string[]>;
   sendPush(emails: string[], payload: PushPayload): Promise<{ sent: number }>;
 };
 
-export type PushAlertResult = { nsf: number; wo: number; sync: number; updates: number; draws: number; seeded?: boolean; error?: string };
+export type PushAlertResult = {
+  nsf: number;
+  wo: number;
+  sync: number;
+  updates: number;
+  draws: number;
+  calendar: number;
+  seeded?: boolean;
+  error?: string;
+};
 
 // Marks that draws are being tracked: until it's in the saved keys, the draws
 // currently ready are recorded silently (no backlog alert when the alert is
@@ -52,13 +65,14 @@ const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResult> {
-  const [prev, payments, workOrders, syncs, assigned, drawCheck] = await Promise.all([
+  const [prev, payments, workOrders, syncs, assigned, drawCheck, due] = await Promise.all([
     deps.loadSentIds(),
     deps.returnedPayments(),
     deps.attentionWorkOrders(),
     deps.staleSyncs(),
     deps.assignedWorkOrderStages(),
     checkDraws(deps),
+    deps.calendarDueToday().catch(() => [] as DueCalendarTask[]),
   ]);
 
   // Candidate event keys this run. Each detector contributes stable keys; the
@@ -75,19 +89,21 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
     draws === null
       ? (prev ?? []).filter((k) => k === DRAWS_TRACKING || k.startsWith("draw:"))
       : [DRAWS_TRACKING, ...draws.map((d) => `draw:${d.id}`)];
+  const calItems = due.map((d) => ({ key: `cal:${d.eventId}:${d.period}`, d }));
   const currentKeys = [
     ...nsfItems.map((i) => i.key),
     ...woItems.map((i) => i.key),
     ...syncItems.map((i) => i.key),
     ...stageItems.map((i) => i.key),
     ...drawKeys,
+    ...calItems.map((i) => i.key),
   ];
 
   // First run (no state row): record everything currently in-window so only
   // *future* events notify — avoids blasting people with the backlog on deploy.
   if (prev === null) {
     await deps.saveSentIds(currentKeys);
-    return { nsf: 0, wo: 0, sync: 0, updates: 0, draws: 0, seeded: true };
+    return { nsf: 0, wo: 0, sync: 0, updates: 0, draws: 0, calendar: 0, seeded: true };
   }
 
   const seen = new Set(prev);
@@ -96,6 +112,7 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
   let sync = 0;
   let updates = 0;
   let drawAlerts = 0;
+  let calendar = 0;
 
   // --- payment_nsf (broadcast) ---
   const newNsf = nsfItems.filter((i) => !seen.has(i.key));
@@ -164,8 +181,20 @@ export async function runPushAlerts(deps: PushAlertDeps): Promise<PushAlertResul
     }
   }
 
+  // --- calendar_tasks (personal): your task is due today ---
+  const newCal = calItems.filter((i) => !seen.has(i.key));
+  if (newCal.length) {
+    const optedIn = new Set((await deps.recipientsFor("calendar_tasks")).map((e) => e.toLowerCase()));
+    for (const { key, d } of newCal) {
+      const owner = d.ownerEmail.toLowerCase();
+      if (!optedIn.has(owner)) continue;
+      const body = `${d.title} (${d.rule}) is due today.`;
+      if (await sendSafe(deps, [owner], { title: `Due today: ${d.title}`, body, url: "/calendar", tag: key })) calendar++;
+    }
+  }
+
   await deps.saveSentIds(currentKeys);
-  return { nsf, wo, sync, updates, draws: drawAlerts };
+  return { nsf, wo, sync, updates, draws: drawAlerts, calendar };
 }
 
 // Who wants batch_ready, and (only if anyone does) the draws ready right now —
