@@ -3,8 +3,10 @@ import { cronAuthorized } from "@/lib/cron-auth";
 import { runTextAlerts } from "@/lib/text-alerts";
 import { liveTextAlertDeps, textAlertConfig } from "@/lib/text-alerts-live";
 
-// Vercel Cron, every 5 minutes: email an alert for each new outbound
-// LeadSimple text (see src/lib/text-alerts.ts).
+// Vercel Cron, every 3 hours: email an alert for each new outbound
+// LeadSimple text (see src/lib/text-alerts.ts). Kept infrequent so the poll
+// doesn't hold the Neon compute awake 24/7 (it dedups, so a run catches every
+// text since the last one).
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
