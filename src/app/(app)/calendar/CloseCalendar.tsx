@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
+import { CALENDAR_COLORS, NO_COLOR } from "@/lib/calendar/colors";
 import { addDays, daysInMonth, weekday, ymd } from "@/lib/calendar/business-days";
 import type { CalendarEvent, TaskStatus } from "@/lib/calendar/events";
 import {
@@ -58,6 +59,8 @@ export function CloseCalendar({
   canEdit,
   windowMonths = 12,
   digestTo = [],
+  colors: initialColors = {},
+  me = "",
 }: {
   initialEvents: CalendarEvent[];
   initialStatuses: Record<string, TaskStatus>;
@@ -66,8 +69,12 @@ export function CloseCalendar({
   canEdit: boolean;
   windowMonths?: number;
   digestTo?: string[]; // daily summary recipients (admins only)
+  colors?: Record<string, string>; // person (lower-case email) → their calendar color
+  me?: string; // the signed-in person's email (picks their own color)
 }) {
   const [events, setEvents] = useState(initialEvents);
+  const [colors, setColors] = useState(initialColors);
+  const colorOf = (email: string | null | undefined) => (email ? colors[email.toLowerCase()] : undefined) ?? NO_COLOR;
   const [statuses, setStatuses] = useState(initialStatuses);
   const [ty, tm] = today.split("-").map(Number);
   const [view, setView] = useState({ y: ty, m: tm });
@@ -132,12 +139,21 @@ export function CloseCalendar({
   const cells: (string | null)[] = [...Array(lead).fill(null), ...Array.from({ length: dim }, (_, i) => ymd(view.y, view.m, i + 1))];
   while (cells.length % 7) cells.push(null);
 
-  const tone = (o: Occurrence) =>
-    statuses[keyOf(o)]
-      ? "bg-emerald-50 text-emerald-700 line-through"
-      : o.date < today
-        ? "bg-red-50 text-red-700"
-        : "bg-brand-50 text-brand-700";
+  // Grid chips are the owner's color; done = faded + struck through; overdue = red outline.
+  const chipStatus = (o: Occurrence) =>
+    statuses[keyOf(o)] ? "line-through opacity-50" : o.date < today ? "ring-1 ring-inset ring-red-500" : "";
+  const chipStyle = (hex: string) => ({
+    borderLeftWidth: 3,
+    borderLeftStyle: "solid" as const,
+    borderLeftColor: hex,
+    backgroundColor: `${hex}1A`,
+    color: hex,
+  });
+  // Legend: everyone who has picked a color, plus the grey for unassigned / not picked yet.
+  const nameOf = (email: string) => staff.find((s) => s.email.toLowerCase() === email)?.name ?? email;
+  const legend = Object.entries(colors)
+    .map(([email, hex]) => ({ name: nameOf(email), hex }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const btn = "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40";
 
@@ -156,15 +172,42 @@ export function CloseCalendar({
         <button type="button" onClick={() => setView({ y: ty, m: tm })} className={btn}>
           Today
         </button>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => setEditing("new")}
-            className="ml-auto rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
-          >
-            + Add event
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {me && (
+            <MyColor
+              me={me.toLowerCase()}
+              colors={colors}
+              nameOf={nameOf}
+              onSaved={(hex) => setColors((c) => ({ ...c, [me.toLowerCase()]: hex }))}
+            />
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing("new")}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              + Add event
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div aria-label="Colors" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+        {legend.map((l) => (
+          <span key={l.name} className="inline-flex items-center gap-1">
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.hex }} />
+            {l.name}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NO_COLOR }} />
+          Unassigned
+        </span>
+        <span className="inline-flex items-center gap-1 text-red-600">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm ring-1 ring-red-500" />
+          Overdue
+        </span>
       </div>
 
       {error && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -191,7 +234,12 @@ export function CloseCalendar({
                   .map((o) => {
                     const e = byId.get(o.eventId);
                     return (
-                      <div key={keyOf(o)} title={e ? `${e.title} (${ruleBadge(e)})` : ""} className={`mb-0.5 truncate rounded px-1 py-0.5 text-[11px] ${tone(o)}`}>
+                      <div
+                        key={keyOf(o)}
+                        title={e ? `${e.title} (${ruleBadge(e)})${e.ownerName ? ` · ${e.ownerName}` : ""}` : ""}
+                        style={chipStyle(colorOf(e?.ownerEmail))}
+                        className={`mb-0.5 truncate rounded px-1 py-0.5 text-[11px] font-medium ${chipStatus(o)}`}
+                      >
                         {e?.title}
                       </div>
                     );
@@ -230,7 +278,10 @@ export function CloseCalendar({
                   {e.description && <div className="mt-0.5 text-xs text-slate-500">{e.description}</div>}
                   {s && <div className="mt-0.5 text-xs text-emerald-700">Done by {s.doneByName} · {fmtDoneAt(s.doneAt)}</div>}
                 </div>
-                <div className="shrink-0 text-xs text-slate-500">{e.ownerName ?? "Unassigned"}</div>
+                <div className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorOf(e.ownerEmail) }} />
+                  {e.ownerName ?? "Unassigned"}
+                </div>
               </li>
             );
           })}
@@ -602,6 +653,90 @@ function DigestSettings({ initial }: { initial: string[] }) {
         </button>
       </div>
       {msg && <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// Pick your own calendar color. Colors someone else has are disabled (and the
+// server refuses them too), so no two people share one.
+function MyColor({
+  me,
+  colors,
+  nameOf,
+  onSaved,
+}: {
+  me: string;
+  colors: Record<string, string>;
+  nameOf: (email: string) => string;
+  onSaved: (hex: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const mine = colors[me];
+  const holderOf = (hex: string) => Object.entries(colors).find(([email, c]) => c.toLowerCase() === hex.toLowerCase() && email !== me)?.[0];
+
+  async function pick(hex: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/calendar/color", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ color: hex }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof d?.error === "string" ? d.error : "Couldn't save your color.");
+      onSaved(hex);
+      setMsg({ ok: true, text: "Your color is saved." });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't save your color." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="My color"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50"
+      >
+        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: mine ?? NO_COLOR }} />
+        My color
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+          <p className="mb-2 text-xs text-slate-500">Pick your color. Colors other people have are greyed out.</p>
+          <div className="grid grid-cols-6 gap-1.5">
+            {CALENDAR_COLORS.map((c) => {
+              const holder = holderOf(c.hex);
+              const isMine = mine?.toLowerCase() === c.hex.toLowerCase();
+              return (
+                <button
+                  key={c.hex}
+                  type="button"
+                  disabled={busy || !!holder}
+                  aria-label={holder ? `${c.name} — taken by ${nameOf(holder)}` : c.name}
+                  aria-pressed={isMine}
+                  title={holder ? `${c.name} — taken by ${nameOf(holder)}` : c.name}
+                  onClick={() => pick(c.hex)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-25 ${
+                    isMine ? "ring-2 ring-slate-800 ring-offset-1" : ""
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                >
+                  {isMine ? "✓" : ""}
+                </button>
+              );
+            })}
+          </div>
+          {msg && <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { getDigestRecipients, listCalendarEvents, listTaskStatuses } from "@/lib/calendar/db";
 import { monthsAround, todayInET } from "@/lib/calendar/today";
 import { listStaff } from "@/lib/staff";
+import { listUserColors } from "@/lib/calendar/colors-db";
 import { CloseCalendar } from "./CloseCalendar";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +20,12 @@ export default async function CalendarPage() {
   const user = await getCurrentUser();
   try {
     const isAdmin = user?.role === "admin";
-    const [events, statuses, staff, digestTo] = await Promise.all([
+    const [events, statuses, staff, digestTo, colors] = await Promise.all([
       listCalendarEvents(prisma),
       listTaskStatuses(prisma, monthsAround(today, WINDOW_MONTHS + 1, WINDOW_MONTHS + 1)),
       listStaff().catch(() => []),
       isAdmin ? getDigestRecipients(prisma).catch(() => []) : Promise.resolve([] as string[]),
+      listUserColors(prisma).catch(() => ({}) as Record<string, string>),
     ]);
     return (
       <div className="mx-auto max-w-6xl">
@@ -37,6 +39,8 @@ export default async function CalendarPage() {
           canEdit={isAdmin}
           windowMonths={WINDOW_MONTHS}
           digestTo={digestTo}
+          colors={colors}
+          me={user?.email ?? ""}
         />
       </div>
     );

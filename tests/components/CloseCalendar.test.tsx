@@ -212,3 +212,28 @@ describe("CloseCalendar — daily summary email (admins)", () => {
   });
 });
 
+describe("CloseCalendar — person colors", () => {
+  const BLUE = "#2563EB";
+  const GREEN = "#16A34A";
+
+  it("colors grid chips by the owner and shows a legend", () => {
+    setup({ colors: { "ari@pmi.com": BLUE }, me: "paul@pmi.com" });
+    const chip = screen.getAllByTitle(/Reimbursables review/)[0];
+    expect(chip).toHaveStyle({ borderLeftColor: BLUE });
+    const legend = screen.getByLabelText("Colors");
+    expect(within(legend).getByText("Ari")).toBeInTheDocument();
+    expect(within(legend).getByText("Unassigned")).toBeInTheDocument();
+  });
+
+  it("lets me pick my own color; colors others have are disabled", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, email: "paul@pmi.com", color: GREEN }) });
+    const { user } = setup({ colors: { "ari@pmi.com": BLUE }, me: "paul@pmi.com" });
+    await user.click(screen.getByRole("button", { name: "My color" }));
+    expect(screen.getByRole("button", { name: /Blue — taken by Ari/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Green" }));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/calendar/color");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ color: GREEN });
+    expect(await screen.findByText("Your color is saved.")).toBeInTheDocument();
+  });
+});
+

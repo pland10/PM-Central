@@ -46,3 +46,11 @@ INSERT INTO calendar_settings (id, seeded) VALUES (1, false) ON CONFLICT (id) DO
 -- out — claimed atomically so the 6am send happens once a day.
 ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_to TEXT NOT NULL DEFAULT '';
 ALTER TABLE calendar_settings ADD COLUMN IF NOT EXISTS digest_last_sent DATE;
+
+-- Each person's calendar color (they pick their own). color is UNIQUE so no
+-- two people can share one; values come from src/lib/calendar/colors.ts.
+CREATE TABLE IF NOT EXISTS calendar_user_colors (
+    user_email TEXT PRIMARY KEY,                 -- lower-case login email
+    color      TEXT NOT NULL UNIQUE,             -- hex, e.g. #2563EB
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
