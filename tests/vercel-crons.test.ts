@@ -41,7 +41,13 @@ describe("vercel.json crons", () => {
   // DB scale to zero between runs.
   it("checks for outbound-text alerts every 3 hours", () => {
     expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "0 */3 * * *" });
-    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$|push-alerts$)/.test(c.path))).toBe(true);
+    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$|push-alerts$|daily-summary$)/.test(c.path))).toBe(true);
+  });
+
+  // 10:00 and 11:00 UTC on weekdays: one of them is 6am Eastern in both EST and
+  // EDT; the route only sends in the 6am ET hour, once a day.
+  it("runs the daily summary email at 6am Eastern on weekdays", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/daily-summary", schedule: "0 10,11 * * 1-5" });
   });
 
   it("checks for admin push alerts every 15 minutes during business hours only (not overnight)", () => {
