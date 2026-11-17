@@ -54,3 +54,6 @@ CREATE TABLE IF NOT EXISTS calendar_user_colors (
     color      TEXT NOT NULL UNIQUE,             -- hex, e.g. #2563EB
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- auto = handed out by the app (people without a color get the next free one);
+-- an auto color can be moved to make room, a chosen one (auto = false) can't.
+ALTER TABLE calendar_user_colors ADD COLUMN IF NOT EXISTS auto BOOLEAN NOT NULL DEFAULT false;

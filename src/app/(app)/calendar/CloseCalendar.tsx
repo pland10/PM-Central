@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { CALENDAR_COLORS, NO_COLOR } from "@/lib/calendar/colors";
+import { CALENDAR_COLORS, NO_COLOR, colorName } from "@/lib/calendar/colors";
 import { addDays, daysInMonth, weekday, ymd } from "@/lib/calendar/business-days";
 import type { CalendarEvent, TaskStatus } from "@/lib/calendar/events";
 import {
@@ -315,6 +315,13 @@ export function CloseCalendar({
             })}
             {events.length === 0 && <li className="px-3 py-4 text-center text-sm text-slate-400">No events yet.</li>}
           </ul>
+          <EveryonesColors
+            staff={staff}
+            colors={colors}
+            onSaved={(email, hex, moved) =>
+              setColors((c) => ({ ...c, [email]: hex, ...(moved ? { [moved.email]: moved.color } : {}) }))
+            }
+          />
           <DigestSettings initial={digestTo} />
         </>
       )}
@@ -737,6 +744,92 @@ function MyColor({
           {msg && <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// Admins: set anyone's color. Someone holding a color only automatically is
+// moved to the next free one; a color someone chose themselves can't be taken.
+function EveryonesColors({
+  staff,
+  colors,
+  onSaved,
+}: {
+  staff: StaffMember[];
+  colors: Record<string, string>;
+  onSaved: (email: string, hex: string, moved?: { email: string; color: string }) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const nameOf = (email: string) => staff.find((s) => s.email.toLowerCase() === email)?.name ?? email;
+  const holderOf = (hex: string, except: string) =>
+    Object.entries(colors).find(([e, c]) => c.toLowerCase() === hex.toLowerCase() && e !== except)?.[0];
+
+  async function set(person: StaffMember, hex: string) {
+    const email = person.email.toLowerCase();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/calendar/color", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, color: hex }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof d?.error === "string" ? d.error : "Couldn't save the color.");
+      onSaved(email, hex, d.moved);
+      setMsg({
+        ok: true,
+        text: `${person.name} is ${colorName(hex)}.${d.moved ? ` ${nameOf(d.moved.email)} moved to ${colorName(d.moved.color)}.` : ""}`,
+      });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't save the color." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (staff.length === 0) return null;
+  return (
+    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-slate-800">Everyone&apos;s colors</h3>
+      <p className="mb-3 mt-0.5 text-xs text-slate-500">
+        People without a color get one automatically; anyone can change theirs with My color. A color someone picked
+        themselves can&apos;t be given to someone else.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {staff.map((p) => {
+          const email = p.email.toLowerCase();
+          const current = colors[email] ?? "";
+          return (
+            <label key={email} className="flex items-center gap-2 text-sm text-slate-700">
+              <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: current || NO_COLOR }} />
+              <span className="w-32 truncate">{p.name}</span>
+              <select
+                aria-label={`Color for ${p.name}`}
+                value={current}
+                disabled={busy}
+                onChange={(e) => e.target.value && set(p, e.target.value)}
+                className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+              >
+                <option value="" disabled>
+                  No color
+                </option>
+                {CALENDAR_COLORS.map((c) => {
+                  const holder = holderOf(c.hex, email);
+                  return (
+                    <option key={c.hex} value={c.hex}>
+                      {c.name}
+                      {holder ? ` (${nameOf(holder)})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+      {msg && <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
     </div>
   );
 }
