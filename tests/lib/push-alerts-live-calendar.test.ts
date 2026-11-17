@@ -39,6 +39,17 @@ describe("livePushAlertDeps().calendarDueToday", () => {
     ]);
   });
 
+  it("includes a daily task every business day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-24T14:00:00Z")); // 9am ET Tue Nov 24
+    vi.mocked(listCalendarEvents).mockResolvedValue([ev({ id: 7, title: "Check bank feed", rule: "DAILY", frequency: "daily" })] as never);
+    vi.mocked(listTaskStatuses).mockResolvedValue({});
+    expect(await livePushAlertDeps().calendarDueToday()).toEqual([
+      { eventId: 7, period: "2026-11-24", title: "Check bank feed", rule: "DAILY", ownerEmail: "ari@pmi.com" },
+    ]);
+    expect(listTaskStatuses).toHaveBeenCalledWith({}, ["2026-11"]); // looked up by month
+  });
+
   it("waits until 7am Eastern, and is empty if the calendar can't be read", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-25T10:00:00Z")); // 5am ET

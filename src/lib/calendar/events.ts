@@ -1,4 +1,4 @@
-import { formatRule, parseRule, type Adjust, type Frequency } from "@/lib/calendar/rules";
+import { DAILY_RULE, formatRule, parseRule, type Adjust, type Frequency } from "@/lib/calendar/rules";
 
 // Close-calendar events: what's due, when (a rule — see ./rules.ts), how often,
 // and who owns it. Pure validation + the starter set; storage is ./db.ts.
@@ -6,9 +6,9 @@ import { formatRule, parseRule, type Adjust, type Frequency } from "@/lib/calend
 export type CalendarEventInput = {
   title: string;
   description: string;
-  rule: string; // canonical, e.g. "ME-5BD"
+  rule: string; // canonical, e.g. "ME-5BD"; "DAILY" for every business day
   frequency: Frequency;
-  month: number | null; // yearly: 1–12; quarterly: month of the quarter, 1–3; monthly: null
+  month: number | null; // yearly: 1–12; quarterly: month of the quarter, 1–3; daily / monthly: null
   adjust: Adjust;
   ownerEmail: string | null;
 };
@@ -23,7 +23,7 @@ export type CalendarEvent = Omit<CalendarEventInput, "ownerEmail"> & {
   active: boolean;
 };
 
-const FREQUENCIES: Frequency[] = ["monthly", "quarterly", "yearly"];
+const FREQUENCIES: Frequency[] = ["daily", "monthly", "quarterly", "yearly"];
 const ADJUSTS: Adjust[] = ["prior", "next", "none"];
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 2000;
@@ -36,11 +36,16 @@ export function sanitizeEvent(raw: unknown): { ok: true; value: CalendarEventInp
   if (title.length > MAX_TITLE) return { ok: false, error: `Keep the name under ${MAX_TITLE} characters.` };
   if (description.length > MAX_DESCRIPTION) return { ok: false, error: `Keep the description under ${MAX_DESCRIPTION} characters.` };
 
+  const frequency = b.frequency as Frequency;
+  if (!FREQUENCIES.includes(frequency)) return { ok: false, error: "Pick how often it repeats." };
+  const ownerEmail = typeof b.ownerEmail === "string" && b.ownerEmail.trim() ? b.ownerEmail.trim().toLowerCase() : null;
+  // Every business day: no date rule or month; weekends/holidays never apply.
+  if (frequency === "daily") {
+    return { ok: true, value: { title, description, rule: DAILY_RULE, frequency, month: null, adjust: "prior", ownerEmail } };
+  }
+
   const parsed = parseRule(typeof b.rule === "string" ? b.rule : "");
   if (!parsed.ok) return { ok: false, error: parsed.error };
-
-  const frequency = b.frequency as Frequency;
-  if (!FREQUENCIES.includes(frequency)) return { ok: false, error: "Pick monthly, quarterly or yearly." };
   const adjust = (b.adjust ?? "prior") as Adjust;
   if (!ADJUSTS.includes(adjust)) return { ok: false, error: "Pick what happens on weekends and holidays." };
 
@@ -54,7 +59,6 @@ export function sanitizeEvent(raw: unknown): { ok: true; value: CalendarEventInp
     month = n;
   }
 
-  const ownerEmail = typeof b.ownerEmail === "string" && b.ownerEmail.trim() ? b.ownerEmail.trim().toLowerCase() : null;
   return { ok: true, value: { title, description, rule: formatRule(parsed.rule), frequency, month, adjust, ownerEmail } };
 }
 
