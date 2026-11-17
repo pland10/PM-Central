@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { BRAND } from "@/config/brand";
 import { isFeatureEnabled, type FeatureKey } from "@/config/features";
 import { canAccessAccounting } from "@/lib/accounting-access";
@@ -9,6 +10,8 @@ import { ENV_INDICATOR, IDLE_LOGOUT_MINUTES } from "@/config/environment";
 import { IdleLogout } from "@/components/IdleLogout";
 import { MobileNav, type MobileNavSection } from "./MobileNav";
 import { SidebarFooter } from "@/components/SidebarFooter";
+import { CollapsibleSidebar } from "@/components/CollapsibleSidebar";
+import { SIDEBAR_COOKIE } from "@/lib/sidebar";
 import { appVersion } from "@/config/version";
 import { PmCentralMark, PM_CENTRAL_NAME } from "@/components/PmCentralMark";
 import { PageTitle } from "@/components/PageTitle";
@@ -233,6 +236,8 @@ function NavLink({ item }: { item: (typeof nav)[number] }) {
   return (
     <Link
       href={item.href}
+      title={item.label}
+      aria-label={item.label}
       className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
     >
       <svg
@@ -250,13 +255,16 @@ function NavLink({ item }: { item: (typeof nav)[number] }) {
       >
         {item.icon}
       </svg>
-      {item.label}
+      <span className="nav-label">{item.label}</span>
     </Link>
   );
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
+  // Desktop sidebar collapsed to icons? (set by its toggle; read here so the
+  // first paint is already the right width)
+  const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
 
   // Accounting carries financial data, so it's gated per-user on top of its
   // feature flag — admins and anyone in ACCOUNTING_ALLOWED_EMAILS only.
@@ -296,9 +304,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {user && IDLE_LOGOUT_MINUTES > 0 && <IdleLogout minutes={IDLE_LOGOUT_MINUTES} />}
       {/* Sidebar — colors come straight from the brand config (inline, so they
           never depend on the CSS build). */}
-      <aside
-        className="hidden w-56 shrink-0 flex-col text-slate-300 md:flex"
+      <CollapsibleSidebar
+        initialCollapsed={sidebarCollapsed}
         style={{ backgroundColor: BRAND.colors.ink }}
+        footer={<SidebarFooter tagline={BRAND.tagline} version={appVersion()} />}
       >
         <Link
           href="/"
@@ -306,7 +315,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           style={{ borderBottom: "1px solid rgba(255,255,255,0.10)" }}
         >
           {/* Dark wordmark already includes the brand name, so no separate text. */}
-          <Logo dark className="h-9 w-auto max-w-[180px] object-contain" />
+          <Logo dark className="nav-label h-9 w-auto max-w-[180px] object-contain" />
+          <span className="nav-collapsed-only">
+            <PmCentralMark size={30} decorative houseColor="#FFFFFF" />
+          </span>
         </Link>
         <nav className="flex flex-col gap-0.5 p-3 text-sm">
           {navLayout.map((entry) => {
@@ -325,7 +337,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 className="mt-4 border-t pt-3"
                 style={{ borderColor: "rgba(255,255,255,0.12)" }}
               >
-                <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                <div className="nav-label mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                   {entry.heading}
                 </div>
                 {groupItems.map((it) => (
@@ -337,6 +349,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
             <Link
               href="/notifications"
+              title="Notifications"
+              aria-label="Notifications"
               className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
             >
               <svg
@@ -355,13 +369,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
-              Notifications
+              <span className="nav-label">Notifications</span>
             </Link>
           </div>
           {user?.role === "admin" && (
             <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
               <Link
                 href="/management"
+                title="Management"
+                aria-label="Management"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -382,17 +398,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <rect x="12" y="8" width="3" height="10" rx="0.5" />
                   <rect x="17" y="4" width="3" height="14" rx="0.5" />
                 </svg>
-                Management
+                <span className="nav-label">Management</span>
               </Link>
             </div>
           )}
           {user?.role === "admin" && (
             <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
-              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+              <div className="nav-label mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                 Admin
               </div>
               <Link
                 href="/admin/data"
+                title="Data sources"
+                aria-label="Data sources"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -412,10 +430,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <path d="M3 5v14a9 3 0 0 0 18 0V5" />
                   <path d="M3 12a9 3 0 0 0 18 0" />
                 </svg>
-                Data sources
+                <span className="nav-label">Data sources</span>
               </Link>
               <Link
                 href="/admin/transaction-filters"
+                title="Transaction filters"
+                aria-label="Transaction filters"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -433,10 +453,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 >
                   <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
                 </svg>
-                Transaction filters
+                <span className="nav-label">Transaction filters</span>
               </Link>
               <Link
                 href="/admin/transaction-categories"
+                title="Transaction categories"
+                aria-label="Transaction categories"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -455,10 +477,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42z" />
                   <circle cx="7" cy="7" r="1.5" />
                 </svg>
-                Transaction categories
+                <span className="nav-label">Transaction categories</span>
               </Link>
               <Link
                 href="/admin/preventive"
+                title="Preventive maintenance"
+                aria-label="Preventive maintenance"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -478,10 +502,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <path d="M18.7 8a4 4 0 0 0-5.7 5.7l-8 8" />
                   <circle cx="18" cy="7" r="1" />
                 </svg>
-                Preventive maintenance
+                <span className="nav-label">Preventive maintenance</span>
               </Link>
               <Link
                 href="/admin/reminder-template"
+                title="Rent reminder email"
+                aria-label="Rent reminder email"
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <svg
@@ -500,13 +526,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <rect x="2" y="4" width="20" height="16" rx="2" />
                   <path d="m22 7-10 5L2 7" />
                 </svg>
-                Rent reminder email
+                <span className="nav-label">Rent reminder email</span>
               </Link>
             </div>
           )}
         </nav>
-        <SidebarFooter tagline={BRAND.tagline} version={appVersion()} />
-      </aside>
+      </CollapsibleSidebar>
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">

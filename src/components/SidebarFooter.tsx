@@ -8,10 +8,12 @@ import { PmCentralMark } from "@/components/PmCentralMark";
 // the running version.
 export function SidebarFooter({ tagline, version }: { tagline: string; version: string }) {
   return (
-    <div className="mt-auto flex flex-col gap-2 p-3">
+    <div className="flex flex-col gap-2 p-3 pt-1">
       <button
         type="button"
         onClick={() => window.location.reload()}
+        title="Refresh"
+        aria-label="Refresh"
         className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
       >
         <svg
@@ -30,9 +32,9 @@ export function SidebarFooter({ tagline, version }: { tagline: string; version: 
           <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
           <path d="M21 3v5h-5" />
         </svg>
-        Refresh
+        <span className="nav-label">Refresh</span>
       </button>
-      <div className="px-3 text-xs leading-snug text-white">
+      <div className="nav-label px-3 text-xs leading-snug text-white">
         <div className="flex items-center gap-1.5 text-white">
           <PmCentralMark size={18} houseColor="#FFFFFF" className="shrink-0" />
           <span>{tagline}</span>
