@@ -43,6 +43,18 @@ const nav: { href: string; label: string; feature: FeatureKey; icon: React.React
     ),
   },
   {
+    href: "/meetings",
+    label: "Meetings",
+    feature: "meetings",
+    icon: (
+      <>
+        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+        <path d="M9 13h6M9 17h4" />
+      </>
+    ),
+  },
+  {
     href: "/properties",
     label: "Properties",
     feature: "properties",
@@ -220,6 +232,7 @@ const navLayout: NavEntry[] = [
   { item: "invoicing" },
   { item: "accounting" },
   { item: "calendar" },
+  { item: "meetings" },
   { item: "inspections" },
   { item: "maintenance" },
   { item: "showings" },
