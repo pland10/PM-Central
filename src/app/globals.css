@@ -21,3 +21,20 @@ body {
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Desktop sidebar: collapsed to an icon rail (CollapsibleSidebar). */
+aside[data-collapsed="true"] .nav-label {
+  display: none;
+}
+aside[data-collapsed="false"] .nav-collapsed-only {
+  display: none;
+}
+aside[data-collapsed="true"] nav a,
+aside[data-collapsed="true"] button {
+  justify-content: center;
+}
+aside[data-collapsed="true"] > a:first-child {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
