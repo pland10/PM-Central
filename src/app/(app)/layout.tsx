@@ -11,7 +11,8 @@ import { IdleLogout } from "@/components/IdleLogout";
 import { MobileNav, type MobileNavSection } from "./MobileNav";
 import { SidebarFooter } from "@/components/SidebarFooter";
 import { CollapsibleSidebar } from "@/components/CollapsibleSidebar";
-import { SIDEBAR_COOKIE } from "@/lib/sidebar";
+import { NAV_SECTIONS_COOKIE, SIDEBAR_COOKIE, parseClosedSections, sectionId } from "@/lib/sidebar";
+import { NavSection } from "@/components/NavSection";
 import { appVersion } from "@/config/version";
 import { PmCentralMark, PM_CENTRAL_NAME } from "@/components/PmCentralMark";
 import { PageTitle } from "@/components/PageTitle";
@@ -277,7 +278,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await getCurrentUser();
   // Desktop sidebar collapsed to icons? (set by its toggle; read here so the
   // first paint is already the right width)
-  const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
+  const jar = await cookies();
+  const sidebarCollapsed = jar.get(SIDEBAR_COOKIE)?.value === "collapsed";
+  // Headed sections (Property Data, Admin…) the user folded away.
+  const closedSections = parseClosedSections(jar.get(NAV_SECTIONS_COOKIE)?.value);
+  const sectionOpen = (heading: string) => !closedSections.includes(sectionId(heading));
 
   // Accounting carries financial data, so it's gated per-user on top of its
   // feature flag — admins and anyone in ACCOUNTING_ALLOWED_EMAILS only.
@@ -345,18 +350,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               .filter((it) => it && canSee(it.feature));
             if (groupItems.length === 0) return null;
             return (
-              <div
+              <NavSection
                 key={entry.heading}
-                className="mt-4 border-t pt-3"
-                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                id={sectionId(entry.heading)}
+                heading={entry.heading}
+                initialOpen={sectionOpen(entry.heading)}
               >
-                <div className="nav-label mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                  {entry.heading}
-                </div>
                 {groupItems.map((it) => (
                   <NavLink key={it.href} item={it} />
                 ))}
-              </div>
+              </NavSection>
             );
           })}
           <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
@@ -416,10 +419,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           )}
           {user?.role === "admin" && (
-            <div className="mt-4 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
-              <div className="nav-label mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Admin
-              </div>
+            <NavSection id={sectionId("Admin")} heading="Admin" initialOpen={sectionOpen("Admin")}>
               <Link
                 href="/admin/data"
                 title="Data sources"
@@ -541,7 +541,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </svg>
                 <span className="nav-label">Rent reminder email</span>
               </Link>
-            </div>
+            </NavSection>
           )}
         </nav>
       </CollapsibleSidebar>
