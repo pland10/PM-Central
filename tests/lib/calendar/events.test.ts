@@ -53,3 +53,17 @@ describe("sanitizeEvent — every business day", () => {
     });
   });
 });
+
+describe("sanitizeEvent — weekly on chosen days", () => {
+  it("takes the weekdays (1=Mon … 5=Fri) and stores them as the rule", () => {
+    expect(sanitizeEvent({ ...good, frequency: "weekly", rule: "", weekdays: [5, 1, 3] })).toMatchObject({
+      ok: true,
+      value: { rule: "WEEKLY:MO,WE,FR", frequency: "weekly", month: null },
+    });
+  });
+
+  it("needs at least one weekday, Mon–Fri only", () => {
+    expect(sanitizeEvent({ ...good, frequency: "weekly", weekdays: [] })).toMatchObject({ ok: false, error: expect.stringMatching(/day/i) });
+    expect(sanitizeEvent({ ...good, frequency: "weekly", weekdays: [6] })).toMatchObject({ ok: false });
+  });
+});
