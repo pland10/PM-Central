@@ -237,3 +237,24 @@ describe("CloseCalendar — person colors", () => {
   });
 });
 
+describe("CloseCalendar — admins set everyone's colors", () => {
+  const BLUE = "#2563EB";
+  const PINK = "#DB2777";
+  const STAFF3 = [...STAFF, { name: "Pam", email: "pam@pmi.com" }];
+
+  it("sets another person's color, moving an automatic one out of the way", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, email: "pam@pmi.com", color: PINK, moved: { email: "ari@pmi.com", color: BLUE } }) });
+    const { user } = setup({ canEdit: true, staff: STAFF3, colors: { "ari@pmi.com": PINK, "pam@pmi.com": "#16A34A" }, me: "paul@pmi.com" });
+    await user.selectOptions(screen.getByLabelText("Color for Pam"), PINK);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/calendar/color");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ email: "pam@pmi.com", color: PINK });
+    expect(await screen.findByText(/Pam is Pink/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Color for Ari")).toHaveValue(BLUE); // moved
+  });
+
+  it("isn't shown to non-admins", () => {
+    setup({ staff: STAFF3, me: "paul@pmi.com" });
+    expect(screen.queryByLabelText("Color for Pam")).not.toBeInTheDocument();
+  });
+});
+
