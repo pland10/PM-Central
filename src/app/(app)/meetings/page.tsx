@@ -4,6 +4,7 @@ import { requireFeature } from "@/config/features";
 import { isMeetingDate, mondayOf, recentMeetingMondays, splitMeetingGroups } from "@/lib/meetings";
 import { notesForDate, previousNotes, removedPropertyIds } from "@/lib/meetings-db";
 import { MeetingSheet, type MeetingRow } from "./MeetingSheet";
+import { MeetingTabs } from "./MeetingTabs";
 
 // Monday tactical meeting: walk every house (Rental Units, then Squatter Watch),
 // take a dated note on each. Date defaults to this week's Monday; ?date= picks a
@@ -52,6 +53,7 @@ export default async function MeetingsPage({
 
   return (
     <div className="mx-auto max-w-4xl">
+      <MeetingTabs active="tactical" />
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Monday tactical meeting</h1>
         <p className="mt-1 text-sm text-slate-500">

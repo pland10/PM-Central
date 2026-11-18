@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { isMeetingDate, isoDate, mondayOf, recentMeetingMondays, splitMeetingGroups } from "@/lib/meetings";
+import {
+  isMeetingDate,
+  isoDate,
+  mondayOf,
+  nestTopics,
+  recentMeetingMondays,
+  recentMeetingTuesdays,
+  splitMeetingGroups,
+  tuesdayOf,
+} from "@/lib/meetings";
 
 describe("meeting dates", () => {
   it("mondayOf returns the Monday on or before the date", () => {
@@ -11,6 +20,13 @@ describe("meeting dates", () => {
   it("recentMeetingMondays lists Mondays newest-first, 7 days apart", () => {
     const mondays = recentMeetingMondays(new Date("2026-11-18T12:00:00Z"), 3);
     expect(mondays).toEqual(["2026-11-16", "2026-11-09", "2026-11-02"]);
+  });
+
+  it("tuesdayOf returns the Tuesday on or before the date; picker lists them", () => {
+    expect(tuesdayOf(new Date("2026-11-18T15:00:00Z"))).toBe("2026-11-17"); // Wed → that Tue
+    expect(tuesdayOf(new Date("2026-11-17T00:00:00Z"))).toBe("2026-11-17"); // Tue → itself
+    expect(tuesdayOf(new Date("2026-11-16T12:00:00Z"))).toBe("2026-11-10"); // Mon → prior Tue
+    expect(recentMeetingTuesdays(new Date("2026-11-18T12:00:00Z"), 2)).toEqual(["2026-11-17", "2026-11-10"]);
   });
 
   it("validates YYYY-MM-DD meeting dates", () => {
@@ -34,5 +50,19 @@ describe("splitMeetingGroups", () => {
     const { rentals, squatterWatch } = splitMeetingGroups(items);
     expect(rentals.map((r) => r.id)).toEqual(["c", "a"]); // 1 Main, 9 Oak
     expect(squatterWatch.map((r) => r.id)).toEqual(["d", "b"]); // 2 Elm, 5 Pine
+  });
+});
+
+describe("nestTopics", () => {
+  it("nests topics under their section, keeping order", () => {
+    const sections = [{ id: 1, title: "Growth" }, { id: 2, title: "Ops" }];
+    const topics = [
+      { id: 10, sectionId: 1, title: "Hiring" },
+      { id: 11, sectionId: 2, title: "Software" },
+      { id: 12, sectionId: 1, title: "Marketing" },
+    ];
+    const nested = nestTopics(sections, topics);
+    expect(nested[0].topics.map((t) => t.id)).toEqual([10, 12]);
+    expect(nested[1].topics.map((t) => t.id)).toEqual([11]);
   });
 });
