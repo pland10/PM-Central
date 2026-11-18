@@ -48,16 +48,20 @@ export function nestTopics<S extends { id: number }, T extends { sectionId: numb
 }
 
 // Split houses into the two meeting sections — Rental Units first, Squatter
-// Watch last — each sorted by its label. Squatter Watch comes from the Rentvine
-// "Squatterwatch Properties" group (a tag on the property), see programs.ts.
-export function splitMeetingGroups<T extends { tags: string | null; sortKey: string }>(
-  items: T[]
+// Watch last. Squatter Watch comes from the Rentvine "Squatterwatch Properties"
+// group (a tag on the property), see programs.ts. Within each group, houses
+// follow the admin's custom sequence (`order`: property id → position); houses
+// with no saved position fall to the end, alphabetically.
+export function splitMeetingGroups<T extends { id: string; tags: string | null; sortKey: string }>(
+  items: T[],
+  order: Record<string, number> = {}
 ): { rentals: T[]; squatterWatch: T[] } {
-  const byLabel = (a: T, b: T) => a.sortKey.toLowerCase().localeCompare(b.sortKey.toLowerCase());
+  const rank = (t: T) => (t.id in order ? order[t.id] : Number.MAX_SAFE_INTEGER);
+  const cmp = (a: T, b: T) => rank(a) - rank(b) || a.sortKey.toLowerCase().localeCompare(b.sortKey.toLowerCase());
   const rentals: T[] = [];
   const squatterWatch: T[] = [];
   for (const it of items) (isSquatterWatch(it.tags) ? squatterWatch : rentals).push(it);
-  rentals.sort(byLabel);
-  squatterWatch.sort(byLabel);
+  rentals.sort(cmp);
+  squatterWatch.sort(cmp);
   return { rentals, squatterWatch };
 }

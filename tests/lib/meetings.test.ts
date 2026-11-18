@@ -51,6 +51,15 @@ describe("splitMeetingGroups", () => {
     expect(rentals.map((r) => r.id)).toEqual(["c", "a"]); // 1 Main, 9 Oak
     expect(squatterWatch.map((r) => r.id)).toEqual(["d", "b"]); // 2 Elm, 5 Pine
   });
+
+  it("follows a custom order within each group; unordered houses fall to the end alphabetically", () => {
+    const more = [...items, { id: "e", tags: "", sortKey: "3 Birch Ln" }];
+    const { rentals, squatterWatch } = splitMeetingGroups(more, { a: 0, c: 1, b: 0 });
+    // a (order 0) then c (order 1), then e (no order → end, by label)
+    expect(rentals.map((r) => r.id)).toEqual(["a", "c", "e"]);
+    // b ordered first; d unordered → after b
+    expect(squatterWatch.map((r) => r.id)).toEqual(["b", "d"]);
+  });
 });
 
 describe("nestTopics", () => {
