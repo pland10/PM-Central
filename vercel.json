@@ -25,6 +25,14 @@
       "schedule": "0 0,3,6,9 * * *"
     },
     {
+      "path": "/api/cron/tenantturner?slot=day",
+      "schedule": "*/15 11-23 * * *"
+    },
+    {
+      "path": "/api/cron/tenantturner?slot=night",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/cron/push-alerts",
       "schedule": "*/15 11-23 * * *"
     },

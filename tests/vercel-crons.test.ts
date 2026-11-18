@@ -45,8 +45,17 @@ describe("vercel.json crons", () => {
     expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts?slot=night", schedule: "0 0,3,6,9 * * *" });
     expect(allCrons.filter((c) => c.path.startsWith("/api/cron/text-alerts"))).toHaveLength(2);
     expect(
-      allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts\?slot=(day|night)$|push-alerts$|daily-summary$)/.test(c.path))
+      allCrons.every((c) =>
+        /^\/api\/cron\/(sync\?|text-alerts\?slot=(day|night)$|tenantturner\?slot=(day|night)$|push-alerts$|daily-summary$)/.test(c.path)
+      )
     ).toBe(true);
+  });
+
+  // Tenant Turner showings are pulled from its API (its webhook never
+  // delivered): every 15 minutes by day, once overnight to catch up.
+  it("pulls Tenant Turner showings every 15 minutes by day, once overnight", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/tenantturner?slot=day", schedule: "*/15 11-23 * * *" });
+    expect(allCrons).toContainEqual({ path: "/api/cron/tenantturner?slot=night", schedule: "30 3 * * *" });
   });
 
   // 10:00 and 11:00 UTC on weekdays: one of them is 6am Eastern in both EST and
