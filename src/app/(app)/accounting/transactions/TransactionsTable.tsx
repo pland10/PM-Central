@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
@@ -15,7 +15,7 @@ import { NotesCell } from "../../work-orders/NotesCell";
 import { NotesPanel } from "@/components/NotesPanel";
 import { Combobox } from "@/components/Combobox";
 import { expandSplitRows, parseRowId, rowIdOf } from "@/lib/transaction-splits";
-import { suggestCategories, type CategoryHistoryEntry } from "@/lib/category-suggest";
+import { AI_MAX_PER_REQUEST, suggestCategories, type CategoryHistoryEntry } from "@/lib/category-suggest";
 import { SplitEditor, type EditorLine } from "./SplitEditor";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -101,6 +101,10 @@ function BilledCell({
 // Stable default (a fresh {} each render would look like new server data).
 const NO_NOTES: Record<string, NoteSummary> = {};
 const NO_HISTORY: CategoryHistoryEntry[] = [];
+const NO_AI: Record<string, string | null> = {};
+// Most rows one page view sends to Claude (bounds the cost of a big backlog;
+// the rest are asked about on later visits).
+const AI_MAX_PER_VIEW = 500;
 
 export function TransactionsTable({
   initialRows,
@@ -113,6 +117,8 @@ export function TransactionsTable({
   rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/payables/bills/",
   noteSummaries = NO_NOTES,
   categoryHistory = NO_HISTORY,
+  aiEnabled = false,
+  aiSuggestions = NO_AI,
 }: {
   initialRows: TxnRow[];
   accounts: string[];
@@ -124,6 +130,8 @@ export function TransactionsTable({
   rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/payables/bills/
   noteSummaries?: Record<string, NoteSummary>; // notes thread per transaction: count + latest
   categoryHistory?: CategoryHistoryEntry[]; // category counts per merchant from transactions not loaded
+  aiEnabled?: boolean; // Claude's guesses are on (ANTHROPIC_API_KEY set)
+  aiSuggestions?: Record<string, string | null>; // Claude's cached guesses: id → category, null = asked, no guess
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   // Notes thread summaries, kept in step with the panel (and fresh server data).
@@ -444,6 +452,47 @@ export function TransactionsTable({
   // Category guesses for uncategorized rows, from the same merchant's others:
   // the rows on screen plus the server's counts for older transactions.
   const categoryGuesses = useMemo(() => suggestCategories(rows, rowIdOf, categoryHistory), [rows, categoryHistory]);
+
+  // Claude's guesses ("AI suggests:") for rows the history can't place: the
+  // cached ones from the server, then the rest asked for in batches.
+  const [aiGuesses, setAiGuesses] = useState<Record<string, string | null>>(aiSuggestions);
+  const aiAsked = useRef(0);
+  const aiBusy = useRef(false);
+  useEffect(() => {
+    if (!aiEnabled || aiBusy.current || aiAsked.current >= AI_MAX_PER_VIEW) return;
+    const ids = rows
+      .filter(
+        (r) =>
+          !r.split &&
+          !r.archived &&
+          !r.categoryOverride.trim() &&
+          !categoryGuesses[r.transactionId] &&
+          !(r.transactionId in aiGuesses)
+      )
+      .map((r) => r.transactionId)
+      .slice(0, Math.min(AI_MAX_PER_REQUEST, AI_MAX_PER_VIEW - aiAsked.current));
+    if (ids.length === 0) return;
+    aiBusy.current = true;
+    aiAsked.current += ids.length;
+    (async () => {
+      let found: Record<string, string> = {};
+      try {
+        const res = await fetch("/api/accounting/ai-categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data?.configured === false) aiAsked.current = AI_MAX_PER_VIEW; // off: stop asking
+        if (data?.suggestions && typeof data.suggestions === "object") found = data.suggestions;
+      } catch {
+        /* no AI guess this time */
+      }
+      aiBusy.current = false;
+      // Mark every id asked (no guess = null) so it isn't asked again this visit.
+      setAiGuesses((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, null])), ...found }));
+    })();
+  }, [aiEnabled, rows, categoryGuesses, aiGuesses]);
   const propertyLabel = useCallback(
     (r: Pick<TxnRow, "propertyId" | "unitId">) => {
       if (!r.propertyId) return "";
@@ -587,6 +636,7 @@ export function TransactionsTable({
         render: (r) => {
           const id = rowIdOf(r);
           const guess = categoryGuesses[id];
+          const aiGuess = !r.split && !r.categoryOverride.trim() ? aiGuesses[r.transactionId] : null;
           return (
             <div className="flex flex-col items-start gap-0.5">
               <CellCombobox
@@ -600,7 +650,7 @@ export function TransactionsTable({
                 }}
                 className="w-32 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-brand-500"
               />
-              {guess && (
+              {guess ? (
                 <button
                   type="button"
                   aria-label={`suggest-category-${id}`}
@@ -610,6 +660,18 @@ export function TransactionsTable({
                 >
                   Suggested: <span className="font-medium text-slate-500">{guess}</span>
                 </button>
+              ) : (
+                aiGuess && (
+                  <button
+                    type="button"
+                    aria-label={`ai-suggest-category-${id}`}
+                    title="Claude's guess (no past category for this merchant) — click to use it"
+                    onClick={() => save(id, { categoryOverride: aiGuess })}
+                    className="max-w-32 truncate text-[11px] text-violet-400 hover:text-brand-600"
+                  >
+                    AI suggests: <span className="font-medium text-violet-600">{aiGuess}</span>
+                  </button>
+                )
               )}
             </div>
           );
@@ -760,7 +822,7 @@ export function TransactionsTable({
           ),
       },
     ],
-    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, propertyLabels, categories, categoryGuesses, rentvineBillUrl, notes]
+    [save, archive, canArchive, accounts, propertyLabel, propertyLookup, propertyLabels, categories, categoryGuesses, aiGuesses, rentvineBillUrl, notes]
   );
 
   const shownColumns = useMemo<Column<TxnRow>[]>(

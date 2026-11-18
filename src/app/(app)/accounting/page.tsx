@@ -13,6 +13,7 @@ import { patternToLike } from "@/lib/transaction-filters";
 import { attachBillCandidates, rentvineBillUrl } from "@/lib/rv-bill-db";
 import { transactionNoteSummaries } from "@/lib/transaction-notes-db";
 import { loadCategoryHistory } from "@/lib/category-suggest-db";
+import { loadAiCategories } from "@/lib/ai-category-db";
 import { AccountingTabs } from "./AccountingTabs";
 import { ConnectButton } from "./transactions/ConnectButton";
 import { HdImportButton } from "./transactions/HdImportButton";
@@ -54,6 +55,15 @@ export default async function AccountingPage() {
   const categoryHistory = rows.length
     ? await loadCategoryHistory(prisma, [...new Set(rows.map((r) => r.transactionId))])
     : [];
+  // Claude's cached guesses for uncategorized rows ("AI suggests:"); the table
+  // asks for the rest. Off until ANTHROPIC_API_KEY is set.
+  const aiEnabled = !!process.env.ANTHROPIC_API_KEY;
+  const aiSuggestions = aiEnabled
+    ? await loadAiCategories(
+        prisma,
+        rows.filter((r) => !r.split && !r.categoryOverride.trim()).map((r) => r.transactionId)
+      )
+    : {};
 
   return (
     <div>
@@ -101,6 +111,8 @@ export default async function AccountingPage() {
             rentvineBillUrl={rentvineBillUrl()}
             noteSummaries={noteSummaries}
             categoryHistory={categoryHistory}
+            aiEnabled={aiEnabled}
+            aiSuggestions={aiSuggestions}
           />
         </div>
       )}
