@@ -36,16 +36,19 @@ function isNewWaiting(r: WorkOrderRow): boolean {
   return !r.terminal && /^new wo$/i.test(r.stage.trim());
 }
 
-export type AttentionKind = "rvClosed" | "rvOnHold" | "estimates" | "overdue" | "high" | "new" | "stalled";
+export type AttentionKind = "chargeOwner" | "rvClosed" | "rvOnHold" | "estimates" | "overdue" | "high" | "new" | "stalled";
 export type AttentionReason = { kind: AttentionKind; label: string };
 // "estimates" outranks "overdue": LeadSimple sets every due date to created +
 // 30 days, so Overdue is mostly age, while a stuck estimate is a specific ask.
-const KIND_RANK: Record<AttentionKind, number> = { rvClosed: 0, rvOnHold: 1, estimates: 2, overdue: 3, high: 4, new: 5, stalled: 6 };
+const KIND_RANK: Record<AttentionKind, number> = { chargeOwner: 0, rvClosed: 1, rvOnHold: 2, estimates: 3, overdue: 4, high: 5, new: 6, stalled: 7 };
 
 // Why an open work order needs someone, most urgent reason first; null if it
 // doesn't (or it's closed).
 export function attentionReason(r: WorkOrderRow, now: number): AttentionReason | null {
   if (r.terminal) return null;
+  // The vendor's invoice is in: the next step is billing the owner in Rentvine.
+  // Whatever else is true of the work order, that's the action.
+  if (/^invoice received$/i.test(r.stage.trim())) return { kind: "chargeOwner", label: "Charge Owner in RV" };
   // Closed in Rentvine but still open in LeadSimple: the two systems disagree, so
   // one needs fixing (close it in LeadSimple, or reopen it in Rentvine). The label
   // names both sides; it outranks Overdue/Stalled.
