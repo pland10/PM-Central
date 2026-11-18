@@ -44,6 +44,14 @@ describe("lastActivityAt", () => {
 });
 
 describe("attentionReason", () => {
+  it("asks to charge the owner in Rentvine for any work order in Invoice Received, ahead of everything else", () => {
+    const charge = { kind: "chargeOwner", label: "Charge Owner in RV" };
+    expect(attentionReason(wo({ stage: "Invoice Received" }), NOW)).toEqual(charge);
+    expect(attentionReason(wo({ stage: "Invoice Received", dueAt: daysAgo(5), priority: "High", updatedAt: daysAgo(9) }), NOW)).toEqual(charge);
+    expect(attentionReason(wo({ stage: "Invoice Received", rvStatus: "Completed" }), NOW)).toEqual(charge);
+    expect(attentionReason(wo({ stage: "Invoice Received", preventive: true }), NOW)).toEqual(charge);
+  });
+
   it("flags an open work order past its due date as Overdue", () => {
     expect(attentionReason(wo({ dueAt: daysAgo(1) }), NOW)).toEqual({ kind: "overdue", label: "Overdue" });
   });
