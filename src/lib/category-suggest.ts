@@ -12,15 +12,86 @@ type Row = { merchantName: string; name: string; categoryOverride: string; poste
 // Category counts for one merchant from transactions not on screen.
 export type CategoryHistoryEntry = { key: string; category: string; count: number; latest: string };
 
-// Same merchant despite case, spacing or a store number ("HOMEDEPOT #6512").
-// Falls back to the bank description when the bank gave no merchant name.
+// Card processors that put their own code before the merchant ("SQ *JOES
+// PLUMBING", "TST* JOES DINER", "PAYPAL *ACME").
+const PROCESSORS = new Set(["sq", "sqc", "tst", "sp", "pp", "paypal", "py", "in", "fs", "ckc", "cke", "ec", "dd", "bt", "wpy", "pos"]);
+// Bank boilerplate and company suffixes that say nothing about the merchant.
+const NOISE = new Set([
+  "pos", "debit", "credit", "purchase", "card", "checkcard", "chkcard", "visa", "mastercard", "ach", "web", "ppd", "ccd",
+  "ref", "id", "inc", "llc", "ltd", "co", "corp", "the", "www", "com", "net", "online", "recurring",
+]);
+
+// One key per merchant, however the bank spells it: case, spacing and
+// punctuation, dates and store / reference numbers, card-processor prefixes and
+// bank boilerplate all drop out ("POS DEBIT HOME-DEPOT #6512 11/14" and
+// "The Home Depot" → "homedepot"). Falls back to the bank description when the
+// bank gave no merchant name.
 export function merchantKey(merchantName: string, name: string): string {
-  const raw = merchantName.trim() || name.trim();
+  let raw = (merchantName.trim() || name.trim()).toLowerCase();
+  const star = raw.indexOf("*");
+  if (star >= 0) {
+    const before = raw.slice(0, star).trim();
+    // "SQ *JOES" → the merchant follows the processor; "AMZN MKTP US*2K3L" →
+    // what follows a merchant's * is an order / reference code.
+    raw = PROCESSORS.has(before) ? raw.slice(star + 1) : before;
+  }
   return raw
-    .toLowerCase()
-    .replace(/[#*]?\d+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !/\d/.test(t) && !NOISE.has(t))
+    .join("");
+}
+
+// Damerau (optimal string alignment) distance — a swapped pair counts as one
+// edit — or Infinity once it must exceed `max` (stops early: most pairs aren't close).
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return Infinity;
+  let prev2: number[] = [];
+  let prev: number[] = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur: number[] = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+      cur.push(v);
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > max) return Infinity;
+    prev2 = prev;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+const MIN_FUZZY = 5; // shorter names than this are too ambiguous to stretch
+const MIN_SIMILARITY = 0.8;
+
+// The known merchant key closest to `key` when there's no exact one: one starts
+// with the other (a description that adds a location, "homedepotelmontny"), or
+// a small misspelling ("homedepto"). Only names with the same first letter are
+// compared — misspellings rarely change it, and it keeps this fast. null when
+// nothing is close enough.
+export function matchMerchant(key: string, known: Iterable<string>): string | null {
+  if (key.length < MIN_FUZZY) return null;
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const k of known) {
+    if (k === key) return k;
+    if (k.length < MIN_FUZZY || k[0] !== key[0]) continue;
+    const [short, long] = k.length <= key.length ? [k, key] : [key, k];
+    let score = 0;
+    if (long.startsWith(short)) score = 0.9 + short.length / 1000; // prefer the longest shared start
+    else {
+      const max = Math.floor(long.length * (1 - MIN_SIMILARITY));
+      score = 1 - editDistance(key, k, max) / long.length;
+    }
+    if (score >= MIN_SIMILARITY && score > bestScore) {
+      best = k;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 type Tally = { count: number; latest: string; spelling: string };
@@ -88,10 +159,20 @@ export function suggestCategories<T extends Row>(
   for (const r of rows) t.add(merchantKey(r.merchantName, r.name), r.categoryOverride, 1, r.postedDate ?? "");
   const best = t.best();
 
+  // No exact merchant? Use the closest one — worked out once per name.
+  const close = new Map<string, string | null>();
+  const guessFor = (key: string): string | undefined => {
+    const exact = best.get(key);
+    if (exact) return exact;
+    if (!close.has(key)) close.set(key, matchMerchant(key, best.keys()));
+    const k = close.get(key);
+    return k ? best.get(k) : undefined;
+  };
+
   const out: Record<string, string> = {};
   for (const r of rows) {
     if (r.categoryOverride.trim()) continue;
-    const guess = best.get(merchantKey(r.merchantName, r.name));
+    const guess = guessFor(merchantKey(r.merchantName, r.name));
     if (guess) out[idOf(r)] = guess;
   }
   return out;
