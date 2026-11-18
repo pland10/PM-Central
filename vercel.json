@@ -17,8 +17,12 @@
       "schedule": "20 10 * * *"
     },
     {
-      "path": "/api/cron/text-alerts",
-      "schedule": "0 */3 * * *"
+      "path": "/api/cron/text-alerts?slot=day",
+      "schedule": "*/15 11-23 * * *"
+    },
+    {
+      "path": "/api/cron/text-alerts?slot=night",
+      "schedule": "0 0,3,6,9 * * *"
     },
     {
       "path": "/api/cron/push-alerts",

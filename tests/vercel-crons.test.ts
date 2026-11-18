@@ -36,12 +36,17 @@ describe("vercel.json crons", () => {
     for (const c of allCrons) expect(c.schedule.trim().split(/\s+/)).toHaveLength(5);
   });
 
-  // The text-alert poll touches Neon every run; at */5 (288×/day) it kept the
-  // compute awake 24/7 and burned the Free CU-hour allowance. Every 3h lets the
-  // DB scale to zero between runs.
-  it("checks for outbound-text alerts every 3 hours", () => {
-    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts", schedule: "0 */3 * * *" });
-    expect(allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts$|push-alerts$|daily-summary$)/.test(c.path))).toBe(true);
+  // The text-alert poll touches Neon every run; at */5 around the clock it kept
+  // the compute awake 24/7. By day it runs every 15 minutes, alongside the push
+  // alerts (which keep the compute awake then anyway); overnight every 3 hours,
+  // so the DB can scale to zero.
+  it("checks for outbound-text alerts every 15 minutes by day, every 3 hours overnight", () => {
+    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts?slot=day", schedule: "*/15 11-23 * * *" });
+    expect(allCrons).toContainEqual({ path: "/api/cron/text-alerts?slot=night", schedule: "0 0,3,6,9 * * *" });
+    expect(allCrons.filter((c) => c.path.startsWith("/api/cron/text-alerts"))).toHaveLength(2);
+    expect(
+      allCrons.every((c) => /^\/api\/cron\/(sync\?|text-alerts\?slot=(day|night)$|push-alerts$|daily-summary$)/.test(c.path))
+    ).toBe(true);
   });
 
   // 10:00 and 11:00 UTC on weekdays: one of them is 6am Eastern in both EST and
