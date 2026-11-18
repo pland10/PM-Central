@@ -9,6 +9,11 @@
 
 type Row = { merchantName: string; name: string; categoryOverride: string; postedDate: string | null };
 
+// Most transaction ids the table sends Claude per request
+// (/api/accounting/ai-categories). Here, not in ./ai-category.ts, so the
+// browser bundle doesn't pull in the Anthropic SDK.
+export const AI_MAX_PER_REQUEST = 100;
+
 // Category counts for one merchant from transactions not on screen.
 export type CategoryHistoryEntry = { key: string; category: string; count: number; latest: string };
 
