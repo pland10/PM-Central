@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionsTable } from "@/app/(app)/accounting/transactions/TransactionsTable";
 import type { TxnRow } from "@/lib/plaid-db";
+import { merchantKey } from "@/lib/category-suggest";
 
 const rows: TxnRow[] = [
   {
@@ -256,6 +257,12 @@ describe("TransactionsTable", () => {
       expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Repairs" });
       expect((screen.getByLabelText("category-t1") as HTMLInputElement).value).toBe("Repairs");
       expect(screen.queryByLabelText("suggest-category-t1")).toBeNull();
+    });
+
+    it("also learns from older transactions the page didn't load", () => {
+      const history = [{ key: merchantKey("The Home Depot", ""), category: "Supplies", count: 5, latest: "2025-02-01" }];
+      render(<TransactionsTable initialRows={[hd("t1", ""), hd("t3", "Repairs")]} accounts={[]} categoryHistory={history} />);
+      expect(screen.getByLabelText("suggest-category-t1")).toHaveTextContent("Supplies");
     });
 
     it("updates the guess as soon as another row of that merchant gets a category", async () => {
