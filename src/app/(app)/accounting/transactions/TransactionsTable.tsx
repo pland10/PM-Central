@@ -15,7 +15,7 @@ import { NotesCell } from "../../work-orders/NotesCell";
 import { NotesPanel } from "@/components/NotesPanel";
 import { Combobox } from "@/components/Combobox";
 import { expandSplitRows, parseRowId, rowIdOf } from "@/lib/transaction-splits";
-import { suggestCategories } from "@/lib/category-suggest";
+import { suggestCategories, type CategoryHistoryEntry } from "@/lib/category-suggest";
 import { SplitEditor, type EditorLine } from "./SplitEditor";
 
 // The Transactions tab table: a summary bar, then every card/bank transaction
@@ -100,6 +100,7 @@ function BilledCell({
 
 // Stable default (a fresh {} each render would look like new server data).
 const NO_NOTES: Record<string, NoteSummary> = {};
+const NO_HISTORY: CategoryHistoryEntry[] = [];
 
 export function TransactionsTable({
   initialRows,
@@ -111,6 +112,7 @@ export function TransactionsTable({
   properties = [],
   rentvineBillUrl = "https://pmilighthouse.rentvine.com/accounting/payables/bills/",
   noteSummaries = NO_NOTES,
+  categoryHistory = NO_HISTORY,
 }: {
   initialRows: TxnRow[];
   accounts: string[];
@@ -121,6 +123,7 @@ export function TransactionsTable({
   properties?: PropertyChoice[]; // existing properties (and units of multi-unit ones) to link to
   rentvineBillUrl?: string; // bill id is appended, e.g. https://<sub>.rentvine.com/accounting/payables/bills/
   noteSummaries?: Record<string, NoteSummary>; // notes thread per transaction: count + latest
+  categoryHistory?: CategoryHistoryEntry[]; // category counts per merchant from transactions not loaded
 }) {
   const [rows, setRows] = useState<TxnRow[]>(initialRows);
   // Notes thread summaries, kept in step with the panel (and fresh server data).
@@ -438,8 +441,9 @@ export function TransactionsTable({
     return { byKey, byLabel, byRvId };
   }, [properties]);
   const propertyLabels = useMemo(() => properties.map((c) => c.label), [properties]);
-  // Category guesses for uncategorized rows, from the same merchant's others.
-  const categoryGuesses = useMemo(() => suggestCategories(rows, rowIdOf), [rows]);
+  // Category guesses for uncategorized rows, from the same merchant's others:
+  // the rows on screen plus the server's counts for older transactions.
+  const categoryGuesses = useMemo(() => suggestCategories(rows, rowIdOf, categoryHistory), [rows, categoryHistory]);
   const propertyLabel = useCallback(
     (r: Pick<TxnRow, "propertyId" | "unitId">) => {
       if (!r.propertyId) return "";
