@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { patternToLike } from "@/lib/transaction-filters";
 import { attachBillCandidates, rentvineBillUrl } from "@/lib/rv-bill-db";
 import { transactionNoteSummaries } from "@/lib/transaction-notes-db";
+import { loadCategoryHistory } from "@/lib/category-suggest-db";
 import { AccountingTabs } from "./AccountingTabs";
 import { ConnectButton } from "./transactions/ConnectButton";
 import { HdImportButton } from "./transactions/HdImportButton";
@@ -48,6 +49,11 @@ export default async function AccountingPage() {
   const rowsWithBills = rows.length ? await attachBillCandidates(rows) : rows;
   // Notes thread per transaction (count + latest) for the Notes column.
   const noteSummaries = rows.length ? await transactionNoteSummaries() : {};
+  // Category counts per merchant over the older transactions not loaded here,
+  // for the "Suggested:" guess under each empty Category box.
+  const categoryHistory = rows.length
+    ? await loadCategoryHistory(prisma, [...new Set(rows.map((r) => r.transactionId))])
+    : [];
 
   return (
     <div>
@@ -94,6 +100,7 @@ export default async function AccountingPage() {
             properties={propertyChoices}
             rentvineBillUrl={rentvineBillUrl()}
             noteSummaries={noteSummaries}
+            categoryHistory={categoryHistory}
           />
         </div>
       )}
