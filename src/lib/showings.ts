@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeStatus, type ShowingStatus } from "@/lib/showings-normalize";
+
+export { normalizeStatus, type ShowingStatus };
 
 // Tenant Turner showings — webhook ingestion + read models.
 //
@@ -52,32 +55,7 @@ function dateOrNull(v: unknown): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-// ---- status normalization --------------------------------------------------
-
-// Our canonical statuses. We prefer Tenant Turner's own showing.status, falling
-// back to the event name, so we track whatever values TT actually sends without
-// hard-coding their exact casing.
-export type ShowingStatus =
-  | "requested"
-  | "scheduled"
-  | "confirmed"
-  | "completed"
-  | "cancelled"
-  | "no-show";
-
-function normalizeStatus(
-  showingStatus: string | undefined,
-  eventType: string | undefined
-): ShowingStatus | undefined {
-  const hay = `${showingStatus ?? ""} ${eventType ?? ""}`.toLowerCase();
-  if (/cancel/.test(hay)) return "cancelled";
-  if (/no.?show/.test(hay)) return "no-show";
-  if (/confirm/.test(hay)) return "confirmed";
-  if (/feedback|complete|attended/.test(hay)) return "completed";
-  if (/request/.test(hay)) return "requested";
-  if (/schedul/.test(hay)) return "scheduled";
-  return undefined;
-}
+// ---- status normalization: src/lib/showings-normalize.ts (shared with the API sync)
 
 // ---- property matching -----------------------------------------------------
 
@@ -97,15 +75,16 @@ function zip5(s: string | undefined): string {
 
 // Best-effort: find our Property whose street+zip match the showing's address.
 // Returns the Property id, or null when nothing matches confidently.
-async function matchPropertyId(
+export async function matchPropertyId(
   address: string | undefined,
-  zip: string | undefined
+  zip: string | undefined,
+  db: Pick<typeof prisma, "property"> = prisma
 ): Promise<string | null> {
   const wantStreet = normStreet(address);
   const wantZip = zip5(zip);
   if (!wantStreet || !wantZip) return null;
 
-  const candidates = await prisma.property.findMany({
+  const candidates = await db.property.findMany({
     where: { zip: { startsWith: wantZip } },
     select: { id: true, street1: true },
   });

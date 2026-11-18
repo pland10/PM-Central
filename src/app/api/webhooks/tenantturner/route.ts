@@ -11,8 +11,9 @@ import { applyTenantTurnerEvent } from "@/lib/showings";
 //   https://pmilighthouse.app/api/webhooks/tenantturner?key=<TENANT_TURNER_WEBHOOK_SECRET>
 //
 // (or an Authorization: Bearer <secret> header). The secret lives in the
-// TENANT_TURNER_WEBHOOK_SECRET env var on each Railway service. Not configured
-// => locked down. The middleware lets /api/webhooks/ through the login gate.
+// TENANT_TURNER_WEBHOOK_SECRET env var (Vercel). Not configured => locked
+// down. The middleware lets /api/webhooks/ through the login gate. Showings
+// mainly arrive by the API pull (/api/cron/tenantturner); this is a bonus.
 //
 // Runs on the Node runtime for crypto; dynamic so it never caches.
 

@@ -121,7 +121,18 @@ the plan ever drops. Check fires in Vercel → project → Settings → Cron Job
 `npm run sync:balances` after any manual import (the scheduled balance sync also
 corrects it on its next run).
 
-### Tenant Turner showings (webhook)
+### Tenant Turner showings (API pull + webhook)
+
+**Primary (since Nov 2026): PM-Central pulls showings from Tenant Turner's REST
+API** — `/api/cron/tenantturner` (Vercel Cron, every 15 min by day, once
+overnight) asks for applications changed since the last run and upserts their
+showings (`src/lib/tenantturner/`). Needs **`TENANT_TURNER_API_KEY`** in Vercel
+(Production) and, for the manual "Sync Tenant Turner showings" workflow
+(backfill from a date, one-time cleanup, field names), in this repo's Actions
+secrets. Without the key the cron skips quietly. The webhook below never
+delivered in production; it stays as a bonus and shares the same upsert key.
+
+#### Webhook (optional)
 
 Showings come from Tenant Turner, which **pushes** a webhook on each viewing
 event (requested / scheduled / confirmed / cancelled / no-show / feedback) plus

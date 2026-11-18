@@ -1,0 +1,48 @@
+name: Sync Tenant Turner showings
+
+# Manual run of the Tenant Turner showings sync (the scheduled one runs on
+# Vercel: /api/cron/tenantturner). Use it to backfill from a start date, to
+# delete older showings once, and to see which fields Tenant Turner's API
+# returns. Prints counts and field names only — never lead details.
+#
+# Secrets required (repo -> Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL              prod Neon connection string (the DB the site reads)
+#   TENANT_TURNER_API_KEY     Tenant Turner API key
+#   TENANT_TURNER_CUSTOMER_ID optional
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Pull applications changed since this date (YYYY-MM-DD); blank = continue from the last run'
+        required: false
+        type: string
+        default: '2026-11-01'
+      prune_before:
+        description: 'Delete Tenant Turner showings created before this date (YYYY-MM-DD); blank = delete nothing'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: sync-tenantturner
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+      TENANT_TURNER_API_KEY:     ${{ secrets.TENANT_TURNER_API_KEY }}
+      TENANT_TURNER_CUSTOMER_ID: ${{ secrets.TENANT_TURNER_CUSTOMER_ID }}
+      TT_SINCE:                  ${{ inputs.since }}
+      TT_PRUNE_BEFORE:           ${{ inputs.prune_before }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run sync:tenantturner
