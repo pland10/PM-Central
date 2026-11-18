@@ -265,6 +265,44 @@ describe("TransactionsTable", () => {
       expect(screen.getByLabelText("suggest-category-t1")).toHaveTextContent("Supplies");
     });
 
+    it("shows Claude's guess, marked as AI, when there's no history guess; one click saves it", async () => {
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[hd("t1", ""), rows[1]]} accounts={[]} aiSuggestions={{ t1: "Utilities", t2: null }} />);
+      const ai = screen.getByLabelText("ai-suggest-category-t1");
+      expect(ai).toHaveTextContent(/AI suggests:\s*Utilities/);
+      expect(screen.queryByLabelText("ai-suggest-category-t2")).toBeNull();
+      await user.click(ai);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ categoryOverride: "Utilities" });
+    });
+
+    it("prefers the history guess over Claude's", () => {
+      render(<TransactionsTable initialRows={[hd("t1", ""), hd("t3", "Repairs")]} accounts={[]} aiSuggestions={{ t1: "Utilities" }} />);
+      expect(screen.getByLabelText("suggest-category-t1")).toHaveTextContent("Repairs");
+      expect(screen.queryByLabelText("ai-suggest-category-t1")).toBeNull();
+    });
+
+    it("asks the server for Claude's guess on rows with no guess yet, once", async () => {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ configured: true, suggestions: { t2: "Supplies" } }) });
+      render(
+        <TransactionsTable
+          initialRows={[hd("t1", ""), hd("t3", "Repairs"), rows[1], { ...rows[1], transactionId: "t4" }, { ...rows[1], transactionId: "t5", categoryOverride: "Payroll", merchantName: "Zed" }]}
+          accounts={[]}
+          aiEnabled
+          aiSuggestions={{ t4: null }}
+        />
+      );
+      expect(await screen.findByLabelText("ai-suggest-category-t2")).toHaveTextContent("Supplies");
+      const aiCalls = fetchMock.mock.calls.filter((c) => c[0] === "/api/accounting/ai-categories");
+      expect(aiCalls).toHaveLength(1);
+      // Not t1 (has a history guess), t3 / t5 (categorized) or t4 (already answered).
+      expect(JSON.parse(aiCalls[0][1].body)).toEqual({ ids: ["t2"] });
+    });
+
+    it("doesn't ask when AI is off", () => {
+      render(<TransactionsTable initialRows={[rows[1]]} accounts={[]} />);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it("updates the guess as soon as another row of that merchant gets a category", async () => {
       const user = userEvent.setup();
       render(<TransactionsTable initialRows={[hd("t1", ""), hd("t3", "")]} accounts={[]} />);
