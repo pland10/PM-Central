@@ -132,6 +132,17 @@ showings (`src/lib/tenantturner/`). Needs **`TENANT_TURNER_API_KEY`** in Vercel
 secrets. Without the key the cron skips quietly. The webhook below never
 delivered in production; it stays as a bonus and shares the same upsert key.
 
+#### Lead replies (Gmail → PM Central)
+
+Tenant Turner's API has no messages, but it emails the assigned agent
+"New message from <lead>" each time a lead texts back. A Google Apps Script in
+paul@pmilighthouse.com (`scripts/apps-script/tenantturner-messages.gs`, setup
+steps in its header) posts those emails every 5 minutes to
+`/api/webhooks/tenantturner-messages`, gated by **`TT_MESSAGES_SECRET`** (Vercel,
+Production; the same value in the script's properties). Replies show on the
+Showings page (recent list + under each lead). Other agents' notifications
+reach the inbox by forwarding to info@.
+
 #### Webhook (optional)
 
 Showings come from Tenant Turner, which **pushes** a webhook on each viewing

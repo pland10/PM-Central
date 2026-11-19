@@ -83,4 +83,38 @@ describe("ShowingsTable pre-screen", () => {
     expect(screen.getByText("Zillow")).toBeInTheDocument();
     expect(screen.getByText("Sam Agent")).toBeInTheDocument();
   });
+
+  describe("lead replies from Tenant Turner", () => {
+    const msgs = [
+      { id: "m2", receivedAt: "2026-11-19T13:39:41.000Z", leadName: "ann lee", agentName: "Paul", text: "Got it. Thanks for sending" },
+      { id: "m1", receivedAt: "2026-11-19T13:32:56.000Z", leadName: "Ann Lee", agentName: "Paul", text: "Via text apparently" },
+      { id: "m0", receivedAt: "2026-11-18T21:26:22.000Z", leadName: null, agentName: "Paul", text: "We found another rental" },
+    ];
+
+    it("shows a lead's replies under their name, the full conversation in a popup", async () => {
+      const user = userEvent.setup();
+      render(<ShowingsTable rows={[row(), row({ id: "s2", leadName: "Bo" })]} messages={msgs} />);
+      const btn = screen.getByRole("button", { name: "2 replies from Ann Lee" });
+      expect(btn).toHaveTextContent("Got it. Thanks for sending");
+      expect(screen.queryByRole("button", { name: /replies? from Bo/ })).toBeNull();
+
+      await user.click(btn);
+      const dialog = screen.getByRole("dialog");
+      const texts = within(dialog).getAllByTestId("reply-text").map((n) => n.textContent);
+      expect(texts).toEqual(["Via text apparently", "Got it. Thanks for sending"]); // oldest first
+    });
+
+    it("lists the latest replies above the table, including unknown leads", () => {
+      render(<ShowingsTable rows={[row()]} messages={msgs} />);
+      const recent = screen.getByRole("region", { name: "Recent lead replies" });
+      expect(within(recent).getByText("We found another rental")).toBeInTheDocument();
+      expect(within(recent).getByText("Unknown lead")).toBeInTheDocument();
+      expect(within(recent).getAllByText(/Ann Lee/i).length).toBeGreaterThan(0);
+    });
+
+    it("shows nothing extra when there are no replies", () => {
+      render(<ShowingsTable rows={[row()]} />);
+      expect(screen.queryByRole("region", { name: "Recent lead replies" })).toBeNull();
+    });
+  });
 });
