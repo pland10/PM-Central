@@ -50,6 +50,19 @@ describe("MeetingSheet", () => {
     expect(screen.getByText(/Last meeting .*leak fixed/)).toBeInTheDocument();
   });
 
+  it("seeds each textarea from the row's note for the current date (so a date switch, which remounts, shows that date's notes)", () => {
+    render(
+      <MeetingSheet
+        date="2026-11-16"
+        dateOptions={["2026-11-16"]}
+        rentals={[row({ id: "r1", label: "1 Main St", note: "roof leaking" })]}
+        squatterWatch={[]}
+        removed={[]}
+      />
+    );
+    expect(screen.getByLabelText("Notes for 1 Main St")).toHaveValue("roof leaking");
+  });
+
   it("saves a note to the API on blur, with the property + date", async () => {
     const user = userEvent.setup();
     renderSheet();
