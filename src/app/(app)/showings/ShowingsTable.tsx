@@ -6,6 +6,7 @@ import { Modal } from "@/components/Modal";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import type { ShowingRow } from "@/lib/showings";
 import type { TtMessage } from "@/lib/tenantturner/messages-db";
+import { isUpcomingShowing } from "@/lib/showings-upcoming";
 
 export type { ShowingRow };
 
@@ -89,14 +90,7 @@ function fmtMoveIn(v: string | null): string {
   return Number.isNaN(d.getTime()) ? v : fmtDate(v);
 }
 
-function isUpcoming(r: ShowingRow): boolean {
-  if (!r.startTime) return false;
-  if (["cancelled", "no-show", "completed"].includes(r.status)) return false;
-  // Count anything from the start of today forward as upcoming.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  return new Date(r.startTime).getTime() >= startOfToday.getTime();
-}
+const isUpcoming = (r: ShowingRow) => isUpcomingShowing(r);
 
 // Lead replies (Tenant Turner "New message from…" emails) are matched to a
 // showing by the lead's name, case-insensitively.
