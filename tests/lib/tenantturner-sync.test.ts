@@ -18,6 +18,13 @@ const APP = {
   MoveIn: "2026-12-01",
   AcquisitionSource: "Zillow",
   DateCreated: "2026-11-03T14:00:00Z",
+  Comments: "Is the basement finished?",
+  IsQualified: true,
+  Questions: [
+    { Question: "Do you have pets?", Answer: "One cat", IsKnockout: false },
+    { Question: "Monthly income?", Answer: "  ", IsKnockout: true },
+    { Question: "", Answer: "orphan answer" },
+  ],
   Showings: [
     {
       ShowingId: 9001,
@@ -27,6 +34,8 @@ const APP = {
       RequestedTime1: "2026-11-05T15:00:00Z",
       DateCreated: "2026-11-03T14:05:00Z",
       CodeSent: "2026-11-05T14:30:00Z",
+      Code: "4321",
+      Message: "Lockbox is on the side door",
       User: { Name: "Sam Agent", Email: "sam@pmi.com", Phone: "555-0199" },
       ShowingFeedback: { Rating: 4, Comments: "Liked the yard" },
     },
@@ -67,6 +76,10 @@ describe("showingsFromApplication", () => {
       feedbackRating: 4,
       feedbackComments: "Liked the yard",
       lockboxCodeSentAt: new Date("2026-11-05T14:30:00Z"),
+      leadComments: "Is the basement finished?",
+      leadQualified: true,
+      leadQuestions: [{ question: "Do you have pets?", answer: "One cat" }],
+      showingMessage: "Lockbox is on the side door",
       ttPropertyId: "77",
       ttAddress: "66 Francis Ct",
       ttCity: "Elmont",
@@ -74,6 +87,18 @@ describe("showingsFromApplication", () => {
       ttZip: "11003",
     });
     expect(second).toMatchObject({ externalId: "9002", status: "cancelled", leadName: "Ann Lee" });
+  });
+
+  it("never keeps the lockbox code, and leaves pre-screen fields out when Tenant Turner sent none", () => {
+    const [first] = showingsFromApplication(lowerKeys(APP), lowerKeys(PROP));
+    expect(JSON.stringify(first)).not.toContain("4321");
+    const bare = lowerKeys({ ApplicationId: 1, Showings: [{ ShowingId: 5, Status: "Scheduled" }] });
+    expect(showingsFromApplication(bare, undefined)[0]).toMatchObject({
+      leadComments: undefined,
+      leadQualified: undefined,
+      leadQuestions: undefined,
+      showingMessage: undefined,
+    });
   });
 
   it("skips showings without an id, and still maps when the property is unknown", () => {

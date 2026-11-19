@@ -209,8 +209,22 @@ export type ShowingRow = {
   feedbackRating: number | null;
   feedbackComments: string | null;
   lockboxCodeSentAt: string | null; // ISO
+  // Pre-screening (from the Tenant Turner API pull).
+  leadComments: string | null; // the lead's inquiry comment
+  leadQualified: boolean | null; // passed your pre-screen criteria
+  leadQuestions: { question: string; answer: string }[];
+  showingMessage: string | null;
   updatedAt: string; // ISO
 };
+
+// Stored JSON → the answered questions, ignoring anything malformed.
+function prescreenAnswers(v: unknown): { question: string; answer: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((q) => {
+    const o = q && typeof q === "object" ? (q as Record<string, unknown>) : {};
+    return typeof o.question === "string" && typeof o.answer === "string" ? [{ question: o.question, answer: o.answer }] : [];
+  });
+}
 
 function fmtAddress(parts: {
   street?: string | null;
@@ -334,6 +348,10 @@ export async function listShowings(): Promise<ShowingRow[] | null> {
       feedbackRating: r.feedbackRating,
       feedbackComments: r.feedbackComments,
       lockboxCodeSentAt: r.lockboxCodeSentAt ? r.lockboxCodeSentAt.toISOString() : null,
+      leadComments: r.leadComments ?? null,
+      leadQualified: r.leadQualified ?? null,
+      leadQuestions: prescreenAnswers(r.leadQuestions),
+      showingMessage: r.showingMessage ?? null,
       updatedAt: r.updatedAt.toISOString(),
     };
   });

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { Modal } from "@/components/Modal";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import type { ShowingRow } from "@/lib/showings";
 
@@ -95,7 +97,64 @@ function isUpcoming(r: ShowingRow): boolean {
   return new Date(r.startTime).getTime() >= startOfToday.getTime();
 }
 
+const hasPrescreen = (r: ShowingRow) => !!r.leadComments || r.leadQuestions.length > 0 || !!r.showingMessage;
+
+function qualifiedPill(q: boolean | null) {
+  if (q == null) return null;
+  return q ? (
+    <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Qualified</span>
+  ) : (
+    <span className="inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700">Not qualified</span>
+  );
+}
+
+// The lead's pre-screening from Tenant Turner: inquiry comment, answers, and
+// the message on the showing.
+function PrescreenModal({ r, onClose }: { r: ShowingRow; onClose: () => void }) {
+  return (
+    <Modal
+      title={`Pre-screen · ${r.leadName ?? "Lead"}`}
+      onClose={onClose}
+      footer={
+        <button type="button" onClick={onClose} className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+          Close
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        {r.leadQualified != null && <div>{qualifiedPill(r.leadQualified)}</div>}
+        {r.leadComments && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Their comment</h3>
+            <p className="mt-1 whitespace-pre-wrap">{r.leadComments}</p>
+          </section>
+        )}
+        {r.leadQuestions.length > 0 && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pre-screen answers</h3>
+            <dl className="mt-1 space-y-2">
+              {r.leadQuestions.map((q, i) => (
+                <div key={i}>
+                  <dt className="text-slate-500">{q.question}</dt>
+                  <dd className="font-medium text-slate-800">{q.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+        {r.showingMessage && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Showing message</h3>
+            <p className="mt-1 whitespace-pre-wrap">{r.showingMessage}</p>
+          </section>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
+  const [prescreenFor, setPrescreenFor] = useState<ShowingRow | null>(null);
   const columns: Column<ShowingRow>[] = [
     {
       key: "address",
@@ -240,6 +299,40 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
         ),
     },
     {
+      key: "prescreen",
+      header: "Pre-screen",
+      sortable: true,
+      sortValue: (r) => (r.leadQualified == null ? 2 : r.leadQualified ? 0 : 1),
+      filter: {
+        type: "select",
+        value: (r) => (r.leadQualified == null ? "(unknown)" : r.leadQualified ? "Qualified" : "Not qualified"),
+      },
+      exportValue: (r) => [r.leadQualified == null ? "" : r.leadQualified ? "Qualified" : "Not qualified", r.leadComments ?? ""].filter(Boolean).join(" · "),
+      render: (r) => {
+        if (r.leadQualified == null && !hasPrescreen(r)) return <span className="text-slate-300">—</span>;
+        return (
+          <div className="max-w-[240px] space-y-0.5">
+            {qualifiedPill(r.leadQualified)}
+            {r.leadComments && (
+              <div className="truncate text-xs text-slate-500" title={r.leadComments}>
+                {r.leadComments}
+              </div>
+            )}
+            {hasPrescreen(r) && (
+              <button
+                type="button"
+                aria-label={`Pre-screen for ${r.leadName ?? "lead"}`}
+                onClick={() => setPrescreenFor(r)}
+                className="text-[11px] font-medium text-brand-600 hover:underline"
+              >
+                Details
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: "feedback",
       header: "Feedback",
       sortable: true,
@@ -284,12 +377,13 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
   ];
 
   return (
+    <>
     <DataTable
       rows={rows}
       columns={columns}
       rowKey={(r) => r.id}
       search={(r) =>
-        `${r.address} ${r.leadName ?? ""} ${r.leadEmail ?? ""} ${r.leadPhone ?? ""} ${r.agentName ?? ""} ${r.acquisitionSource ?? ""}`
+        `${r.address} ${r.leadName ?? ""} ${r.leadEmail ?? ""} ${r.leadPhone ?? ""} ${r.agentName ?? ""} ${r.acquisitionSource ?? ""} ${r.leadComments ?? ""}`
       }
       searchPlaceholder="Search address, lead, agent…"
       exportName="Showings"
@@ -297,5 +391,7 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       initialSort={{ key: "when", dir: "asc" }}
       initialFacets={{ window: "upcoming" }}
     />
+    {prescreenFor && <PrescreenModal r={prescreenFor} onClose={() => setPrescreenFor(null)} />}
+    </>
   );
 }
