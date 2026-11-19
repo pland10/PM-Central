@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeQueries, sqlOf } from "../helpers/sql";
 
-vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: vi.fn() } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: vi.fn(), $executeRawUnsafe: vi.fn(async () => 0) } }));
 
 import { prisma } from "@/lib/prisma";
 import { normalizeDate, paymentSummaryAsOf, todayStr } from "@/lib/payments-dashboard";
@@ -15,6 +15,7 @@ const line = (id: string, amount: number, over: Record<string, unknown> = {}) =>
   amount,
   date_posted: "2026-10-20",
   clear_date: null,
+  return_date: null,
   expected_clear: null,
   ...over,
 });
@@ -142,7 +143,7 @@ describe("paymentSummaryAsOf", () => {
 
       expect(s!.rangeDays).toBe(1);
       expect(valuesOf(/WHERE status = 'cleared'/)).toEqual(["2026-10-24", "2026-10-24", 1]);
-      expect(valuesOf(/status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 5]);
+      expect(valuesOf(/WHERE status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 5]);
     });
 
     it("with 7 days, covers the 7 days ending on the date for cleared and returns", async () => {
@@ -152,7 +153,7 @@ describe("paymentSummaryAsOf", () => {
 
       expect(s!.rangeDays).toBe(7);
       expect(valuesOf(/WHERE status = 'cleared'/)).toEqual(["2026-10-24", "2026-10-24", 6]); // Oct 18–24
-      expect(valuesOf(/status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 6]);
+      expect(valuesOf(/WHERE status = 'returned'/)).toEqual(["2026-10-24", "2026-10-24", 6]);
     });
 
     it("treats any other range as the default", async () => {
@@ -180,8 +181,54 @@ describe("paymentSummaryAsOf", () => {
     const s = await paymentSummaryAsOf("2026-11-17");
 
     // Still pending today, OR cleared after the view date: both were in flight then.
-    expect(pendingSql).toMatch(/date_posted <= \?::date AND \(status = 'pending' OR \(status = 'cleared' AND clear_date > \?::date\)\)/);
-    expect(pendingValues).toEqual(["2026-11-17", "2026-11-17"]);
+    expect(pendingSql).toMatch(/date_posted <= \?::date AND \(status = 'pending' OR \(status = 'cleared' AND clear_date > \?::date\)/);
+    expect(pendingValues).toEqual(["2026-11-17", "2026-11-17", "2026-11-17"]);
     expect(s).toMatchObject({ pendingCount: 1, pendingTotal: 5000 });
+  });
+
+  describe("returns use the date they were returned (Walker: $2,500 posted 11/7, returned 11/13)", () => {
+    const capture = () => {
+      const seen: Record<string, { sql: string; values: unknown[] }> = {};
+      queryRaw.mockImplementation((async (q: unknown) => {
+        const sql = sqlOf(q);
+        const key = /WHERE status = 'cleared'/.test(sql) ? "cleared" : /WHERE status = 'returned'/.test(sql) ? "returned" : "pending";
+        seen[key] = { sql, values: (q as { values: unknown[] }).values };
+        return [];
+      }) as never);
+      return seen;
+    };
+
+    it("counts a payment returned after the view date as in flight on that date", async () => {
+      const seen = capture();
+      await paymentSummaryAsOf("2026-11-10");
+      expect(seen.pending.sql).toMatch(/OR \(status = 'returned' AND return_date > \?::date\)/);
+      expect(seen.pending.values).toEqual(["2026-11-10", "2026-11-10", "2026-11-10"]);
+    });
+
+    it("lists returns by return date, falling back to the paid date when it isn't synced", async () => {
+      const seen = capture();
+      await paymentSummaryAsOf("2026-11-13");
+      expect(seen.returned.sql).toMatch(/COALESCE\(return_date, date_posted\) <= \?::date AND COALESCE\(return_date, date_posted\) >= \?::date - \?::int/);
+      expect(seen.returned.sql).toMatch(/ORDER BY COALESCE\(return_date, date_posted\) DESC/);
+    });
+
+    it("selects return_date for each line", async () => {
+      const seen = capture();
+      await paymentSummaryAsOf("2026-11-13");
+      for (const k of ["cleared", "pending", "returned"]) expect(seen[k].sql).toMatch(/to_char\(return_date, 'YYYY-MM-DD'\) AS return_date/);
+    });
+
+    it("makes sure the sync-owned return_date column exists before querying (once per process)", async () => {
+      vi.resetModules(); // the guard is cached per module instance
+      const { prisma: fresh } = await import("@/lib/prisma");
+      const { paymentSummaryAsOf: load } = await import("@/lib/payments-dashboard");
+      vi.mocked(fresh.$queryRaw).mockResolvedValue([] as never);
+      const ddl = vi.mocked(fresh.$executeRawUnsafe);
+      ddl.mockClear();
+      await load("2026-11-13");
+      await load("2026-11-14");
+      expect(ddl).toHaveBeenCalledTimes(1);
+      expect(ddl).toHaveBeenCalledWith("ALTER TABLE payments ADD COLUMN IF NOT EXISTS return_date DATE");
+    });
   });
 });
