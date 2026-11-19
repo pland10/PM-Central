@@ -39,6 +39,18 @@ export const tuesdayOf = (now: Date) => weekMeetingDate(now, 2);
 export const recentMeetingMondays = (now: Date, count = 8) => recentMeetingDates(now, 1, count);
 export const recentMeetingTuesdays = (now: Date, count = 8) => recentMeetingDates(now, 2, count);
 
+// Status a strategic-meeting topic can be in. Stored as a slug on the topic.
+export const TOPIC_STATUSES = ["open", "in_progress", "done"] as const;
+export type TopicStatus = (typeof TOPIC_STATUSES)[number];
+export const TOPIC_STATUS_LABELS: Record<TopicStatus, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  done: "Done",
+};
+export function isTopicStatus(s: unknown): s is TopicStatus {
+  return typeof s === "string" && (TOPIC_STATUSES as readonly string[]).includes(s);
+}
+
 // Nest topics under their sections, preserving the order each list comes in.
 export function nestTopics<S extends { id: number }, T extends { sectionId: number }>(
   sections: S[],

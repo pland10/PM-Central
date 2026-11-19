@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 // app-owned (see prisma/sql/meeting-strategic.sql) and created on first use.
 
 export type SectionRow = { id: number; title: string };
-export type TopicRow = { id: number; sectionId: number; title: string };
+export type TopicRow = { id: number; sectionId: number; title: string; status: string };
 
 const DDL = [
   `CREATE TABLE IF NOT EXISTS meeting_sections (
@@ -29,6 +29,8 @@ const DDL = [
      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
      PRIMARY KEY (topic_id, meeting_date)
    )`,
+  // Per-topic status (open | in_progress | done) — added after the table shipped.
+  `ALTER TABLE meeting_topics ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open'`,
 ];
 
 let tables: Promise<void> | null = null;
@@ -53,10 +55,10 @@ export async function listSections(): Promise<SectionRow[]> {
 
 export async function listTopics(): Promise<TopicRow[]> {
   await ensureStrategicTables();
-  const rows = await prisma.$queryRaw<{ id: number; section_id: number; title: string }[]>(
-    Prisma.sql`SELECT id, section_id, title FROM meeting_topics ORDER BY sort_order, id`
+  const rows = await prisma.$queryRaw<{ id: number; section_id: number; title: string; status: string }[]>(
+    Prisma.sql`SELECT id, section_id, title, status FROM meeting_topics ORDER BY sort_order, id`
   );
-  return rows.map((r) => ({ id: r.id, sectionId: r.section_id, title: r.title }));
+  return rows.map((r) => ({ id: r.id, sectionId: r.section_id, title: r.title, status: r.status }));
 }
 
 // Structure for the admin + strategic page; empty if the tables aren't there yet.
@@ -107,6 +109,11 @@ export async function addTopic(sectionId: number, title: string): Promise<number
 export async function renameTopic(id: number, title: string): Promise<void> {
   await ensureStrategicTables();
   await prisma.$executeRaw(Prisma.sql`UPDATE meeting_topics SET title = ${title} WHERE id = ${id}`);
+}
+
+export async function setTopicStatus(id: number, status: string): Promise<void> {
+  await ensureStrategicTables();
+  await prisma.$executeRaw(Prisma.sql`UPDATE meeting_topics SET status = ${status} WHERE id = ${id}`);
 }
 
 export async function deleteTopic(id: number): Promise<void> {

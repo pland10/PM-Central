@@ -28,7 +28,13 @@ export default async function StrategicMeetingPage({
   const nested: StrategicSection[] = nestTopics(sections, topics).map((s) => ({
     id: s.id,
     title: s.title,
-    topics: s.topics.map((t) => ({ id: t.id, title: t.title, note: notes[t.id] ?? "", lastNote: prior[t.id] ?? null })),
+    topics: s.topics.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      note: notes[t.id] ?? "",
+      lastNote: prior[t.id] ?? null,
+    })),
   }));
 
   return (

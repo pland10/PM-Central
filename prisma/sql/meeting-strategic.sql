@@ -19,8 +19,11 @@ CREATE TABLE IF NOT EXISTS meeting_topics (
     section_id INT NOT NULL,
     title      TEXT NOT NULL,
     sort_order INT NOT NULL DEFAULT 0,
+    status     TEXT NOT NULL DEFAULT 'open',  -- open | in_progress | done
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Added after the table first shipped; idempotent for existing databases.
+ALTER TABLE meeting_topics ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open';
 
 -- One dated note per topic per meeting date (the strategic history).
 CREATE TABLE IF NOT EXISTS meeting_topic_notes (
