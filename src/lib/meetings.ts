@@ -39,6 +39,20 @@ export const tuesdayOf = (now: Date) => weekMeetingDate(now, 2);
 export const recentMeetingMondays = (now: Date, count = 8) => recentMeetingDates(now, 1, count);
 export const recentMeetingTuesdays = (now: Date, count = 8) => recentMeetingDates(now, 2, count);
 
+// Shift a YYYY-MM-DD date by whole days.
+export function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return isoDate(d);
+}
+
+// Date-picker options for a weekly sheet: next week's date first (so you can
+// prep ahead), then this week and the recent past, newest first.
+export function meetingDateOptions(now: Date, isoDow: number, back = 8): string[] {
+  const past = recentMeetingDates(now, isoDow, back);
+  return [addDays(past[0], 7), ...past];
+}
+
 // Status a strategic-meeting topic can be in. Stored as a slug on the topic.
 export const TOPIC_STATUSES = ["open", "in_progress", "done"] as const;
 export type TopicStatus = (typeof TOPIC_STATUSES)[number];

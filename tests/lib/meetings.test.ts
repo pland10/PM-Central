@@ -29,6 +29,13 @@ describe("meeting dates", () => {
     expect(recentMeetingTuesdays(new Date("2026-11-18T12:00:00Z"), 2)).toEqual(["2026-11-17", "2026-11-10"]);
   });
 
+  it("offers next week first in the picker, then this week and the recent past", async () => {
+    const { meetingDateOptions, addDays } = await import("@/lib/meetings");
+    expect(addDays("2026-11-16", 7)).toBe("2026-11-23");
+    // Monday picker from a Wednesday: next Mon (23) first, then this Mon (16), then prior
+    expect(meetingDateOptions(new Date("2026-11-18T12:00:00Z"), 1, 2)).toEqual(["2026-11-23", "2026-11-16", "2026-11-09"]);
+  });
+
   it("validates YYYY-MM-DD meeting dates", () => {
     expect(isMeetingDate("2026-11-16")).toBe(true);
     expect(isMeetingDate("2026-13-99")).toBe(false);

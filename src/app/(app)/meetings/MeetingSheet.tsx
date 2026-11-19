@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { mondayOf } from "@/lib/meetings";
 
 export type MeetingRow = {
   id: string;
@@ -17,18 +18,22 @@ export type MeetingRow = {
 type Filter = "all" | "active" | "inactive";
 type SaveState = "saving" | "saved" | "error" | undefined;
 
+const COLLAPSE_KEY = "pmi.meetingCollapsed";
+
 function prettyDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 export function MeetingSheet({
+  header,
   date,
   dateOptions,
   rentals,
   squatterWatch,
   removed,
 }: {
+  header?: ReactNode;
   date: string;
   dateOptions: string[];
   rentals: MeetingRow[];
@@ -36,10 +41,33 @@ export function MeetingSheet({
   removed: MeetingRow[];
 }) {
   const router = useRouter();
+  const currentMonday = mondayOf(new Date());
   const [filter, setFilter] = useState<Filter>("all");
   const seed = Object.fromEntries([...rentals, ...squatterWatch].map((r) => [r.id, r.note]));
   const [notes, setNotes] = useState<Record<string, string>>(seed);
   const [saved, setSaved] = useState<Record<string, SaveState>>({});
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_KEY);
+      if (raw) setCollapsed(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleCollapsed(key: string) {
+    setCollapsed((c) => {
+      const next = { ...c, [key]: !c[key] };
+      try {
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   const keep = (r: MeetingRow) => filter === "all" || (filter === "active" ? r.active : !r.active);
 
@@ -89,13 +117,12 @@ export function MeetingSheet({
           )}
         </div>
         <div className="text-xs text-slate-500">{r.address}</div>
-        <button
-          type="button"
-          onClick={() => setRemoved(r.id, true)}
-          className="mt-1 text-[11px] text-slate-400 hover:text-red-600"
-        >
-          Remove from list
-        </button>
+        {/* Only inactive houses can be taken off the sheet. */}
+        {!r.active && (
+          <button type="button" onClick={() => setRemoved(r.id, true)} className="mt-1 text-[11px] text-slate-400 hover:text-red-600">
+            Remove from list
+          </button>
+        )}
       </div>
       <div className="flex-1">
         <textarea
@@ -119,65 +146,89 @@ export function MeetingSheet({
     </li>
   );
 
-  const renderSection = (title: string, rows: MeetingRow[]) => {
+  const renderSection = (key: string, title: string, rows: MeetingRow[]) => {
     const shown = rows.filter(keep);
+    const isCollapsed = !!collapsed[key];
     return (
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">
-          {title} <span className="font-normal text-slate-400">({shown.length})</span>
-        </h2>
-        {shown.length ? (
-          <ul className="mt-1 divide-y divide-slate-100">{shown.map(renderRow)}</ul>
-        ) : (
-          <p className="mt-2 text-xs text-slate-400">No houses here.</p>
-        )}
+        <button
+          type="button"
+          onClick={() => toggleCollapsed(key)}
+          aria-expanded={!isCollapsed}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            aria-hidden="true"
+            className={`text-slate-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+          <h2 className="text-base font-bold text-slate-900">
+            {title} <span className="text-sm font-normal text-slate-400">({shown.length})</span>
+          </h2>
+        </button>
+        {!isCollapsed &&
+          (shown.length ? (
+            <ul className="mt-1 divide-y divide-slate-100">{shown.map(renderRow)}</ul>
+          ) : (
+            <p className="mt-2 text-xs text-slate-400">No houses here.</p>
+          ))}
       </section>
     );
   };
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <span className="font-medium">Meeting date</span>
-          <select
-            aria-label="Meeting date"
-            value={date}
-            onChange={(e) => router.push(`/meetings?date=${e.target.value}`)}
-            className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none"
-          >
-            {dateOptions.map((d) => (
-              <option key={d} value={d}>
-                {prettyDate(d)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex items-center gap-1 text-xs">
-          {(["all", "active", "inactive"] as Filter[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-              className={`rounded-md px-2.5 py-1 font-medium capitalize ${
-                filter === f ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+      {/* Locked: tabs, title and the meeting-date bar stay put; the houses scroll. */}
+      <div className="sticky top-0 z-20 pb-3" style={{ backgroundColor: "var(--background)" }}>
+        {header}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <span className="font-medium">Meeting date</span>
+            <select
+              aria-label="Meeting date"
+              value={date}
+              onChange={(e) => router.push(`/meetings?date=${e.target.value}`)}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none"
             >
-              {f}
-            </button>
-          ))}
+              {dateOptions.map((d) => (
+                <option key={d} value={d}>
+                  {prettyDate(d)}
+                  {d === currentMonday ? " · this week" : d > currentMonday ? " · next week" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-center gap-1 text-xs">
+            {(["all", "active", "inactive"] as Filter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                aria-pressed={filter === f}
+                onClick={() => setFilter(f)}
+                className={`rounded-md px-2.5 py-1 font-medium capitalize ${
+                  filter === f ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {renderSection("Rental Units", rentals)}
-      {renderSection("Squatter Watch", squatterWatch)}
+      {renderSection("rentals", "Rental Units", rentals)}
+      {renderSection("squatter", "Squatter Watch", squatterWatch)}
 
       {removed.length > 0 && (
         <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer text-sm font-medium text-slate-600">
-            Removed from the list ({removed.length})
-          </summary>
+          <summary className="cursor-pointer text-sm font-medium text-slate-600">Removed from the list ({removed.length})</summary>
           <ul className="mt-2 divide-y divide-slate-100">
             {removed.map((r) => (
               <li key={r.id} className="flex items-center justify-between py-2 text-sm">
