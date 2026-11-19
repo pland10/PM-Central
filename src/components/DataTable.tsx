@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadXlsx, todayStamp, type ExportCell } from "@/lib/export-excel";
 
 // Per-column filter config. Opt-in: a column only gets a filter control if it
@@ -127,6 +127,36 @@ export function DataTable<T>({
   scrollBox?: boolean;
 }) {
   const [q, setQ] = useState("");
+
+  // Scroll-box mode: fit the box to the screen space below its own top edge,
+  // so only the table scrolls — the page (and whatever sits above the table)
+  // stays put, and the box's bottom rows + sideways scrollbar are on screen.
+  // Measured with the page scrolled to the top (offset by the scroller's
+  // scrollTop) and kept in 100vh terms so window resizes need no re-measure;
+  // re-measured when the content above changes height. 24px = the page's bottom
+  // padding (main p-6), so the page itself has nothing left to scroll. Floor 20rem.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxMaxHeight, setBoxMaxHeight] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (!scrollBox) return;
+    const el = boxRef.current;
+    if (!el) return;
+    const scroller = el.closest("main");
+    const measure = () => {
+      const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY);
+      const next = `max(20rem, calc(100vh - ${Math.round(top + 24)}px))`;
+      setBoxMaxHeight((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const content = scroller?.firstElementChild ?? el.parentElement;
+    const ro = typeof ResizeObserver !== "undefined" && content ? new ResizeObserver(measure) : null;
+    if (ro && content) ro.observe(content);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [scrollBox]);
   const [facetValues, setFacetValues] = useState<Record<string, string>>(initialFacets ?? {});
   const [colFilters, setColFilters] = useState<Record<string, FilterVal>>(initialColumnFilters ?? {});
   const [sort, setSort] = useState<SortKey[]>(initialSort ? [initialSort] : []);
@@ -394,9 +424,12 @@ export function DataTable<T>({
               ? "w-max min-w-full"
               : `overflow-x-auto ${stickyHeader ? "lg:overflow-x-clip" : ""}`
         }`}
-        // Scroll-box mode: as tall as the screen allows below any pinned page
-        // header, so the box's bottom scrollbar is on screen.
-        style={scrollBox ? { maxHeight: "calc(100vh - var(--sticky-offset, 0px) - 2rem)" } : undefined}
+        // Scroll-box mode: as tall as the screen allows below the box's top (see
+        // boxMaxHeight), so the box's bottom scrollbar is on screen.
+        ref={boxRef}
+        style={
+          scrollBox ? { maxHeight: boxMaxHeight ?? "calc(100vh - var(--sticky-offset, 0px) - 2rem)" } : undefined
+        }
       >
         <table className="w-full text-sm">
           <thead>
