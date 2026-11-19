@@ -12,6 +12,9 @@ const base = {
   status: "scheduled",
   viewingType: null,
   startTime: null,
+  requestedTime1: new Date("2026-11-20T15:00:00Z"),
+  requestedTime2: new Date("2026-11-22T15:00:00Z"),
+  requestedTime3: null,
   property: null,
   ttAddress: "66 Francis Ct",
   ttCity: "Elmont",
@@ -49,6 +52,7 @@ describe("listShowings pre-screen fields", () => {
       leadQualified: false,
       leadQuestions: [{ question: "Pets?", answer: "One cat" }],
       showingMessage: "Side door",
+      requestedTime: "2026-11-22T15:00:00.000Z", // the latest time the lead asked for
     });
   });
 

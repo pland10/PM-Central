@@ -70,13 +70,28 @@ describe("MeetingSheet", () => {
     expect(screen.getByText("1 Main St")).toBeInTheDocument();
   });
 
-  it("removes a house from the list via the API and refreshes", async () => {
+  it("removes an INACTIVE house from the list via the API and refreshes", async () => {
     const user = userEvent.setup();
     renderSheet();
-    const mainRow = screen.getByText("1 Main St").closest("li")!;
-    await user.click(within(mainRow).getByRole("button", { name: /remove from list/i }));
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ propertyId: "r1", removed: true });
+    const oakRow = screen.getByText("9 Oak Ave").closest("li")!; // r2 is inactive
+    await user.click(within(oakRow).getByRole("button", { name: /remove from list/i }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ propertyId: "r2", removed: true });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("does not offer Remove on an active house", () => {
+    renderSheet();
+    const mainRow = screen.getByText("1 Main St").closest("li")!; // r1 is active
+    expect(within(mainRow).queryByRole("button", { name: /remove from list/i })).not.toBeInTheDocument();
+  });
+
+  it("collapses a section so its houses hide (to reach the other group)", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    expect(screen.getByText("1 Main St")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Rental Units/ }));
+    expect(screen.queryByText("1 Main St")).not.toBeInTheDocument(); // collapsed to the header row
+    expect(screen.getByText("5 Pine St")).toBeInTheDocument(); // Squatter Watch still visible
   });
 
   it("changes the meeting date by navigating", async () => {

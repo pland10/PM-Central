@@ -2,6 +2,7 @@ import { requireFeature } from "@/config/features";
 import { listShowings } from "@/lib/showings";
 import { prisma } from "@/lib/prisma";
 import { listTtMessages } from "@/lib/tenantturner/messages-db";
+import { isUpcomingShowing } from "@/lib/showings-upcoming";
 import { ShowingsTable } from "./ShowingsTable";
 
 export const dynamic = "force-dynamic";
@@ -38,13 +39,7 @@ export default async function ShowingsPage() {
     );
   }
 
-  const now = Date.now();
-  const upcoming = rows.filter(
-    (r) =>
-      r.startTime &&
-      new Date(r.startTime).getTime() >= now &&
-      !["cancelled", "no-show", "completed"].includes(r.status)
-  ).length;
+  const upcoming = rows.filter((r) => isUpcomingShowing(r)).length;
   const needsAction = rows.filter((r) => r.status === "requested").length;
 
   return (

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatAddress } from "@/lib/format";
 import { requireFeature } from "@/config/features";
-import { isMeetingDate, mondayOf, recentMeetingMondays, splitMeetingGroups } from "@/lib/meetings";
+import { isMeetingDate, meetingDateOptions, mondayOf, splitMeetingGroups } from "@/lib/meetings";
 import { getPropertyOrder, notesForDate, previousNotes, removedPropertyIds } from "@/lib/meetings-db";
 import { MeetingSheet, type MeetingRow } from "./MeetingSheet";
 import { MeetingTabs } from "./MeetingTabs";
@@ -52,18 +52,24 @@ export default async function MeetingsPage({
     .map(toRow)
     .sort((a, b) => a.sortKey.toLowerCase().localeCompare(b.sortKey.toLowerCase()));
 
-  return (
-    <div className="mx-auto max-w-4xl">
+  const header = (
+    <>
       <MeetingTabs active="tactical" />
-      <div className="mb-6">
+      <div className="pt-4 pb-3">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Monday tactical meeting</h1>
         <p className="mt-1 text-sm text-slate-500">
           Walk every house and jot what&apos;s going on. Notes are saved per meeting date, so last week stays with you.
         </p>
       </div>
+    </>
+  );
+
+  return (
+    <div className="mx-auto max-w-4xl">
       <MeetingSheet
+        header={header}
         date={date}
-        dateOptions={recentMeetingMondays(new Date(), 8)}
+        dateOptions={meetingDateOptions(new Date(), 1, 8)}
         rentals={rentals}
         squatterWatch={squatterWatch}
         removed={removedRows}
