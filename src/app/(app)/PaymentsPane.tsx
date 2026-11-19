@@ -235,7 +235,12 @@ function PaymentRow({
       <div className="shrink-0 text-right">
         <div className="font-medium text-slate-700">{formatCurrency(p.amount)}</div>
         {whenField === "age" && days != null && <div className={`text-xs ${tone}`}>{days}d in flight</div>}
-        {whenField === "posted" && <div className="text-xs text-slate-400">paid {fmtShort(p.date_posted)}</div>}
+        {whenField === "posted" && (
+          <div className="text-xs text-slate-400">
+            paid {fmtShort(p.date_posted)}
+            {p.return_date ? ` · returned ${fmtShort(p.return_date)}` : ""}
+          </div>
+        )}
         {whenField === "cleared" && <div className="text-xs text-slate-400">cleared {fmtShort(p.clear_date)}</div>}
       </div>
     </div>

@@ -30,3 +30,8 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS payments_status_idx     ON payments(status);
 CREATE INDEX IF NOT EXISTS payments_clear_date_idx ON payments(clear_date);
 CREATE INDEX IF NOT EXISTS payments_posted_idx     ON payments(date_posted);
+
+-- Nov 2026: the day a returned (NSF) payment was returned, from its Rentvine
+-- "Lease Payment Return" transaction. settlement_sync.py and the dashboard
+-- loader (src/lib/payments-dashboard.ts) both add it if missing.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS return_date DATE;

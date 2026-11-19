@@ -10,8 +10,11 @@ import { prisma } from "@/lib/prisma";
 //   - Cleared (now payable): status=cleared, clear_date within the last 1 day
 //     as of the view date — grouped by owner so it's clear who can be paid.
 //   - Pending (in flight):   posted on/before the view date and not settled by
-//                            then (status=pending, or cleared after that date).
-//   - Returns / NSF (5d):    status=returned, posted within the last 5 days.
+//                            then (status=pending, or cleared / returned after
+//                            that date).
+//   - Returns / NSF (5d):    status=returned, returned within the last 5 days
+//                            (return_date; falls back to date_posted when the
+//                            sync couldn't link the return).
 // A pending payment older than STALE_DAYS is almost certainly stuck, not in
 // flight, so it's flagged.
 
@@ -23,6 +26,7 @@ export type PaymentLine = {
   amount: number;
   date_posted: string | null; // YYYY-MM-DD
   clear_date: string | null; // YYYY-MM-DD (cleared only)
+  return_date: string | null; // YYYY-MM-DD (returned only; null if not synced)
   expected_clear: string | null; // YYYY-MM-DD (pending estimate)
 };
 
@@ -72,12 +76,30 @@ const LINE_COLS = Prisma.sql`
   source_id, tenant, property_address, amount::float8 AS amount,
   to_char(date_posted, 'YYYY-MM-DD') AS date_posted,
   to_char(clear_date, 'YYYY-MM-DD') AS clear_date,
+  to_char(return_date, 'YYYY-MM-DD') AS return_date,
   to_char(expected_clear, 'YYYY-MM-DD') AS expected_clear`;
 
 // settlement_sync.py writes owner receipts (Rentvine "Owner Receipt" — owner
 // contributions) as rvown_<id>; tenant payments are rvpay_<id>.
 function withKind<T extends { source_id: string }>(row: T): T & { kind: PaymentLine["kind"] } {
   return { ...row, kind: row.source_id.startsWith("rvown_") ? "owner" : "rent" };
+}
+
+// payments.return_date is written by settlement_sync.py (leadsimple-search),
+// added Nov 2026. The sync adds the column itself; this guard covers the window
+// before its first run so the dashboard never errors on a missing column.
+let returnDateColumn: Promise<void> | null = null;
+function ensureReturnDateColumn(): Promise<void> {
+  if (!returnDateColumn) {
+    returnDateColumn = prisma
+      .$executeRawUnsafe(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS return_date DATE`)
+      .then(() => undefined)
+      .catch((e) => {
+        returnDateColumn = null; // let a later call retry
+        throw e;
+      });
+  }
+  return returnDateColumn;
 }
 
 export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): Promise<PaymentAsOf | null> {
@@ -87,6 +109,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): P
   const clearedBack = rangeDays === 7 ? 6 : CLEARED_WINDOW_DAYS;
   const returnsBack = rangeDays === 7 ? 6 : RETURNS_WINDOW_DAYS;
   try {
+    await ensureReturnDateColumn();
     // Cleared "now payable": cleared within the window ending on asOf.
     const clearedRows = (await prisma.$queryRaw<(Omit<PaymentLine, "kind"> & { owner: string | null })[]>(Prisma.sql`
       SELECT ${LINE_COLS}, owner
@@ -97,24 +120,26 @@ export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): P
       ORDER BY owner ASC NULLS LAST, clear_date ASC, amount DESC`)).map(withKind);
 
     // Pending (in flight) as of asOf, oldest first: paid on/before asOf and not
-    // yet settled by then — still pending today, or cleared only after asOf.
+    // yet settled by then — still pending today, or cleared / returned only
+    // after asOf.
     // (Status is today's; without the clear_date check a past date would lose
     // every payment that has cleared since, e.g. posted 11/13, settled 11/18
     // vanished from the 11/17 view.)
     const pending = (await prisma.$queryRaw<Omit<PaymentLine, "kind">[]>(Prisma.sql`
       SELECT ${LINE_COLS}
       FROM payments
-      WHERE date_posted <= ${asOf}::date AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date))
+      WHERE date_posted <= ${asOf}::date AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date) OR (status = 'returned' AND return_date > ${asOf}::date))
       ORDER BY date_posted ASC NULLS LAST`)).map(withKind);
 
-    // Returns / NSF within the last RETURNS_WINDOW_DAYS, newest first.
+    // Returns / NSF returned within the last RETURNS_WINDOW_DAYS, newest first.
+    // By the day it was returned; date_posted only when the sync couldn't link it.
     const returned = (await prisma.$queryRaw<Omit<PaymentLine, "kind">[]>(Prisma.sql`
       SELECT ${LINE_COLS}
       FROM payments
       WHERE status = 'returned'
-        AND date_posted <= ${asOf}::date
-        AND date_posted >= ${asOf}::date - ${returnsBack}::int
-      ORDER BY date_posted DESC NULLS LAST`)).map(withKind);
+        AND COALESCE(return_date, date_posted) <= ${asOf}::date
+        AND COALESCE(return_date, date_posted) >= ${asOf}::date - ${returnsBack}::int
+      ORDER BY COALESCE(return_date, date_posted) DESC NULLS LAST`)).map(withKind);
 
     // If every query is empty the table may simply be unpopulated — but it still
     // exists, so return zeros (the pane shows an empty state, not hidden).
@@ -147,6 +172,7 @@ export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): P
         amount: r.amount,
         date_posted: r.date_posted,
         clear_date: r.clear_date,
+        return_date: r.return_date,
         expected_clear: r.expected_clear,
       });
     }
