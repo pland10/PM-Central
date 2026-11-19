@@ -71,11 +71,13 @@ describe("upsertTtShowing", () => {
 });
 
 describe("pruneShowingsBefore", () => {
-  it("deletes only Tenant Turner showings created before the date", async () => {
+  it("deletes only Tenant Turner showings dated before the date (showing time, else requested, booked, created)", async () => {
     const { prisma, executeRaw } = fakePrisma();
     expect(await pruneShowingsBefore(prisma, "2026-11-01")).toBe(3);
     const q = executeRaw.mock.calls[0][0] as { values: unknown[] };
-    expect(sqlOf(q)).toMatch(/DELETE FROM "Showing" WHERE source = .* AND "createdAt" < /);
+    expect(sqlOf(q)).toMatch(
+      /DELETE FROM "Showing" WHERE source = .* AND COALESCE\("startTime", "requestedTime1", "bookedAt", "createdAt"\) < /
+    );
     expect(q.values).toEqual(["tenantturner", "2026-11-01"]);
   });
 });

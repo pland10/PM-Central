@@ -10,7 +10,7 @@ export default async function ShowingsPage() {
 
   if (!rows) {
     return (
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Showings</h1>
         </div>
@@ -23,7 +23,7 @@ export default async function ShowingsPage() {
 
   if (rows.length === 0) {
     return (
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Showings</h1>
           <p className="mt-1 text-sm text-slate-500">Property viewings from Tenant Turner.</p>
@@ -46,7 +46,7 @@ export default async function ShowingsPage() {
   const needsAction = rows.filter((r) => r.status === "requested").length;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Showings</h1>
         <p className="mt-1 text-sm text-slate-500">
