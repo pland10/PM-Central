@@ -263,6 +263,14 @@ model Showing {
 
   lockboxCodeSentAt DateTime? // set by the Lockbox Code Sent event
 
+  // Pre-screening, from the Tenant Turner API pull (not the webhook): the lead's
+  // inquiry comment, qualified yes/no, their answers ([{question, answer}]), and
+  // the message on the showing. Added by prisma/sql/showings-prescreen.sql.
+  leadComments   String?
+  leadQualified  Boolean?
+  leadQuestions  Json?
+  showingMessage String?
+
   // Tenant Turner's property reference + a denormalized address snapshot so the
   // showing is readable even when it isn't linked to one of our properties.
   ttPropertyId String?
