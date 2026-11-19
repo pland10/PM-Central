@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import { setPropertyRemoved } from "@/lib/meetings-db";
+import { isPropertyActive, setPropertyRemoved } from "@/lib/meetings-db";
 
 // Hide a house from the meeting sheet, or put it back: { propertyId, removed }.
 // Only touches the meeting list — never the underlying property. Any signed-in
-// user.
+// user. Active houses can't be removed (only inactive ones you no longer want).
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -17,6 +17,9 @@ export async function POST(req: NextRequest) {
   if (!propertyId) return NextResponse.json({ error: "Missing property." }, { status: 400 });
 
   try {
+    if (removed && (await isPropertyActive(propertyId))) {
+      return NextResponse.json({ error: "Active houses can't be removed from the list." }, { status: 400 });
+    }
     await setPropertyRemoved(propertyId, removed);
     return NextResponse.json({ ok: true });
   } catch (e) {

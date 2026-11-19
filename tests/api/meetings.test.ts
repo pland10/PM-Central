@@ -5,10 +5,11 @@ vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/meetings-db", () => ({
   upsertMeetingNote: vi.fn(async () => {}),
   setPropertyRemoved: vi.fn(async () => {}),
+  isPropertyActive: vi.fn(async () => false),
 }));
 
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import { upsertMeetingNote, setPropertyRemoved } from "@/lib/meetings-db";
+import { upsertMeetingNote, setPropertyRemoved, isPropertyActive } from "@/lib/meetings-db";
 import { POST as notesPOST } from "@/app/api/meetings/notes/route";
 import { POST as removePOST } from "@/app/api/meetings/remove/route";
 
@@ -45,6 +46,16 @@ describe("POST /api/meetings/remove", () => {
   it("removes and restores a property", async () => {
     expect((await removePOST(req("/api/meetings/remove", { propertyId: "p1", removed: true }))).status).toBe(200);
     expect(setPropertyRemoved).toHaveBeenCalledWith("p1", true);
+    await removePOST(req("/api/meetings/remove", { propertyId: "p1", removed: false }));
+    expect(setPropertyRemoved).toHaveBeenCalledWith("p1", false);
+  });
+
+  it("won't remove an active house, but still restores one", async () => {
+    vi.mocked(isPropertyActive).mockResolvedValueOnce(true);
+    const res = await removePOST(req("/api/meetings/remove", { propertyId: "p1", removed: true }));
+    expect(res.status).toBe(400);
+    expect(setPropertyRemoved).not.toHaveBeenCalled();
+    // restoring (removed:false) never checks active status
     await removePOST(req("/api/meetings/remove", { propertyId: "p1", removed: false }));
     expect(setPropertyRemoved).toHaveBeenCalledWith("p1", false);
   });

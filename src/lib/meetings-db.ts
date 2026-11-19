@@ -78,6 +78,13 @@ export async function upsertMeetingNote(propertyId: string, date: string, body: 
     ON CONFLICT (property_id, meeting_date) DO UPDATE SET body = EXCLUDED.body, updated_at = now()`);
 }
 
+// Whether a property is currently active (used to block removing active houses
+// from the meeting sheet).
+export async function isPropertyActive(propertyId: string): Promise<boolean> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { status: true } });
+  return p?.status === "active";
+}
+
 // Houses removed from the sheet.
 export async function removedPropertyIds(): Promise<Set<string>> {
   await ensureMeetingTables();
