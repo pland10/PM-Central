@@ -39,6 +39,18 @@ const dateOrUndef = (v: unknown): Date | undefined => {
   return Number.isNaN(d.getTime()) ? undefined : d;
 };
 
+export type PrescreenAnswer = { question: string; answer: string };
+
+// The lead's pre-screen answers, keeping only questions that were answered.
+function prescreenAnswers(v: unknown): PrescreenAnswer[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .map(lowerKeys)
+    .map((q) => ({ question: str(q.question), answer: str(q.answer) }))
+    .filter((q): q is PrescreenAnswer => !!q.question && !!q.answer);
+  return out.length ? out : undefined;
+}
+
 export type ShowingInput = {
   externalId: string;
   status: string;
@@ -60,6 +72,12 @@ export type ShowingInput = {
   feedbackRating?: number;
   feedbackComments?: string;
   lockboxCodeSentAt?: Date;
+  // Pre-screening: the lead's inquiry comment, qualified yes/no and their
+  // answers; the message on the showing. (The lockbox code itself is never kept.)
+  leadComments?: string;
+  leadQualified?: boolean;
+  leadQuestions?: PrescreenAnswer[];
+  showingMessage?: string;
   ttPropertyId?: string;
   ttAddress?: string;
   ttCity?: string;
@@ -71,6 +89,8 @@ export type ShowingInput = {
 // Turner property (lower-keyed), for the address snapshot; may be unknown.
 export function showingsFromApplication(app: TtRecord, prop: TtRecord | undefined): ShowingInput[] {
   const leadName = [str(app.firstname), str(app.lastname)].filter(Boolean).join(" ") || undefined;
+  const leadQuestions = prescreenAnswers(app.questions);
+  const leadQualified = typeof app.isqualified === "boolean" ? app.isqualified : undefined;
   const showings = Array.isArray(app.showings) ? app.showings : [];
   const out: ShowingInput[] = [];
   for (const raw of showings) {
@@ -100,6 +120,10 @@ export function showingsFromApplication(app: TtRecord, prop: TtRecord | undefine
       feedbackRating: intOrUndef(fb.rating),
       feedbackComments: str(fb.comments),
       lockboxCodeSentAt: dateOrUndef(sh.codesent),
+      leadComments: str(app.comments),
+      leadQualified,
+      leadQuestions,
+      showingMessage: str(sh.message),
       ttPropertyId: idStr(app.propertyid),
       ttAddress: str(prop?.address),
       ttCity: str(prop?.city),
