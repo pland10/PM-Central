@@ -45,6 +45,14 @@ describe("StrategicSheet", () => {
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
+  it("seeds each topic's textarea from its note for the current date (remount on date switch loads that date)", () => {
+    const withNote: StrategicSection[] = [
+      { id: 1, title: "Growth", topics: [{ id: 10, title: "Hiring a PM", status: "open", note: "offer out", lastNote: null }] },
+    ];
+    render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={withNote} canManage={false} />);
+    expect(screen.getByLabelText("Notes for Hiring a PM")).toHaveValue("offer out");
+  });
+
   it("changes a topic's status and posts it", async () => {
     const user = userEvent.setup();
     render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={sections} canManage={false} />);
