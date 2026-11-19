@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TOPIC_STATUSES, TOPIC_STATUS_LABELS, tuesdayOf } from "@/lib/meetings";
+
+function Spinner() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4z" />
+    </svg>
+  );
+}
 
 export type StrategicTopic = {
   id: number;
@@ -43,6 +52,7 @@ export function StrategicSheet({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const currentTuesday = tuesdayOf(new Date());
   const allTopics = sections.flatMap((s) => s.topics);
   const seed = Object.fromEntries(allTopics.map((t) => [t.id, t.note]));
@@ -158,8 +168,12 @@ export function StrategicSheet({
             <select
               aria-label="Meeting date"
               value={date}
-              onChange={(e) => router.push(`/meetings/strategic?date=${e.target.value}`)}
-              className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none"
+              disabled={isPending}
+              onChange={(e) => {
+                const v = e.target.value;
+                startTransition(() => router.push(`/meetings/strategic?date=${v}`));
+              }}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none disabled:opacity-60"
             >
               {dateOptions.map((d) => (
                 <option key={d} value={d}>
@@ -168,6 +182,11 @@ export function StrategicSheet({
                 </option>
               ))}
             </select>
+            {isPending && (
+              <span className="flex items-center gap-1 text-xs text-slate-400" role="status">
+                <Spinner /> Loading…
+              </span>
+            )}
           </label>
           {canManage && (
             <Link href="/admin/meeting-topics" className="text-xs font-medium text-brand-600 hover:underline">
@@ -177,6 +196,8 @@ export function StrategicSheet({
         </div>
       </div>
 
+      {/* Dim while the next date loads, so the switch is obviously happening. */}
+      <div className="transition-opacity" style={{ opacity: isPending ? 0.5 : 1 }} aria-busy={isPending}>
       {sections.length === 0 ? (
         <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
           No agenda yet.{" "}
@@ -225,6 +246,7 @@ export function StrategicSheet({
           );
         })
       )}
+      </div>
     </div>
   );
 }

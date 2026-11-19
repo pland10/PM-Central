@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { mondayOf } from "@/lib/meetings";
+
+function Spinner() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4z" />
+    </svg>
+  );
+}
 
 export type MeetingRow = {
   id: string;
@@ -41,6 +50,7 @@ export function MeetingSheet({
   removed: MeetingRow[];
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const currentMonday = mondayOf(new Date());
   const [filter, setFilter] = useState<Filter>("all");
   const seed = Object.fromEntries([...rentals, ...squatterWatch].map((r) => [r.id, r.note]));
@@ -194,8 +204,12 @@ export function MeetingSheet({
             <select
               aria-label="Meeting date"
               value={date}
-              onChange={(e) => router.push(`/meetings?date=${e.target.value}`)}
-              className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none"
+              disabled={isPending}
+              onChange={(e) => {
+                const v = e.target.value;
+                startTransition(() => router.push(`/meetings?date=${v}`));
+              }}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none disabled:opacity-60"
             >
               {dateOptions.map((d) => (
                 <option key={d} value={d}>
@@ -204,6 +218,11 @@ export function MeetingSheet({
                 </option>
               ))}
             </select>
+            {isPending && (
+              <span className="flex items-center gap-1 text-xs text-slate-400" role="status">
+                <Spinner /> Loading…
+              </span>
+            )}
           </label>
           <div className="flex items-center gap-1 text-xs">
             {(["all", "active", "inactive"] as Filter[]).map((f) => (
@@ -223,10 +242,12 @@ export function MeetingSheet({
         </div>
       </div>
 
-      {renderSection("rentals", "Rental Units", rentals)}
-      {renderSection("squatter", "Squatter Watch", squatterWatch)}
+      {/* Dim while the next date loads, so the switch is obviously happening. */}
+      <div className="transition-opacity" style={{ opacity: isPending ? 0.5 : 1 }} aria-busy={isPending}>
+        {renderSection("rentals", "Rental Units", rentals)}
+        {renderSection("squatter", "Squatter Watch", squatterWatch)}
 
-      {removed.length > 0 && (
+        {removed.length > 0 && (
         <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <summary className="cursor-pointer text-sm font-medium text-slate-600">Removed from the list ({removed.length})</summary>
           <ul className="mt-2 divide-y divide-slate-100">
@@ -240,9 +261,10 @@ export function MeetingSheet({
                 </button>
               </li>
             ))}
-          </ul>
-        </details>
-      )}
+            </ul>
+          </details>
+        )}
+      </div>
     </div>
   );
 }
