@@ -1,24 +1,28 @@
 import { prisma } from "@/lib/prisma";
 import { rentvinePropertyId } from "@/lib/rentvine-ids";
 
-// Properties that an invoice can be linked to, keyed by their stable externalId
-// (what we store on the invoice). Server-side (Prisma) — used by the invoice
-// editor's property picker and the invoicing list's property labels.
+// Properties that a record (invoice, bank transaction, work order) can be linked
+// to, keyed by their stable externalId (what we store on the record). Former
+// clients (inactive in Rentvine) are included — you still bill things to them —
+// marked "(inactive)" and listed after the active ones. Server-side (Prisma).
 export type PropertyOption = { externalId: string; label: string };
 
 export async function listPropertyOptions(): Promise<PropertyOption[]> {
   const props = await prisma.property.findMany({
-    where: { externalId: { not: null }, status: "active" },
-    select: { externalId: true, name: true, street1: true, city: true },
+    where: { externalId: { not: null } },
+    select: { externalId: true, name: true, street1: true, city: true, status: true },
     orderBy: [{ name: "asc" }, { street1: "asc" }],
   });
   return props
     .filter((p): p is typeof p & { externalId: string } => Boolean(p.externalId))
     .map((p) => {
       const main = p.name || p.street1 || "Untitled property";
-      const label = p.city ? `${main} · ${p.city}` : main;
-      return { externalId: p.externalId, label };
-    });
+      const base = p.city ? `${main} · ${p.city}` : main;
+      const inactive = p.status !== "active";
+      return { externalId: p.externalId, label: inactive ? `${base} (inactive)` : base, inactive };
+    })
+    .sort((a, b) => Number(a.inactive) - Number(b.inactive)) // stable: keeps name order within each group
+    .map(({ externalId, label }) => ({ externalId, label }));
 }
 
 // Map of externalId → label, for resolving an invoice's property to a name.
