@@ -199,35 +199,6 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       },
     },
     {
-      key: "submitted",
-      header: "Submitted",
-      sortable: true,
-      sortValue: (r) => (r.leadSubmittedAt ? new Date(r.leadSubmittedAt).getTime() : 0),
-      exportValue: (r) => r.leadSubmittedAt ?? "",
-      render: (r) =>
-        r.leadSubmittedAt ? (
-          <span className="whitespace-nowrap text-slate-600">{fmtDate(r.leadSubmittedAt)}</span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
-    },
-    {
-      key: "moveIn",
-      header: "Move-in",
-      sortable: true,
-      sortValue: (r) => {
-        const t = r.moveIn ? new Date(r.moveIn).getTime() : NaN;
-        return Number.isNaN(t) ? 0 : t;
-      },
-      exportValue: (r) => r.moveIn ?? "",
-      render: (r) =>
-        r.moveIn ? (
-          <span className="whitespace-nowrap text-slate-600">{fmtMoveIn(r.moveIn)}</span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -237,21 +208,13 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
         value: (r) => r.status,
         options: Object.keys(STATUS_RANK).map((s) => ({ value: s, label: statusLabel(s) })),
       },
-      exportValue: (r) => statusLabel(r.status),
-      render: (r) => statusBadge(r.status),
-    },
-    {
-      key: "type",
-      header: "Type",
-      sortable: true,
-      sortValue: (r) => typeLabel(r.viewingType).toLowerCase(),
-      filter: { type: "select", value: (r) => typeLabel(r.viewingType) },
-      render: (r) =>
-        r.viewingType ? (
-          <span className="text-slate-600">{typeLabel(r.viewingType)}</span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
+      exportValue: (r) => [statusLabel(r.status), typeLabel(r.viewingType)].filter(Boolean).join(" · "),
+      render: (r) => (
+        <div className="whitespace-nowrap">
+          {statusBadge(r.status)}
+          {r.viewingType && <div className="mt-0.5 text-xs text-slate-400">{typeLabel(r.viewingType)}</div>}
+        </div>
+      ),
     },
     {
       key: "lead",
@@ -259,41 +222,43 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       sortable: true,
       sortValue: (r) => (r.leadName ?? "").toLowerCase(),
       filter: { type: "text", value: (r) => `${r.leadName ?? ""} ${r.leadEmail ?? ""} ${r.leadPhone ?? ""}` },
-      exportValue: (r) => r.leadName ?? "",
-      render: (r) =>
-        r.leadName || r.leadEmail || r.leadPhone ? (
-          <div className="max-w-[220px]">
+      exportValue: (r) =>
+        [
+          r.leadName,
+          r.leadEmail || r.leadPhone,
+          r.leadSubmittedAt ? `submitted ${fmtDate(r.leadSubmittedAt)}` : null,
+          r.moveIn ? `move-in ${fmtMoveIn(r.moveIn)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      render: (r) => {
+        const dates = [
+          r.leadSubmittedAt ? `Submitted ${fmtDate(r.leadSubmittedAt)}` : null,
+          r.moveIn ? `Move-in ${fmtMoveIn(r.moveIn)}` : null,
+        ].filter(Boolean);
+        if (!r.leadName && !r.leadEmail && !r.leadPhone && dates.length === 0) return <span className="text-slate-300">—</span>;
+        return (
+          <div className="max-w-[230px]">
             {r.leadName && <div className="truncate text-slate-700">{r.leadName}</div>}
-            {(r.leadEmail || r.leadPhone) && (
-              <div className="truncate text-xs text-slate-400">{r.leadEmail || r.leadPhone}</div>
-            )}
+            {(r.leadEmail || r.leadPhone) && <div className="truncate text-xs text-slate-400">{r.leadEmail || r.leadPhone}</div>}
+            {dates.length > 0 && <div className="truncate text-xs text-slate-500">{dates.join(" · ")}</div>}
           </div>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
+        );
+      },
     },
     {
       key: "source",
-      header: "Lead source",
+      header: "Source / agent",
       sortable: true,
       sortValue: (r) => (r.acquisitionSource ?? "").toLowerCase(),
       filter: { type: "select", value: (r) => r.acquisitionSource ?? "" },
+      exportValue: (r) => [r.acquisitionSource, r.agentName].filter(Boolean).join(" · "),
       render: (r) =>
-        r.acquisitionSource ? (
-          <span className="text-slate-600">{r.acquisitionSource}</span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
-    },
-    {
-      key: "agent",
-      header: "Agent",
-      sortable: true,
-      sortValue: (r) => (r.agentName ?? "").toLowerCase(),
-      filter: { type: "select", value: (r) => r.agentName ?? "" },
-      render: (r) =>
-        r.agentName ? (
-          <span className="text-slate-600">{r.agentName}</span>
+        r.acquisitionSource || r.agentName ? (
+          <div className="max-w-[160px]">
+            {r.acquisitionSource && <div className="truncate text-slate-600">{r.acquisitionSource}</div>}
+            {r.agentName && <div className="truncate text-xs text-slate-400">{r.agentName}</div>}
+          </div>
         ) : (
           <span className="text-slate-300">—</span>
         ),
@@ -390,6 +355,7 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       facets={facets}
       initialSort={{ key: "when", dir: "asc" }}
       initialFacets={{ window: "upcoming" }}
+      scrollBox
     />
     {prescreenFor && <PrescreenModal r={prescreenFor} onClose={() => setPrescreenFor(null)} />}
     </>

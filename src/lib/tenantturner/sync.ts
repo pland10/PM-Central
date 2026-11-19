@@ -148,6 +148,9 @@ export type TtSyncDeps = {
   upsertShowing: (s: ShowingInput) => Promise<{ linked: boolean }>;
   defaultSince: string; // where the first run starts
   sinceOverride?: string; // a backfill's explicit start
+  // Keep only showings dated on/after this (ISO). A lead changed recently can
+  // carry showings from months ago; those stay out.
+  showingsFrom?: string;
   now?: () => Date;
   // Diagnostics: the field names seen on applications / showings (names only).
   onFields?: (applicationKeys: string[], showingKeys: string[]) => void;
@@ -198,12 +201,20 @@ export async function runTenantTurnerSync(deps: TtSyncDeps): Promise<TtSyncResul
     deps.onFields([...appKeys].sort(), [...showingKeys].sort());
   }
 
+  // A showing's date: when it happens, else the first requested time, else
+  // when it was booked. One with no date at all is kept.
+  const cutoff = deps.showingsFrom ? Date.parse(deps.showingsFrom) : null;
+  const tooOld = (s: ShowingInput) => {
+    const d = s.startTime ?? s.requestedTime1 ?? s.bookedAt;
+    return cutoff != null && d != null && d.getTime() < cutoff;
+  };
+
   let showings = 0;
   let linked = 0;
   const seen = new Set<string>();
   for (const a of full) {
     for (const s of showingsFromApplication(a, propById.get(idStr(a.propertyid) ?? ""))) {
-      if (seen.has(s.externalId)) continue;
+      if (seen.has(s.externalId) || tooOld(s)) continue;
       seen.add(s.externalId);
       const r = await deps.upsertShowing(s);
       showings++;
