@@ -15,6 +15,7 @@ const line = (over: Partial<PaymentLine>): PaymentLine => ({
   amount: 800,
   date_posted: "2026-10-21",
   clear_date: null,
+  return_date: null,
   expected_clear: null,
   ...over,
 });
@@ -38,6 +39,17 @@ function data(over: Partial<PaymentAsOf>): PaymentAsOf {
 }
 
 describe("PaymentsPane", () => {
+  it("shows when a return happened, next to when it was paid", () => {
+    const walker = line({ source_id: "rvpay_11677", tenant: "Timothy Robert Walker", amount: 2500, date_posted: "2026-11-07", return_date: "2026-11-13" });
+    const unlinked = line({ source_id: "rvpay_9", tenant: "No Link", amount: 100, date_posted: "2026-11-10", return_date: null });
+    render(<PaymentsPane initial={data({ asOf: "2026-11-13", returned: [walker, unlinked], returnedCount: 2, returnedTotal: 2600 })} />);
+
+    const row = screen.getByText("Timothy Robert Walker").closest("div.flex") as HTMLElement;
+    expect(within(row).getByText(/paid Nov 7 · returned Nov 13/)).toBeTruthy();
+    const other = screen.getByText("No Link").closest("div.flex") as HTMLElement;
+    expect(within(other).getByText(/^paid Nov 10$/)).toBeTruthy();
+  });
+
   it("labels an owner contribution so it isn't mistaken for rent", () => {
     const owner = line({
       source_id: "rvown_11347",
