@@ -9,7 +9,8 @@ import { prisma } from "@/lib/prisma";
 // Mirrors the settlement email's categories so the UI shows the same picture:
 //   - Cleared (now payable): status=cleared, clear_date within the last 1 day
 //     as of the view date — grouped by owner so it's clear who can be paid.
-//   - Pending (in flight):   status=pending, posted on/before the view date.
+//   - Pending (in flight):   posted on/before the view date and not settled by
+//                            then (status=pending, or cleared after that date).
 //   - Returns / NSF (5d):    status=returned, posted within the last 5 days.
 // A pending payment older than STALE_DAYS is almost certainly stuck, not in
 // flight, so it's flagged.
@@ -95,11 +96,15 @@ export async function paymentSummaryAsOf(asOfRaw?: string, rangeRaw?: number): P
         AND clear_date >= ${asOf}::date - ${clearedBack}::int
       ORDER BY owner ASC NULLS LAST, clear_date ASC, amount DESC`)).map(withKind);
 
-    // Pending (in flight) as of asOf, oldest first.
+    // Pending (in flight) as of asOf, oldest first: paid on/before asOf and not
+    // yet settled by then — still pending today, or cleared only after asOf.
+    // (Status is today's; without the clear_date check a past date would lose
+    // every payment that has cleared since, e.g. posted 11/13, settled 11/18
+    // vanished from the 11/17 view.)
     const pending = (await prisma.$queryRaw<Omit<PaymentLine, "kind">[]>(Prisma.sql`
       SELECT ${LINE_COLS}
       FROM payments
-      WHERE status = 'pending' AND date_posted <= ${asOf}::date
+      WHERE date_posted <= ${asOf}::date AND (status = 'pending' OR (status = 'cleared' AND clear_date > ${asOf}::date))
       ORDER BY date_posted ASC NULLS LAST`)).map(withKind);
 
     // Returns / NSF within the last RETURNS_WINDOW_DAYS, newest first.
