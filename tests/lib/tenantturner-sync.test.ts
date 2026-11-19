@@ -145,6 +145,23 @@ describe("runTenantTurnerSync", () => {
     expect(out).toEqual({ since: "2026-11-10T00:00:00.000Z", applications: 1, showings: 2, linked: 1, failed: 0 });
   });
 
+  it("keeps only showings dated on or after the cutoff (an old lead touched recently brings old showings)", async () => {
+    const app = lowerKeys({
+      ...APP,
+      Showings: [
+        { ShowingId: 1, Status: "Confirmed", StartTime: "2026-08-08T17:00:00Z" }, // August — dropped
+        { ShowingId: 2, Status: "Requested", RequestedTime1: "2026-11-02T15:00:00Z" }, // no start yet, requested in Nov
+        { ShowingId: 3, Status: "Scheduled", StartTime: "2026-11-01T00:00:00Z" }, // right on the cutoff
+        { ShowingId: 4, Status: "Requested", DateCreated: "2026-10-30T12:00:00Z" }, // only a booked date, before the cutoff
+        { ShowingId: 5, Status: "Requested" }, // no date at all — kept
+      ],
+    });
+    const { d, upserts } = deps({ listChangedApplications: vi.fn(async () => [app]), showingsFrom: "2026-11-01T00:00:00.000Z" });
+    const out = await runTenantTurnerSync(d);
+    expect(upserts).toEqual(["2", "3", "5"]);
+    expect(out.showings).toBe(3);
+  });
+
   it("starts from the default date the first time", async () => {
     const { d } = deps({ loadSince: vi.fn(async () => null) });
     await runTenantTurnerSync(d);

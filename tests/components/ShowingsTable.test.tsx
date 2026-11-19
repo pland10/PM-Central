@@ -61,4 +61,26 @@ describe("ShowingsTable pre-screen", () => {
     // Nothing to open for a lead with no pre-screen details.
     expect(screen.queryByRole("button", { name: "Pre-screen for Cy" })).toBeNull();
   });
+
+  it("fits more in fewer columns: type under status, dates under the lead, agent under the source", () => {
+    render(
+      <ShowingsTable
+        rows={[
+          row({
+            viewingType: "Self-Access",
+            leadEmail: "ann@example.com",
+            leadSubmittedAt: "2026-11-03T14:00:00.000Z",
+            moveIn: "2026-12-01",
+            acquisitionSource: "Zillow",
+            agentName: "Sam Agent",
+          }),
+        ]}
+      />
+    );
+    for (const h of ["Submitted", "Move-in", "Type", "Agent"]) expect(screen.queryByRole("columnheader", { name: new RegExp(`^${h}`) })).toBeNull();
+    expect(screen.getByText("Self-access")).toBeInTheDocument();
+    expect(screen.getByText(/Submitted Nov 3, 2026 · Move-in/)).toBeInTheDocument();
+    expect(screen.getByText("Zillow")).toBeInTheDocument();
+    expect(screen.getByText("Sam Agent")).toBeInTheDocument();
+  });
 });

@@ -64,11 +64,12 @@ export async function upsertTtShowing(prisma: PrismaClient, s: ShowingInput): Pr
   return { linked: !!propertyId };
 }
 
-// One-time cleanup: drop Tenant Turner showings created before `date`
-// (YYYY-MM-DD). Returns how many were deleted.
+// Cleanup: drop Tenant Turner showings dated before `date` (YYYY-MM-DD) — the
+// showing time, else the first requested time, else when it was booked, else
+// when we stored it. Returns how many were deleted.
 export async function pruneShowingsBefore(prisma: PrismaClient, date: string): Promise<number> {
   const n = await prisma.$executeRaw(
-    Prisma.sql`DELETE FROM "Showing" WHERE source = ${SOURCE} AND "createdAt" < ${date}::date`
+    Prisma.sql`DELETE FROM "Showing" WHERE source = ${SOURCE} AND COALESCE("startTime", "requestedTime1", "bookedAt", "createdAt") < ${date}::date`
   );
   return Number(n);
 }
@@ -86,6 +87,7 @@ export function liveTenantTurnerDeps(
     getApplication: api.getApplication,
     upsertShowing: (s) => upsertTtShowing(prisma, s),
     defaultSince: TT_DEFAULT_SINCE,
+    showingsFrom: TT_DEFAULT_SINCE,
     sinceOverride: opts.sinceOverride,
     onFields: opts.onFields,
   };
