@@ -3,11 +3,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { TOPIC_STATUSES, TOPIC_STATUS_LABELS } from "@/lib/meetings";
 
-export type StrategicTopic = { id: number; title: string; note: string; lastNote: { date: string; body: string } | null };
+export type StrategicTopic = {
+  id: number;
+  title: string;
+  status: string;
+  note: string;
+  lastNote: { date: string; body: string } | null;
+};
 export type StrategicSection = { id: number; title: string; topics: StrategicTopic[] };
 
 type SaveState = "saving" | "saved" | "error" | undefined;
+
+const STATUS_STYLE: Record<string, string> = {
+  open: "border-slate-200 bg-slate-50 text-slate-600",
+  in_progress: "border-amber-200 bg-amber-50 text-amber-700",
+  done: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
 
 function prettyDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -26,9 +39,28 @@ export function StrategicSheet({
   canManage: boolean;
 }) {
   const router = useRouter();
-  const seed = Object.fromEntries(sections.flatMap((s) => s.topics).map((t) => [t.id, t.note]));
+  const allTopics = sections.flatMap((s) => s.topics);
+  const seed = Object.fromEntries(allTopics.map((t) => [t.id, t.note]));
   const [notes, setNotes] = useState<Record<number, string>>(seed);
   const [saved, setSaved] = useState<Record<number, SaveState>>({});
+  const [statuses, setStatuses] = useState<Record<number, string>>(
+    Object.fromEntries(allTopics.map((t) => [t.id, t.status || "open"]))
+  );
+
+  async function changeStatus(id: number, status: string) {
+    const prev = statuses[id];
+    setStatuses((s) => ({ ...s, [id]: status })); // optimistic
+    try {
+      const res = await fetch("/api/meetings/topic-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topicId: id, status }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setStatuses((s) => ({ ...s, [id]: prev })); // revert
+    }
+  }
 
   async function saveNote(id: number) {
     if ((notes[id] ?? "") === (seed[id] ?? "")) return;
@@ -93,7 +125,25 @@ export function StrategicSheet({
               <ul className="mt-1 divide-y divide-slate-100">
                 {sec.topics.map((t) => (
                   <li key={t.id} className="py-3">
-                    <div className="text-sm font-medium text-slate-800">{t.title}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={`text-sm font-medium ${statuses[t.id] === "done" ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                        {t.title}
+                      </div>
+                      <select
+                        aria-label={`Status for ${t.title}`}
+                        value={statuses[t.id] ?? "open"}
+                        onChange={(e) => changeStatus(t.id, e.target.value)}
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium focus:outline-none ${
+                          STATUS_STYLE[statuses[t.id] ?? "open"] ?? STATUS_STYLE.open
+                        }`}
+                      >
+                        {TOPIC_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {TOPIC_STATUS_LABELS[s]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <textarea
                       aria-label={`Notes for ${t.title}`}
                       value={notes[t.id] ?? ""}

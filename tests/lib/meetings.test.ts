@@ -62,6 +62,17 @@ describe("splitMeetingGroups", () => {
   });
 });
 
+describe("topic status", () => {
+  it("accepts known slugs and rejects the rest", async () => {
+    const { isTopicStatus } = await import("@/lib/meetings");
+    expect(isTopicStatus("open")).toBe(true);
+    expect(isTopicStatus("in_progress")).toBe(true);
+    expect(isTopicStatus("done")).toBe(true);
+    expect(isTopicStatus("closed")).toBe(false);
+    expect(isTopicStatus(2)).toBe(false);
+  });
+});
+
 describe("nestTopics", () => {
   it("nests topics under their section, keeping order", () => {
     const sections = [{ id: 1, title: "Growth" }, { id: 2, title: "Ops" }];

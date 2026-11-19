@@ -22,8 +22,8 @@ const sections: StrategicSection[] = [
     id: 1,
     title: "Growth",
     topics: [
-      { id: 10, title: "Hiring a PM", note: "", lastNote: { date: "2026-11-10", body: "posted the ad" } },
-      { id: 11, title: "Owner retention", note: "", lastNote: null },
+      { id: 10, title: "Hiring a PM", status: "open", note: "", lastNote: { date: "2026-11-10", body: "posted the ad" } },
+      { id: 11, title: "Owner retention", status: "in_progress", note: "", lastNote: null },
     ],
   },
 ];
@@ -43,6 +43,16 @@ describe("StrategicSheet", () => {
     await user.tab();
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ topicId: 10, date: "2026-11-17", body: "offer accepted" });
     expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("changes a topic's status and posts it", async () => {
+    const user = userEvent.setup();
+    render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={sections} canManage={false} />);
+    const select = screen.getByLabelText("Status for Hiring a PM") as HTMLSelectElement;
+    expect(select.value).toBe("open");
+    await user.selectOptions(select, "done");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ topicId: 10, status: "done" });
+    expect(select.value).toBe("done");
   });
 
   it("shows an empty state with an admin link when there's no agenda", () => {

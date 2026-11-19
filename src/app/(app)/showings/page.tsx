@@ -1,12 +1,14 @@
 import { requireFeature } from "@/config/features";
 import { listShowings } from "@/lib/showings";
+import { prisma } from "@/lib/prisma";
+import { listTtMessages } from "@/lib/tenantturner/messages-db";
 import { ShowingsTable } from "./ShowingsTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShowingsPage() {
   requireFeature("showings");
-  const rows = await listShowings();
+  const [rows, messages] = await Promise.all([listShowings(), listTtMessages(prisma)]);
 
   if (!rows) {
     return (
@@ -56,7 +58,7 @@ export default async function ShowingsPage() {
         </p>
       </div>
 
-      <ShowingsTable rows={rows} />
+      <ShowingsTable rows={rows} messages={messages} />
     </div>
   );
 }

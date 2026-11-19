@@ -10,6 +10,7 @@ vi.mock("@/lib/meeting-topics-db", () => ({
   renameTopic: vi.fn(async () => {}),
   deleteTopic: vi.fn(async () => {}),
   upsertTopicNote: vi.fn(async () => {}),
+  setTopicStatus: vi.fn(async () => {}),
 }));
 
 import { getCurrentUser } from "@/lib/auth/supabase-server";
@@ -17,6 +18,7 @@ import * as db from "@/lib/meeting-topics-db";
 import { POST as secPOST, PATCH as secPATCH, DELETE as secDELETE } from "@/app/api/admin/meeting-sections/route";
 import { POST as topPOST, PATCH as topPATCH, DELETE as topDELETE } from "@/app/api/admin/meeting-topics/route";
 import { POST as notePOST } from "@/app/api/meetings/topic-notes/route";
+import { POST as statusPOST } from "@/app/api/meetings/topic-status/route";
 
 const mk = (method: string, url: string, body?: unknown) =>
   new NextRequest(`https://pmilighthouse.app${url}`, {
@@ -80,5 +82,23 @@ describe("topic notes (any signed-in user)", () => {
     expect((await notePOST(mk("POST", "/api/meetings/topic-notes", { topicId: 0, date: "2026-11-17", body: "x" }))).status).toBe(400);
     vi.mocked(getCurrentUser).mockResolvedValue(null);
     expect((await notePOST(mk("POST", "/api/meetings/topic-notes", { topicId: 2, date: "2026-11-17", body: "x" }))).status).toBe(401);
+  });
+});
+
+describe("topic status (any signed-in user)", () => {
+  it("sets a known status", async () => {
+    asUser();
+    const res = await statusPOST(mk("POST", "/api/meetings/topic-status", { topicId: 2, status: "done" }));
+    expect(res.status).toBe(200);
+    expect(db.setTopicStatus).toHaveBeenCalledWith(2, "done");
+  });
+
+  it("rejects an unknown status / bad topic, 401s when logged out", async () => {
+    asUser();
+    expect((await statusPOST(mk("POST", "/api/meetings/topic-status", { topicId: 2, status: "closed" }))).status).toBe(400);
+    expect((await statusPOST(mk("POST", "/api/meetings/topic-status", { topicId: 0, status: "done" }))).status).toBe(400);
+    expect(db.setTopicStatus).not.toHaveBeenCalled();
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+    expect((await statusPOST(mk("POST", "/api/meetings/topic-status", { topicId: 2, status: "done" }))).status).toBe(401);
   });
 });
