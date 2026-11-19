@@ -1060,7 +1060,9 @@ export function TransactionsTable({
         rows={reviewing ? eligibleToArchive : tableRows}
         columns={shownColumns}
         onFilteredChange={setShown}
-        wide
+        // Scroll inside its own screen-height box: the header row stays locked
+        // and the page above (tabs, filters, totals) doesn't scroll away.
+        scrollBox
         dense
         rowKey={(r) => rowIdOf(r)}
         // Tint split lines and give them a brand accent stripe so the lines of
