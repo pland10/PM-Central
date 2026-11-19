@@ -55,6 +55,14 @@ describe("StrategicSheet", () => {
     expect(select.value).toBe("done");
   });
 
+  it("collapses a section so its topics hide", async () => {
+    const user = userEvent.setup();
+    render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={sections} canManage={false} />);
+    expect(screen.getByText("Hiring a PM")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Growth/ }));
+    expect(screen.queryByText("Hiring a PM")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state with an admin link when there's no agenda", () => {
     render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={[]} canManage />);
     expect(screen.getByText(/No agenda yet/)).toBeInTheDocument();

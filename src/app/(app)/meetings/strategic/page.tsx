@@ -1,6 +1,6 @@
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { requireFeature } from "@/config/features";
-import { isMeetingDate, nestTopics, recentMeetingTuesdays, tuesdayOf } from "@/lib/meetings";
+import { isMeetingDate, meetingDateOptions, nestTopics, tuesdayOf } from "@/lib/meetings";
 import { listStructureSafe, topicNotesForDate, topicPreviousNotes } from "@/lib/meeting-topics-db";
 import { MeetingTabs } from "../MeetingTabs";
 import { StrategicSheet, type StrategicSection } from "./StrategicSheet";
@@ -37,18 +37,24 @@ export default async function StrategicMeetingPage({
     })),
   }));
 
-  return (
-    <div className="mx-auto max-w-4xl">
+  const header = (
+    <>
       <MeetingTabs active="strategic" />
-      <div className="mb-6">
+      <div className="pt-4 pb-3">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Tuesday strategic meeting</h1>
         <p className="mt-1 text-sm text-slate-500">
           Walk the agenda, section by section, and capture where each topic stands. Notes are saved per meeting date.
         </p>
       </div>
+    </>
+  );
+
+  return (
+    <div className="mx-auto max-w-4xl">
       <StrategicSheet
+        header={header}
         date={date}
-        dateOptions={recentMeetingTuesdays(new Date(), 8)}
+        dateOptions={meetingDateOptions(new Date(), 2, 8)}
         sections={nested}
         canManage={user?.role === "admin"}
       />
