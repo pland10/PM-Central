@@ -62,6 +62,18 @@ function setup() {
 }
 
 describe("TransactionsTable", () => {
+  it("scrolls the table in its own box with the header row locked (page header stays put)", () => {
+    setup();
+    const table = screen.getAllByRole("table")[0];
+    const box = table.parentElement!;
+    expect(box.className).toMatch(/(^|\s)overflow-auto(\s|$)/);
+    expect(box.style.maxHeight).toMatch(/100vh/);
+    for (const th of table.querySelectorAll("thead th")) {
+      expect(th.className).toMatch(/\bsticky\b/);
+      expect((th as HTMLElement).style.top).toBe("0px");
+    }
+  });
+
   it("shows a summary across all rows", () => {
     setup();
     // total spend = 100 + 200
@@ -405,10 +417,10 @@ describe("TransactionsTable", () => {
     });
   });
 
-  it("is a dense, wide table so no column gets cut off", () => {
+  it("is a dense table whose box scrolls sideways, so no column gets cut off", () => {
     const { container } = render(<TransactionsTable initialRows={rows} accounts={[]} />);
     const box = container.querySelector("table")!.parentElement!;
-    expect(box.className).toMatch(/\bw-max\b/);
+    expect(box.className).toMatch(/(^|\s)overflow-auto(\s|$)/); // both axes
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/\bpx-2\b/);
   });
 

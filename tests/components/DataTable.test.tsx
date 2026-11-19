@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 
 type Row = { id: string; address: string; city: string; rent: number; status: string; start: string | null };
@@ -205,6 +205,17 @@ describe("DataTable", () => {
       expect(th.className).toMatch(/\bsticky\b/);
       expect(th.style.top).toBe("0px"); // pinned to the top of its own box
     }
+  });
+
+  it("in scroll-box mode, sizes the box to the screen space below its top, so the page itself doesn't scroll", () => {
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      top: 403, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 403, toJSON: () => ({}),
+    } as DOMRect);
+    render(<DataTable rows={rows} columns={columns} rowKey={(r) => r.id} scrollBox />);
+    const box = screen.getByRole("table").parentElement!;
+    // 403px from the top + the page's 24px bottom padding; never shorter than 20rem.
+    expect(box.style.maxHeight).toBe("max(20rem, calc(100vh - 427px))");
+    spy.mockRestore();
   });
 
   it("uses tighter cell padding when dense", () => {
