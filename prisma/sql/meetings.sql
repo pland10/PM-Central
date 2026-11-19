@@ -23,3 +23,10 @@ CREATE TABLE IF NOT EXISTS meeting_removed_properties (
     property_id TEXT PRIMARY KEY,
     removed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- The admin's custom walk-through sequence for the tactical sheet (lower = first).
+CREATE TABLE IF NOT EXISTS property_meeting_order (
+    property_id TEXT PRIMARY KEY,
+    sort_order  INT NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

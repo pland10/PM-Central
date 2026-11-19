@@ -18,6 +18,11 @@ const DDL = [
      property_id TEXT PRIMARY KEY,
      removed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
    )`,
+  `CREATE TABLE IF NOT EXISTS property_meeting_order (
+     property_id TEXT PRIMARY KEY,
+     sort_order  INT NOT NULL,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+   )`,
 ];
 
 let tables: Promise<void> | null = null;
@@ -91,4 +96,27 @@ export async function setPropertyRemoved(propertyId: string, removed: boolean): 
   } else {
     await prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_removed_properties WHERE property_id = ${propertyId}`);
   }
+}
+
+// The admin's custom sequence: property id → position. Houses not listed sort to
+// the end (splitMeetingGroups handles the fallback).
+export async function getPropertyOrder(): Promise<Record<string, number>> {
+  await ensureMeetingTables();
+  const rows = await prisma.$queryRaw<{ property_id: string; sort_order: number }[]>(
+    Prisma.sql`SELECT property_id, sort_order FROM property_meeting_order`
+  );
+  return Object.fromEntries(rows.map((r) => [r.property_id, r.sort_order]));
+}
+
+// Replace the saved sequence with this exact ordered list (position = index).
+export async function savePropertyOrder(ids: string[]): Promise<void> {
+  await ensureMeetingTables();
+  await prisma.$transaction([
+    prisma.$executeRaw(Prisma.sql`DELETE FROM property_meeting_order`),
+    ...ids.map((id, i) =>
+      prisma.$executeRaw(
+        Prisma.sql`INSERT INTO property_meeting_order (property_id, sort_order) VALUES (${id}, ${i})`
+      )
+    ),
+  ]);
 }

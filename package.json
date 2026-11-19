@@ -21,6 +21,7 @@
     "sync:rentvine:bills": "tsx scripts/sync-rentvine-bills.ts",
     "sync:plaid": "tsx scripts/sync-plaid.ts",
     "sync:hd": "tsx scripts/sync-hd-invoices.ts",
+    "sync:tenantturner": "tsx scripts/sync-tenantturner.ts",
     "plaid:sandbox-test": "tsx scripts/plaid-sandbox-test.ts",
     "migrate:invoices": "tsx scripts/migrate-invoices-to-neon.ts",
     "migrate:inspections": "tsx scripts/migrate-inspections-to-neon.ts",
