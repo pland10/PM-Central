@@ -66,7 +66,10 @@ export default async function MeetingsPage({
 
   return (
     <div className="mx-auto max-w-4xl">
+      {/* key={date} remounts the sheet when the meeting date changes, so each
+          date loads its own notes instead of carrying the prior date's edits. */}
       <MeetingSheet
+        key={date}
         header={header}
         date={date}
         dateOptions={meetingDateOptions(new Date(), 1, 8)}

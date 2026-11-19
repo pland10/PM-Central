@@ -51,7 +51,10 @@ export default async function StrategicMeetingPage({
 
   return (
     <div className="mx-auto max-w-4xl">
+      {/* key={date} remounts the sheet when the meeting date changes, so each
+          date loads its own notes instead of carrying the prior date's edits. */}
       <StrategicSheet
+        key={date}
         header={header}
         date={date}
         dateOptions={meetingDateOptions(new Date(), 2, 8)}
