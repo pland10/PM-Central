@@ -9,6 +9,7 @@ const row = (over: Partial<ShowingRow> = {}): ShowingRow => ({
   status: "scheduled",
   viewingType: "Self-Access",
   startTime: "2099-01-05T15:00:00.000Z",
+  requestedTime: null,
   address: "66 Francis Ct · Elmont, NY 11003",
   propertyId: null,
   leadName: "Ann Lee",
@@ -116,5 +117,18 @@ describe("ShowingsTable pre-screen", () => {
       render(<ShowingsTable rows={[row()]} />);
       expect(screen.queryByRole("region", { name: "Recent lead replies" })).toBeNull();
     });
+  });
+
+  it("lists a requested showing with no time yet under Upcoming (the default view)", () => {
+    render(
+      <ShowingsTable
+        rows={[
+          row({ id: "r1", leadName: "Needs a time", status: "requested", startTime: null }),
+          row({ id: "p1", leadName: "Long past", status: "completed", startTime: "2020-01-01T15:00:00.000Z" }),
+        ]}
+      />
+    );
+    expect(screen.getByText("Needs a time")).toBeInTheDocument();
+    expect(screen.queryByText("Long past")).toBeNull();
   });
 });

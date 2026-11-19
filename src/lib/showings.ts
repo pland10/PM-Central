@@ -196,6 +196,7 @@ export type ShowingRow = {
   status: string;
   viewingType: string | null;
   startTime: string | null; // ISO
+  requestedTime: string | null; // ISO — the latest time the lead asked for (no time set yet)
   address: string; // best address we have (our Property, else TT snapshot)
   propertyId: string | null; // our Property id when linked
   leadName: string | null;
@@ -216,6 +217,12 @@ export type ShowingRow = {
   showingMessage: string | null;
   updatedAt: string; // ISO
 };
+
+// The latest of the times the lead asked for, as ISO (null when none).
+function latestRequested(...times: (Date | null)[]): string | null {
+  const ms = times.filter((t): t is Date => t != null).map((t) => t.getTime());
+  return ms.length ? new Date(Math.max(...ms)).toISOString() : null;
+}
 
 // Stored JSON → the answered questions, ignoring anything malformed.
 function prescreenAnswers(v: unknown): { question: string; answer: string }[] {
@@ -335,6 +342,7 @@ export async function listShowings(): Promise<ShowingRow[] | null> {
       status: r.status,
       viewingType: r.viewingType,
       startTime: r.startTime ? r.startTime.toISOString() : null,
+      requestedTime: latestRequested(r.requestedTime1, r.requestedTime2, r.requestedTime3),
       address,
       propertyId: r.propertyId,
       leadName: r.leadName,
