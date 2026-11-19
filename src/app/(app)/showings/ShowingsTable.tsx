@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Modal } from "@/components/Modal";
 import { DataTable, type Column, type Facet } from "@/components/DataTable";
 import type { ShowingRow } from "@/lib/showings";
+import type { TtMessage } from "@/lib/tenantturner/messages-db";
 
 export type { ShowingRow };
 
@@ -97,6 +98,75 @@ function isUpcoming(r: ShowingRow): boolean {
   return new Date(r.startTime).getTime() >= startOfToday.getTime();
 }
 
+// Lead replies (Tenant Turner "New message from…" emails) are matched to a
+// showing by the lead's name, case-insensitively.
+const leadKey = (name: string | null | undefined) => (name ?? "").trim().toLowerCase();
+
+function fmtReplyTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function RepliesModal({ name, replies, onClose }: { name: string; replies: TtMessage[]; onClose: () => void }) {
+  const oldestFirst = [...replies].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  return (
+    <Modal
+      title={`Replies · ${name}`}
+      onClose={onClose}
+      footer={
+        <button type="button" onClick={onClose} className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+          Close
+        </button>
+      }
+    >
+      <ul className="space-y-3">
+        {oldestFirst.map((m) => (
+          <li key={m.id}>
+            <div className="text-xs text-slate-400">
+              {fmtReplyTime(m.receivedAt)}
+              {m.agentName ? ` · to ${m.agentName}` : ""}
+            </div>
+            <p data-testid="reply-text" className="mt-0.5 whitespace-pre-wrap text-slate-800">
+              {m.text}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs text-slate-400">Replies the lead texted back, from Tenant Turner&apos;s notification emails.</p>
+    </Modal>
+  );
+}
+
+// The latest lead replies, above the table — including "Unknown lead" ones that
+// don't match a showing.
+function RecentReplies({ messages }: { messages: TtMessage[] }) {
+  const recent = messages.slice(0, 8);
+  return (
+    <section aria-label="Recent lead replies" className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent lead replies</h2>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {recent.map((m) => (
+          <li key={m.id} className="flex flex-col gap-0.5 py-1.5 text-sm sm:flex-row sm:gap-3">
+            <div className="shrink-0 text-xs text-slate-400 sm:w-44">
+              <span className="font-medium text-slate-600">{m.leadName ?? "Unknown lead"}</span>
+              <span> · {fmtReplyTime(m.receivedAt)}</span>
+            </div>
+            <div className="min-w-0 flex-1 truncate text-slate-700" title={m.text}>
+              {m.text}
+            </div>
+            {m.agentName && <div className="shrink-0 text-xs text-slate-400">to {m.agentName}</div>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 const hasPrescreen = (r: ShowingRow) => !!r.leadComments || r.leadQuestions.length > 0 || !!r.showingMessage;
 
 function qualifiedPill(q: boolean | null) {
@@ -153,8 +223,19 @@ function PrescreenModal({ r, onClose }: { r: ShowingRow; onClose: () => void }) 
   );
 }
 
-export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
+export function ShowingsTable({ rows, messages = [] }: { rows: ShowingRow[]; messages?: TtMessage[] }) {
   const [prescreenFor, setPrescreenFor] = useState<ShowingRow | null>(null);
+  const [repliesFor, setRepliesFor] = useState<{ name: string; replies: TtMessage[] } | null>(null);
+  // Replies per lead name, newest first (messages arrive newest first).
+  const repliesByLead = useMemo(() => {
+    const map = new Map<string, TtMessage[]>();
+    for (const m of messages) {
+      const k = leadKey(m.leadName);
+      if (!k) continue;
+      map.set(k, [...(map.get(k) ?? []), m]);
+    }
+    return map;
+  }, [messages]);
   const columns: Column<ShowingRow>[] = [
     {
       key: "address",
@@ -237,11 +318,23 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
           r.moveIn ? `Move-in ${fmtMoveIn(r.moveIn)}` : null,
         ].filter(Boolean);
         if (!r.leadName && !r.leadEmail && !r.leadPhone && dates.length === 0) return <span className="text-slate-300">—</span>;
+        const replies = repliesByLead.get(leadKey(r.leadName));
         return (
           <div className="max-w-[230px]">
             {r.leadName && <div className="truncate text-slate-700">{r.leadName}</div>}
             {(r.leadEmail || r.leadPhone) && <div className="truncate text-xs text-slate-400">{r.leadEmail || r.leadPhone}</div>}
             {dates.length > 0 && <div className="truncate text-xs text-slate-500">{dates.join(" · ")}</div>}
+            {replies && r.leadName && (
+              <button
+                type="button"
+                aria-label={`${replies.length} repl${replies.length === 1 ? "y" : "ies"} from ${r.leadName}`}
+                onClick={() => setRepliesFor({ name: r.leadName!, replies })}
+                className="mt-0.5 block max-w-full truncate text-left text-xs text-brand-600 hover:underline"
+                title={replies[0].text}
+              >
+                {replies.length} repl{replies.length === 1 ? "y" : "ies"} · “{replies[0].text}”
+              </button>
+            )}
           </div>
         );
       },
@@ -343,6 +436,7 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
 
   return (
     <>
+    {messages.length > 0 && <RecentReplies messages={messages} />}
     <DataTable
       rows={rows}
       columns={columns}
@@ -358,6 +452,7 @@ export function ShowingsTable({ rows }: { rows: ShowingRow[] }) {
       scrollBox
     />
     {prescreenFor && <PrescreenModal r={prescreenFor} onClose={() => setPrescreenFor(null)} />}
+    {repliesFor && <RepliesModal name={repliesFor.name} replies={repliesFor.replies} onClose={() => setRepliesFor(null)} />}
     </>
   );
 }
