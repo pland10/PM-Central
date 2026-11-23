@@ -16,7 +16,9 @@ export type SearchFilters = {
   dir: string;
   taskStatus: string;
   types: string[];
-  contact: string;
+  // Contact names to scope to — any of them matches (e.g. one person stored
+  // under several spellings).
+  contacts: string[];
   property: string;
   pipeline: string;
   // "external" (default) = owner/tenant Search, hides INTERNAL_PIPELINES.
@@ -62,7 +64,9 @@ function buildWhere(f: SearchFilters): Prisma.Sql {
   // Scope: contact/property match either (OR); pipeline is ANDed on top. Values
   // are bound as parameters, so no escaping is needed for safety.
   const orParts: Prisma.Sql[] = [];
-  if (f.contact) orParts.push(Prisma.sql`contact_names ILIKE ${`%${f.contact}%`}`);
+  for (const c of f.contacts.map((c) => c.trim()).filter(Boolean)) {
+    orParts.push(Prisma.sql`contact_names ILIKE ${`%${c}%`}`);
+  }
   if (f.property) orParts.push(Prisma.sql`property_address ILIKE ${`%${f.property}%`}`);
   if (orParts.length) conds.push(Prisma.sql`(${Prisma.join(orParts, " OR ")})`);
   if (f.pipeline) conds.push(Prisma.sql`pipeline_name ILIKE ${`%${f.pipeline}%`}`);

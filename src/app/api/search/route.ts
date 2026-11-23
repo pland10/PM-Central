@@ -7,6 +7,7 @@ import { isFeatureEnabled } from "@/config/features";
 export const dynamic = "force-dynamic";
 
 const ALL_TYPES = ["email", "text", "call", "note", "chat", "task", "payment"];
+const MAX_CONTACTS = 20;
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -32,7 +33,12 @@ export async function GET(req: NextRequest) {
     dir: sp.get("dir") || "",
     taskStatus: sp.get("taskStatus") || "",
     types,
-    contact: (sp.get("contact") || "").trim(),
+    // ?contact=A&contact=B — any of them matches (capped).
+    contacts: sp
+      .getAll("contact")
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .slice(0, MAX_CONTACTS),
     property: (sp.get("property") || "").trim(),
     pipeline: (sp.get("pipeline") || "").trim(),
     // Team Comms asks for the internal pipelines; everything else is the

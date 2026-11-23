@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse } from "../helpers/fetch";
 
@@ -19,6 +20,9 @@ beforeEach(() => {
       if (url.pathname === "/api/search") {
         searchCalls.push(url.searchParams);
         return jsonResponse({ rows: [], count: 0 });
+      }
+      if (url.pathname === "/api/search/suggest" && url.searchParams.get("field") === "contact_names") {
+        return jsonResponse({ items: ["Shiv Patel", "Shiv P", "Shivkumar Patel"] });
       }
       return jsonResponse({});
     })
@@ -73,5 +77,39 @@ describe("SearchClient freshness", () => {
     );
     render(<SearchClient />);
     expect(await screen.findByText(/Last refreshed Nov 10, 9:05 AM EST/)).toBeTruthy();
+  });
+});
+
+describe("SearchClient contact scope (several names)", () => {
+  it("adds each picked name as a chip and searches them all; × removes one", async () => {
+    const user = userEvent.setup();
+    render(<SearchClient />);
+    const box = screen.getByPlaceholderText("Contact name…");
+
+    await user.type(box, "shiv");
+    await user.click(await screen.findByRole("button", { name: "Shiv Patel" }));
+    expect(box).toHaveValue(""); // ready for the next name
+
+    await user.type(box, "shiv");
+    await user.click(await screen.findByRole("button", { name: "Shivkumar Patel" }));
+
+    const chips = screen.getByRole("list", { name: "Chosen contacts" });
+    expect(within(chips).getByText("Shiv Patel")).toBeInTheDocument();
+    expect(within(chips).getByText("Shivkumar Patel")).toBeInTheDocument();
+    await waitFor(() => expect(searchCalls.at(-1)!.getAll("contact")).toEqual(["Shiv Patel", "Shivkumar Patel"]));
+
+    await user.click(within(chips).getByRole("button", { name: "Remove Shiv Patel" }));
+    await waitFor(() => expect(searchCalls.at(-1)!.getAll("contact")).toEqual(["Shivkumar Patel"]));
+  });
+
+  it("doesn't add the same name twice", async () => {
+    const user = userEvent.setup();
+    render(<SearchClient />);
+    const box = screen.getByPlaceholderText("Contact name…");
+    for (let i = 0; i < 2; i++) {
+      await user.type(box, "shiv");
+      await user.click(await screen.findByRole("button", { name: "Shiv Patel" }));
+    }
+    expect(within(screen.getByRole("list", { name: "Chosen contacts" })).getAllByRole("listitem")).toHaveLength(1);
   });
 });

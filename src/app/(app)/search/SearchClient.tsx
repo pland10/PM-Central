@@ -49,16 +49,19 @@ function fmtDate(iso: string | null) {
 
 // Autocomplete input for the "scope by" fields. Commits a value only when the
 // user picks a suggestion (or clears the box), matching the standalone app.
+// `clearOnPick` empties the box after a pick, for adding several values.
 function ScopeInput({
   field,
   placeholder,
   committed,
   onCommit,
+  clearOnPick = false,
 }: {
   field: string;
   placeholder: string;
   committed: string;
   onCommit: (v: string) => void;
+  clearOnPick?: boolean;
 }) {
   const [text, setText] = useState(committed);
   const [items, setItems] = useState<string[]>([]);
@@ -92,7 +95,7 @@ function ScopeInput({
   }
 
   function pick(v: string) {
-    setText(v);
+    setText(clearOnPick ? "" : v);
     setItems([]);
     setOpen(false);
     onCommit(v);
@@ -147,7 +150,9 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
   const [pageSize, setPageSize] = useState(20);
   // Both task states active by default; when exactly one is active it filters.
   const [taskStates, setTaskStates] = useState<Set<string>>(new Set(["open", "closed"]));
-  const [contact, setContact] = useState("");
+  // Several contact names can be chosen — any of them matches (one person is
+  // often stored under different spellings).
+  const [contacts, setContacts] = useState<string[]>([]);
   const [property, setProperty] = useState("");
   const [pipeline, setPipeline] = useState("");
 
@@ -177,12 +182,12 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
           types: [...types].join(","),
           dir,
           taskStatus,
-          contact,
           property,
           pipeline,
           page: String(toPage),
           pageSize: String(pageSize),
         });
+        for (const c of contacts) params.append("contact", c);
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
         if (mySeq !== seq.current) return;
@@ -202,14 +207,14 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
         if (mySeq === seq.current) setLoading(false);
       }
     },
-    [q, types, dir, taskStatus, contact, property, pipeline, pageSize]
+    [q, types, dir, taskStatus, contacts, property, pipeline, pageSize]
   );
 
   // Re-run when a filter changes (not while typing the keyword — that's Enter).
   useEffect(() => {
     run(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [types, dir, taskStatus, contact, property, pipeline, pageSize]);
+  }, [types, dir, taskStatus, contacts, property, pipeline, pageSize]);
 
   useEffect(() => {
     fetch("/api/search/status")
@@ -239,7 +244,7 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
     setTypes(new Set(TYPES.map((t) => t.key)));
     setDir("");
     setTaskStates(new Set(["open", "closed"]));
-    setContact("");
+    setContacts([]);
     setProperty("");
     setPipeline("");
   }
@@ -261,7 +266,15 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
       {/* Scope by */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Scope by</span>
-        <div className="min-w-[180px] flex-1"><ScopeInput field="contact_names" placeholder="Contact name…" committed={contact} onCommit={setContact} /></div>
+        <div className="min-w-[180px] flex-1">
+          <ScopeInput
+            field="contact_names"
+            placeholder={contacts.length ? "Add another name…" : "Contact name…"}
+            committed=""
+            clearOnPick
+            onCommit={(v) => v && setContacts((cs) => (cs.includes(v) ? cs : [...cs, v]))}
+          />
+        </div>
         <div className="min-w-[180px] flex-1"><ScopeInput field="property_address" placeholder="Property address…" committed={property} onCommit={setProperty} /></div>
         <div className="min-w-[180px] flex-1"><ScopeInput field="pipeline_name" placeholder="Pipeline / portfolio…" committed={pipeline} onCommit={setPipeline} /></div>
         <button
@@ -271,6 +284,23 @@ export function SearchClient({ initialTypes }: { initialTypes?: string } = {}) {
           Clear
         </button>
       </div>
+      {contacts.length > 0 && (
+        <ul aria-label="Chosen contacts" className="-mt-1 mb-3 flex flex-wrap items-center gap-1.5">
+          {contacts.map((c) => (
+            <li key={c} className="flex items-center gap-1 rounded-full bg-brand-50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-500/30">
+              {c}
+              <button
+                type="button"
+                aria-label={`Remove ${c}`}
+                onClick={() => setContacts((cs) => cs.filter((x) => x !== c))}
+                className="rounded-full px-1 text-brand-500 hover:bg-brand-100 hover:text-brand-700"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Keyword */}
       <div className="flex gap-2">
