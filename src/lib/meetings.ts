@@ -91,3 +91,33 @@ export function splitMeetingGroups<T extends { id: string; tags: string | null; 
   squatterWatch.sort(cmp);
   return { rentals, squatterWatch };
 }
+
+// Owner + current tenants for a house, shown under its address on the tactical
+// sheet. Owners come from the property's portfolio (every owner contact; the
+// portfolio name if none are linked). Tenants are on active or eviction leases
+// (still in the house), primary first, deduped. Pending/ended leases are skipped.
+type PersonName = { firstName: string | null; lastName: string | null; companyName: string | null };
+export type PropertyPeopleInput = {
+  portfolio: { name: string; owners: { contact: PersonName }[] } | null;
+  units: { leases: { status: string; tenants: { isPrimary: boolean; contact: PersonName }[] }[] }[];
+};
+
+const personName = (c: PersonName) =>
+  (c.companyName || [c.firstName, c.lastName].filter(Boolean).join(" ")).trim();
+
+export function propertyPeople(p: PropertyPeopleInput): { owner: string | null; tenants: string[] } {
+  const owners = (p.portfolio?.owners ?? []).map((o) => personName(o.contact)).filter(Boolean);
+  const owner = owners.length ? owners.join(", ") : p.portfolio?.name?.trim() || null;
+
+  const current = p.units
+    .flatMap((u) => u.leases)
+    .filter((l) => l.status === "active" || l.status === "eviction")
+    .flatMap((l) => l.tenants);
+  const ordered = [...current.filter((t) => t.isPrimary), ...current.filter((t) => !t.isPrimary)];
+  const tenants: string[] = [];
+  for (const t of ordered) {
+    const n = personName(t.contact);
+    if (n && !tenants.includes(n)) tenants.push(n);
+  }
+  return { owner, tenants };
+}
