@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 // Storage for the Monday tactical meeting (see src/lib/meetings.ts, prisma/sql/
 // meetings.sql). Two app-owned tables, created on first use:
-//   meeting_notes               one free-text note per house per meeting date
+//   meeting_notes               one free-text note per house per meeting date,
+//                               plus wo_needed (the "work order needed" box)
 //   meeting_removed_properties  houses taken off the sheet (hidden, never deleted)
 
 const DDL = [
@@ -14,6 +15,8 @@ const DDL = [
      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
      PRIMARY KEY (property_id, meeting_date)
    )`,
+  // "Work order needed" checkbox per house per meeting date.
+  `ALTER TABLE meeting_notes ADD COLUMN IF NOT EXISTS wo_needed BOOLEAN NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS meeting_removed_properties (
      property_id TEXT PRIMARY KEY,
      removed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -28,8 +31,10 @@ const DDL = [
 let tables: Promise<void> | null = null;
 export function ensureMeetingTables(): Promise<void> {
   if (!tables) {
-    tables = Promise.all(DDL.map((sql) => prisma.$executeRawUnsafe(sql)))
-      .then(() => undefined)
+    // In order: the ALTER needs meeting_notes to exist first.
+    tables = (async () => {
+      for (const sql of DDL) await prisma.$executeRawUnsafe(sql);
+    })()
       .catch((e) => {
         tables = null; // let a later call retry
         throw e;
@@ -61,21 +66,54 @@ export async function previousNotes(date: string): Promise<Record<string, { date
   );
 }
 
-// Save (or clear) one house's note for a meeting date. An empty note deletes the
-// row so the history stays clean.
+// Drop a house's row for a date once it holds nothing: no note, box unticked.
+const dropIfEmpty = (propertyId: string, date: string) =>
+  prisma.$executeRaw(Prisma.sql`
+    DELETE FROM meeting_notes
+     WHERE property_id = ${propertyId} AND meeting_date = ${date}::date AND body = '' AND NOT wo_needed`);
+
+// Save (or clear) one house's note for a meeting date. An empty note removes the
+// row so the history stays clean — unless "work order needed" is ticked.
 export async function upsertMeetingNote(propertyId: string, date: string, body: string): Promise<void> {
   await ensureMeetingTables();
   const trimmed = body.trim();
   if (!trimmed) {
     await prisma.$executeRaw(
-      Prisma.sql`DELETE FROM meeting_notes WHERE property_id = ${propertyId} AND meeting_date = ${date}::date`
+      Prisma.sql`UPDATE meeting_notes SET body = '', updated_at = now() WHERE property_id = ${propertyId} AND meeting_date = ${date}::date`
     );
+    await dropIfEmpty(propertyId, date);
     return;
   }
   await prisma.$executeRaw(Prisma.sql`
     INSERT INTO meeting_notes (property_id, meeting_date, body, updated_at)
     VALUES (${propertyId}, ${date}::date, ${trimmed}, now())
     ON CONFLICT (property_id, meeting_date) DO UPDATE SET body = EXCLUDED.body, updated_at = now()`);
+}
+
+// Tick / untick "work order needed" for a house on a meeting date. Its note
+// (the text Jasper reads) is left as it is.
+export async function setWoNeeded(propertyId: string, date: string, needed: boolean): Promise<void> {
+  await ensureMeetingTables();
+  if (needed) {
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO meeting_notes (property_id, meeting_date, body, wo_needed, updated_at)
+      VALUES (${propertyId}, ${date}::date, '', true, now())
+      ON CONFLICT (property_id, meeting_date) DO UPDATE SET wo_needed = true, updated_at = now()`);
+    return;
+  }
+  await prisma.$executeRaw(
+    Prisma.sql`UPDATE meeting_notes SET wo_needed = false, updated_at = now() WHERE property_id = ${propertyId} AND meeting_date = ${date}::date`
+  );
+  await dropIfEmpty(propertyId, date);
+}
+
+// The houses with "work order needed" ticked for a meeting date.
+export async function woNeededForDate(date: string): Promise<Set<string>> {
+  await ensureMeetingTables();
+  const rows = await prisma.$queryRaw<{ property_id: string }[]>(
+    Prisma.sql`SELECT property_id FROM meeting_notes WHERE meeting_date = ${date}::date AND wo_needed`
+  );
+  return new Set(rows.map((r) => r.property_id));
 }
 
 // Whether a property is currently active (used to block removing active houses

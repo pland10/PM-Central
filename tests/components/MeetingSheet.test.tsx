@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
+  localStorage.clear(); // collapsed sections persist in localStorage between tests
   fetchMock = vi.fn(async () => ({ ok: true }));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -27,6 +28,7 @@ const row = (o: Partial<MeetingRow> & { id: string; label: string }): MeetingRow
   lastNote: null,
   owner: null,
   tenants: [],
+  woNeeded: false,
   ...o,
 });
 
@@ -138,5 +140,38 @@ describe("MeetingSheet", () => {
     renderSheet();
     await user.selectOptions(screen.getByLabelText("Meeting date"), "2026-11-09");
     expect(push).toHaveBeenCalledWith("/meetings?date=2026-11-09");
+  });
+
+  it("has a 'WO needed' checkbox per house that saves right away for this meeting date", async () => {
+    const user = userEvent.setup();
+    render(
+      <MeetingSheet
+        date="2026-11-23"
+        dateOptions={["2026-11-23"]}
+        rentals={[row({ id: "r1", label: "1 Main St" }), row({ id: "r3", label: "3 Elm St", woNeeded: true })]}
+        squatterWatch={[]}
+        removed={[]}
+      />
+    );
+    const box = screen.getByRole("checkbox", { name: "Work order needed for 1 Main St" });
+    expect(box).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Work order needed for 3 Elm St" })).toBeChecked();
+
+    await user.click(box);
+    expect(box).toBeChecked();
+    const call = fetchMock.mock.calls.find((c) => c[0] === "/api/meetings/wo-needed");
+    expect(call).toBeTruthy();
+    expect(JSON.parse(call![1].body)).toEqual({ propertyId: "r1", date: "2026-11-23", needed: true });
+  });
+
+  it("puts the box back if the save fails", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce({ ok: false });
+    render(
+      <MeetingSheet date="2026-11-23" dateOptions={["2026-11-23"]} rentals={[row({ id: "r1", label: "1 Main St" })]} squatterWatch={[]} removed={[]} />
+    );
+    const box = screen.getByRole("checkbox", { name: "Work order needed for 1 Main St" });
+    await user.click(box);
+    await vi.waitFor(() => expect(box).not.toBeChecked());
   });
 });

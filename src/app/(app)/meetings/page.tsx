@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAddress } from "@/lib/format";
 import { requireFeature } from "@/config/features";
 import { isMeetingDate, meetingDateOptions, mondayOf, propertyPeople, splitMeetingGroups } from "@/lib/meetings";
-import { getPropertyOrder, notesForDate, previousNotes, removedPropertyIds } from "@/lib/meetings-db";
+import { getPropertyOrder, notesForDate, previousNotes, removedPropertyIds, woNeededForDate } from "@/lib/meetings-db";
 import { MeetingSheet, type MeetingRow } from "./MeetingSheet";
 import { MeetingTabs } from "./MeetingTabs";
 
@@ -20,7 +20,7 @@ export default async function MeetingsPage({
   const { date: raw } = await searchParams;
   const date = isMeetingDate(raw) ? raw : mondayOf(new Date());
 
-  const [properties, removed, notes, prior, order] = await Promise.all([
+  const [properties, removed, notes, prior, order, woNeeded] = await Promise.all([
     prisma.property.findMany({
       orderBy: { createdAt: "asc" },
       select: {
@@ -46,6 +46,7 @@ export default async function MeetingsPage({
     notesForDate(date).catch(() => ({}) as Record<string, string>),
     previousNotes(date).catch(() => ({}) as Record<string, { date: string; body: string }>),
     getPropertyOrder().catch(() => ({}) as Record<string, number>),
+    woNeededForDate(date).catch(() => new Set<string>()),
   ]);
 
   const toRow = (p: (typeof properties)[number]): MeetingRow => {
@@ -59,6 +60,7 @@ export default async function MeetingsPage({
       sortKey: label,
       note: notes[p.id] ?? "",
       lastNote: prior[p.id] ?? null,
+      woNeeded: woNeeded.has(p.id),
       ...propertyPeople(p),
     };
   };

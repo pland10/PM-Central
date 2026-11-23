@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS meeting_notes (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (property_id, meeting_date)
 );
+-- "Work order needed" checkbox per house per meeting date.
+ALTER TABLE meeting_notes ADD COLUMN IF NOT EXISTS wo_needed BOOLEAN NOT NULL DEFAULT false;
 
 -- Houses taken off the sheet (hidden from the meeting, never deleted).
 CREATE TABLE IF NOT EXISTS meeting_removed_properties (
