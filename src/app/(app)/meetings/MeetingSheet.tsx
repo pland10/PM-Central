@@ -24,6 +24,7 @@ export type MeetingRow = {
   lastNote: { date: string; body: string } | null;
   owner: string | null; // owner name(s), shown under the address
   tenants: string[]; // current tenants; none = no tenant line
+  woNeeded: boolean; // "work order needed" ticked for this meeting date
 };
 
 type Filter = "all" | "active" | "inactive";
@@ -58,6 +59,9 @@ export function MeetingSheet({
   const seed = Object.fromEntries([...rentals, ...squatterWatch].map((r) => [r.id, r.note]));
   const [notes, setNotes] = useState<Record<string, string>>(seed);
   const [saved, setSaved] = useState<Record<string, SaveState>>({});
+  const [woNeeded, setWoNeeded] = useState<Record<string, boolean>>(
+    Object.fromEntries([...rentals, ...squatterWatch].map((r) => [r.id, r.woNeeded]))
+  );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -96,6 +100,23 @@ export function MeetingSheet({
       seed[id] = notes[id] ?? "";
       setSaved((s) => ({ ...s, [id]: "saved" }));
     } catch {
+      setSaved((s) => ({ ...s, [id]: "error" }));
+    }
+  }
+
+  // Tick / untick "work order needed": shows at once, saves right away, and
+  // goes back if the save fails.
+  async function toggleWoNeeded(id: string, needed: boolean) {
+    setWoNeeded((w) => ({ ...w, [id]: needed }));
+    try {
+      const res = await fetch("/api/meetings/wo-needed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId: id, date, needed }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setWoNeeded((w) => ({ ...w, [id]: !needed }));
       setSaved((s) => ({ ...s, [id]: "error" }));
     }
   }
@@ -143,6 +164,7 @@ export function MeetingSheet({
         )}
       </div>
       <div className="flex-1">
+        <div className="flex items-start gap-3">
         <textarea
           aria-label={`Notes for ${r.label}`}
           value={notes[r.id] ?? ""}
@@ -152,6 +174,18 @@ export function MeetingSheet({
           placeholder="What's going on with this house?"
           className="w-full rounded-lg border border-slate-200 p-2 text-sm text-slate-800 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
+        {/* Jasper's cue: a work order is needed — the details are in the note. */}
+        <label className="flex shrink-0 cursor-pointer flex-col items-center gap-1 pt-1 text-[11px] font-medium text-slate-500">
+          <input
+            type="checkbox"
+            aria-label={`Work order needed for ${r.label}`}
+            checked={!!woNeeded[r.id]}
+            onChange={(e) => toggleWoNeeded(r.id, e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          WO needed
+        </label>
+        </div>
         <div className="mt-1 flex items-center justify-between text-[11px]">
           <span className="text-slate-400">
             {r.lastNote ? `Last meeting (${prettyDate(r.lastNote.date)}): ${r.lastNote.body}` : "No prior note."}
