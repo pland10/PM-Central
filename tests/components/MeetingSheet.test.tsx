@@ -25,6 +25,8 @@ const row = (o: Partial<MeetingRow> & { id: string; label: string }): MeetingRow
   sortKey: o.label,
   note: "",
   lastNote: null,
+  owner: null,
+  tenants: [],
   ...o,
 });
 
@@ -41,6 +43,30 @@ function renderSheet() {
 }
 
 describe("MeetingSheet", () => {
+  it("lists the owner and tenants under the address (no tenant line for a vacant house)", () => {
+    render(
+      <MeetingSheet
+        date="2026-11-23"
+        dateOptions={["2026-11-23"]}
+        rentals={[
+          row({ id: "a", label: "29 Parkway Ave", owner: "Ann Smith", tenants: ["Timothy Robert Walker", "Jane Walker"] }),
+          row({ id: "b", label: "5 Vacant Rd", owner: "Bob Owner" }),
+        ]}
+        squatterWatch={[]}
+        removed={[]}
+      />
+    );
+    expect(screen.getByText("Owner: Ann Smith")).toBeInTheDocument();
+    expect(screen.getByText("Tenants: Timothy Robert Walker, Jane Walker")).toBeInTheDocument();
+    expect(screen.getByText("Owner: Bob Owner")).toBeInTheDocument();
+    expect(screen.getAllByText(/^Tenants?:/)).toHaveLength(1);
+  });
+
+  it("says Tenant (singular) for one tenant", () => {
+    render(<MeetingSheet date="2026-11-23" dateOptions={["2026-11-23"]} rentals={[row({ id: "a", label: "1 A St", tenants: ["Solo Renter"] })]} squatterWatch={[]} removed={[]} />);
+    expect(screen.getByText("Tenant: Solo Renter")).toBeInTheDocument();
+  });
+
   it("shows both sections with their houses, and last-meeting context", () => {
     renderSheet();
     expect(screen.getByText("Rental Units")).toBeInTheDocument();

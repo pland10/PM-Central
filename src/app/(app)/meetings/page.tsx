@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatAddress } from "@/lib/format";
 import { requireFeature } from "@/config/features";
-import { isMeetingDate, meetingDateOptions, mondayOf, splitMeetingGroups } from "@/lib/meetings";
+import { isMeetingDate, meetingDateOptions, mondayOf, propertyPeople, splitMeetingGroups } from "@/lib/meetings";
 import { getPropertyOrder, notesForDate, previousNotes, removedPropertyIds } from "@/lib/meetings-db";
 import { MeetingSheet, type MeetingRow } from "./MeetingSheet";
 import { MeetingTabs } from "./MeetingTabs";
@@ -23,7 +23,24 @@ export default async function MeetingsPage({
   const [properties, removed, notes, prior, order] = await Promise.all([
     prisma.property.findMany({
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, street1: true, street2: true, city: true, state: true, zip: true, status: true, tags: true },
+      select: {
+        id: true, name: true, street1: true, street2: true, city: true, state: true, zip: true, status: true, tags: true,
+        // Owner + current tenants, listed under the address.
+        portfolio: {
+          select: { name: true, owners: { select: { contact: { select: { firstName: true, lastName: true, companyName: true } } } } },
+        },
+        units: {
+          select: {
+            leases: {
+              where: { status: { in: ["active", "eviction"] } },
+              select: {
+                status: true,
+                tenants: { select: { isPrimary: true, contact: { select: { firstName: true, lastName: true, companyName: true } } } },
+              },
+            },
+          },
+        },
+      },
     }),
     removedPropertyIds().catch(() => new Set<string>()),
     notesForDate(date).catch(() => ({}) as Record<string, string>),
@@ -42,6 +59,7 @@ export default async function MeetingsPage({
       sortKey: label,
       note: notes[p.id] ?? "",
       lastNote: prior[p.id] ?? null,
+      ...propertyPeople(p),
     };
   };
 

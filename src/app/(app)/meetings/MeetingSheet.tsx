@@ -22,6 +22,8 @@ export type MeetingRow = {
   sortKey: string;
   note: string;
   lastNote: { date: string; body: string } | null;
+  owner: string | null; // owner name(s), shown under the address
+  tenants: string[]; // current tenants; none = no tenant line
 };
 
 type Filter = "all" | "active" | "inactive";
@@ -127,6 +129,12 @@ export function MeetingSheet({
           )}
         </div>
         <div className="text-xs text-slate-500">{r.address}</div>
+        {r.owner && <div className="text-xs text-slate-500">Owner: {r.owner}</div>}
+        {r.tenants.length > 0 && (
+          <div className="text-xs text-slate-500">
+            {r.tenants.length === 1 ? "Tenant" : "Tenants"}: {r.tenants.join(", ")}
+          </div>
+        )}
         {/* Only inactive houses can be taken off the sheet. */}
         {!r.active && (
           <button type="button" onClick={() => setRemoved(r.id, true)} className="mt-1 text-[11px] text-slate-400 hover:text-red-600">

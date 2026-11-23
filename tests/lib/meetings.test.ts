@@ -4,6 +4,7 @@ import {
   isoDate,
   mondayOf,
   nestTopics,
+  propertyPeople,
   recentMeetingMondays,
   recentMeetingTuesdays,
   splitMeetingGroups,
@@ -91,5 +92,33 @@ describe("nestTopics", () => {
     const nested = nestTopics(sections, topics);
     expect(nested[0].topics.map((t) => t.id)).toEqual([10, 12]);
     expect(nested[1].topics.map((t) => t.id)).toEqual([11]);
+  });
+});
+
+describe("propertyPeople (owner + tenants shown under the address)", () => {
+  const c = (firstName: string | null, lastName: string | null, companyName: string | null = null) => ({ firstName, lastName, companyName });
+  it("names every owner (company name wins) and the current tenants, primary first, deduped", () => {
+    const p = {
+      portfolio: { name: "Smith Holdings", owners: [{ contact: c("Ann", "Smith") }, { contact: c(null, null, "Smith LLC") }] },
+      units: [
+        {
+          leases: [
+            { status: "ended", tenants: [{ isPrimary: true, contact: c("Old", "Tenant") }] },
+            { status: "active", tenants: [{ isPrimary: false, contact: c("Linda", "Gallo") }, { isPrimary: true, contact: c("Jose", "Zavala") }] },
+          ],
+        },
+        { leases: [{ status: "eviction", tenants: [{ isPrimary: true, contact: c("Linda", "Gallo") }] }] },
+      ],
+    };
+    expect(propertyPeople(p)).toEqual({ owner: "Ann Smith, Smith LLC", tenants: ["Jose Zavala", "Linda Gallo"] });
+  });
+
+  it("falls back to the portfolio name, and is empty for a vacant house with no portfolio", () => {
+    expect(propertyPeople({ portfolio: { name: "Walker Trust", owners: [] }, units: [] })).toEqual({ owner: "Walker Trust", tenants: [] });
+    expect(propertyPeople({ portfolio: null, units: [{ leases: [{ status: "pending", tenants: [{ isPrimary: true, contact: c("Future", "Renter") }] }] }] })).toEqual({ owner: null, tenants: [] });
+  });
+
+  it("skips blank names", () => {
+    expect(propertyPeople({ portfolio: { name: "", owners: [{ contact: c(null, null) }] }, units: [] })).toEqual({ owner: null, tenants: [] });
   });
 });
