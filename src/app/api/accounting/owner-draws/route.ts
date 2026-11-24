@@ -3,13 +3,12 @@ import { isFeatureEnabled } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { canAccessAccounting, canApproveOwnerDraws } from "@/lib/accounting-access";
 import { drawFigures, isMonthKey, monthKeyET, type DrawSnapshot } from "@/lib/owner-draws";
-import { getDrawRecord, setDrawNote, setDrawOverride, setDrawStatus, type DrawField } from "@/lib/owner-draws-db";
+import { getDrawRecord, setDrawOverride, setDrawStatus, type DrawField } from "@/lib/owner-draws-db";
 import { loadOwnerDrawData } from "@/lib/owner-draws-rentvine";
 
 // Accounting → Owner Draws: save one change to one owner's row for a month.
 //   { month, portfolioId, action, field?, value?, expectDue? }
 //   set        field balance|reserve|unpaid, value number (or null = back to Rentvine)
-//   note       value text
 //   approve    approvers only; freezes today's Rentvine figures. expectDue is the
 //              amount on the approver's screen — refused if Rentvine has moved.
 //   unapprove  approvers only
@@ -20,7 +19,6 @@ export const maxDuration = 60;
 
 const FIELDS: DrawField[] = ["balance", "reserve", "unpaid"];
 const MAX_AMOUNT = 10_000_000;
-const MAX_NOTE = 4000;
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
@@ -60,11 +58,6 @@ export async function POST(req: NextRequest) {
       }
       if (current?.paidAt) return bad("This draw is marked paid — untick Paid before changing the numbers.", 409);
       await setDrawOverride(month, portfolioId, field, value === null ? null : Math.round(value * 100) / 100, by);
-      break;
-    }
-    case "note": {
-      if (typeof body.value !== "string") return bad("Missing note.");
-      await setDrawNote(month, portfolioId, body.value.trim().slice(0, MAX_NOTE), by);
       break;
     }
     case "approve":

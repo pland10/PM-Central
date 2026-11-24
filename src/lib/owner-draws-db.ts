@@ -115,15 +115,6 @@ export async function setDrawOverride(
            updated_at = now(), updated_by = EXCLUDED.updated_by`);
 }
 
-export async function setDrawNote(month: string, portfolioId: string, note: string, by: string): Promise<void> {
-  await ensureOwnerDrawTables();
-  await prisma.$executeRaw(Prisma.sql`
-    INSERT INTO owner_draws (month, portfolio_id, note, updated_by)
-    VALUES (${month}, ${portfolioId}, ${note}, ${by})
-    ON CONFLICT (month, portfolio_id) DO UPDATE
-       SET note = EXCLUDED.note, updated_at = now(), updated_by = EXCLUDED.updated_by`);
-}
-
 // Approve / mark paid (on = true) or undo it. Turning either on freezes the
 // Rentvine figures (keeping an existing snapshot); when both are off again the
 // row goes back to live numbers.
