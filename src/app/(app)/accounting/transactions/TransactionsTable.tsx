@@ -380,9 +380,15 @@ export function TransactionsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
-    } catch {
-      setError("That review action couldn't be saved. Please try again.");
+      if (!res.ok) {
+        // Show the server's reason (e.g. "needs a different review") instead of
+        // a generic message, so a failure can be understood and acted on.
+        const d = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(typeof d.error === "string" && d.error ? d.error : "");
+      }
+    } catch (e) {
+      const why = e instanceof Error && e.message ? e.message : "Please try again.";
+      setError(`That review action couldn't be saved. ${why}`);
       return;
     }
     if (body.action !== "ok") {
