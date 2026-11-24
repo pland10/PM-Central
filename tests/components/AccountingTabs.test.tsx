@@ -12,12 +12,19 @@ afterEach(() => {
 });
 
 describe("AccountingTabs", () => {
-  it("lists Bank Transactions first (the default) then Rentvine Transactions", () => {
+  it("lists Bank Transactions first (the default), then Rentvine Transactions and Owner Draws", () => {
     render(<AccountingTabs />);
     const links = screen.getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["Bank Transactions", "Rentvine Transactions"]);
+    expect(links.map((l) => l.textContent)).toEqual(["Bank Transactions", "Rentvine Transactions", "Owner Draws"]);
     expect(links[0]).toHaveAttribute("href", "/accounting");
     expect(links[1]).toHaveAttribute("href", "/accounting/rentvine");
+    expect(links[2]).toHaveAttribute("href", "/accounting/owner-draws");
+  });
+
+  it("marks Owner Draws active on /accounting/owner-draws", () => {
+    pathname = "/accounting/owner-draws";
+    render(<AccountingTabs />);
+    expect(screen.getByRole("link", { name: "Owner Draws" }).className).toContain("border-brand-500");
   });
 
   it("marks Bank active on /accounting (the default landing tab)", () => {
