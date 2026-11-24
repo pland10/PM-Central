@@ -506,6 +506,18 @@ describe("TransactionsTable", () => {
       expect(reviewCalls()).toEqual([["/api/plaid/transactions/a1/review", { action: "ok" }]]);
       expect(screen.queryByRole("region", { name: /needs review/i })).toBeNull();
     });
+    it("shows the server's reason when a review action fails", async () => {
+      fetchMock.mockImplementation(async (url: unknown) =>
+        String(url).endsWith("/review")
+          ? { ok: false, json: async () => ({ error: "This charge needs a different review: move the edits or dismiss it." }) }
+          : { ok: true, json: async () => ({ ok: true }) }
+      );
+      const user = userEvent.setup();
+      render(<TransactionsTable initialRows={[rows[0], changed]} accounts={[]} />);
+      await user.click(within(box()).getByRole("button", { name: /looks right/i }));
+      expect(await screen.findByText(/needs a different review: move the edits or dismiss it/i)).toBeInTheDocument();
+      expect(box()).toBeInTheDocument(); // still there — nothing was saved
+    });
   });
 
   describe("archive", () => {

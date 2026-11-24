@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sqlOf } from "../helpers/sql";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn(), $transaction: vi.fn() },
+  prisma: { $executeRaw: vi.fn(), $executeRawUnsafe: vi.fn(), $transaction: vi.fn(), $queryRaw: vi.fn() },
 }));
 vi.mock("@/config/features", () => ({ isFeatureEnabled: vi.fn(() => true) }));
 vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
@@ -83,5 +83,30 @@ describe("POST /api/plaid/transactions/:id/review", () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "u2", email: "x@y.com", role: "user" } as never);
     expect((await post({ action: "dismiss" })).status).toBe(404);
     expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  describe("'Looks right' (ok) is safe to repeat", () => {
+    it("treats an already-cleared flag as done (e.g. a teammate confirmed it first)", async () => {
+      executeRaw.mockResolvedValue(0); // nothing flagged any more
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ review_reason: null }] as never);
+      const res = await post({ action: "ok" }, "post1");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, already: true });
+    });
+
+    it("still 404s when the charge doesn't exist at all", async () => {
+      executeRaw.mockResolvedValue(0);
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
+      const res = await post({ action: "ok" }, "gone1");
+      expect(res.status).toBe(404);
+    });
+
+    it("explains when the charge is flagged for a different reason", async () => {
+      executeRaw.mockResolvedValue(0);
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ review_reason: "pending_dropped" }] as never);
+      const res = await post({ action: "ok" }, "pend2");
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/move the edits or dismiss/i);
+    });
   });
 });

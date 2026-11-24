@@ -13,7 +13,7 @@ import { ensurePlaidAnnotationColumns } from "@/lib/plaid-sync";
 //       notes thread there too, then remove it.
 //   { action: "dismiss" } — it was declined/reversed: remove it and its notes.
 //   { action: "ok" } — edits carried over but the amount changed: looked at,
-//       clear the flag.
+//       clear the flag. Safe to repeat: an already-cleared flag returns ok.
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ transactionId: string }> }) {
@@ -39,6 +39,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tra
       n = await prisma.$executeRaw(Prisma.sql`
         UPDATE plaid_transactions SET review_reason = NULL, review_detail = NULL
         WHERE transaction_id = ${id} AND review_reason = 'amount_changed'`);
+      if (n === 0) {
+        // Nothing flagged: safe to repeat. Already cleared (a teammate confirmed
+        // it, or a stale page) counts as done; only a missing charge is a 404.
+        const [row] = await prisma.$queryRaw<{ review_reason: string | null }[]>(Prisma.sql`
+          SELECT review_reason FROM plaid_transactions WHERE transaction_id = ${id}`);
+        if (row && row.review_reason === null) return NextResponse.json({ ok: true, already: true });
+        if (row) {
+          return NextResponse.json(
+            { error: "This charge needs a different review: move the edits or dismiss it." },
+            { status: 409 }
+          );
+        }
+      }
     } else if (action === "dismiss") {
       n = await prisma.$executeRaw(Prisma.sql`
         DELETE FROM plaid_transactions WHERE transaction_id = ${id} AND review_reason = 'pending_dropped'`);
