@@ -139,22 +139,15 @@ describe("OwnerDraws", () => {
     expect(screen.getByRole("checkbox", { name: "Approve Grant Holdings" })).not.toBeChecked();
   });
 
-  it("saves the note on blur and shows last month's note", async () => {
-    view({ initialRows: rows([], [rec({ note: "Charge next month: fridge $890" })]) });
-    expect(within(rowOf("Grant Holdings")).getByText(/Last month: Charge next month: fridge \$890/)).toBeInTheDocument();
-    fetchMock.mockResolvedValueOnce(answer(rec({ note: "Sent first half" })));
-    await userEvent.type(screen.getByLabelText("Note for Grant Holdings"), "Sent first half");
-    await userEvent.tab();
-    expect(sentBodies()[0]).toEqual({ month: "2026-11", portfolioId: "75", action: "note", value: "Sent first half" });
-  });
-
-  it("keeps a note that failed to save in the box", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "DB down" }) });
-    view();
-    await userEvent.type(screen.getByLabelText("Note for Grant Holdings"), "Important note");
-    await userEvent.tab();
-    expect(await screen.findByRole("alert")).toHaveTextContent("DB down");
-    expect(screen.getByLabelText("Note for Grant Holdings")).toHaveValue("Important note");
+  it("shows each owner's latest note and opens the notes thread", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ notes: [], staff: [], me: "", canModerate: true }) });
+    view({
+      noteSummaries: { "75": { count: 2, latest: "Charge next month: fridge $890", latestAt: "2026-11-01T00:00:00Z", latestBy: "JR" } },
+    });
+    expect(within(rowOf("Grant Holdings")).getByText("Charge next month: fridge $890")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Notes for Grant Holdings" }));
+    expect(await screen.findByRole("dialog", { name: "Notes for Grant Holdings" })).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/api/accounting/owner-draw-notes?portfolio=75");
   });
 
   it("takes fresh rows from the server after a refresh", () => {

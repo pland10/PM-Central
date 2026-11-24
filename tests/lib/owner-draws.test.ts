@@ -203,7 +203,7 @@ describe("buildDrawRows", () => {
     expect(rows.map((r) => r.portfolioId)).toEqual(["75"]);
   });
 
-  it("carries last month's note and a lowered reserve onto this month's row", () => {
+  it("carries a lowered reserve onto this month's row", () => {
     const prevSnap = { name: "Grant", owners: [], balance: 1, reserve: 500, unpaid: 0, hold: false, bills: [] };
     const rows = buildDrawRows({
       live,
@@ -212,7 +212,6 @@ describe("buildDrawRows", () => {
       previous: [rec({ note: "Charge next month: fridge $890", reserveOverride: 250, snapshot: prevSnap })],
     });
     const g = rows.find((r) => r.portfolioId === "75")!;
-    expect(g.lastNote).toBe("Charge next month: fridge $890");
     expect(g.lastReserveLoweredBy).toBe(250);
   });
 });
