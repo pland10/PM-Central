@@ -53,6 +53,7 @@ Vercel.
 | `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Only if `AUTH_MODE=basic` | not used in `supabase` mode |
 | `TENANT_TURNER_WEBHOOK_SECRET` | Gates the Tenant Turner showings webhook | long random string; set on **both** services. See "Tenant Turner showings" below |
 | `FEATURE_*` | Turn modules on/off | all on by default |
+| `OWNER_DRAW_APPROVER_EMAILS` | Who may approve on Accounting → Owner Draws | comma-separated emails; unset = admins approve. The `owner_draws` table creates itself on first use (`prisma/sql/owner-draws.sql` is the same DDL) |
 
 `.env.example` documents each of these.
 
