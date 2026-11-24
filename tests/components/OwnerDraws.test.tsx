@@ -148,6 +148,29 @@ describe("OwnerDraws", () => {
     expect(sentBodies()[0]).toEqual({ month: "2026-11", portfolioId: "75", action: "note", value: "Sent first half" });
   });
 
+  it("keeps a note that failed to save in the box", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "DB down" }) });
+    view();
+    await userEvent.type(screen.getByLabelText("Note for Grant Holdings"), "Important note");
+    await userEvent.tab();
+    expect(await screen.findByRole("alert")).toHaveTextContent("DB down");
+    expect(screen.getByLabelText("Note for Grant Holdings")).toHaveValue("Important note");
+  });
+
+  it("takes fresh rows from the server after a refresh", () => {
+    const { rerender } = view();
+    const fresh = buildDrawRows({
+      live: [{ ...live[0], balance: 4000 }, live[1]],
+      bills,
+      records: [],
+      previous: [],
+    });
+    rerender(
+      <OwnerDraws month="2026-11" months={["2026-11"]} isCurrent initialRows={fresh} canApprove rentvineAccount="acme" />
+    );
+    expect(screen.getByTestId("due-75")).toHaveTextContent("$3,400.00");
+  });
+
   it("filters to rows waiting on approval, and totals what's due", async () => {
     view();
     expect(screen.getByTestId("total-due")).toHaveTextContent("$2,400.00");

@@ -43,6 +43,12 @@ export function OwnerDraws({
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
+  // router.refresh() hands down fresh rows; take them (useState alone would keep the old ones).
+  const [loadedRows, setLoadedRows] = useState(initialRows);
+  if (initialRows !== loadedRows) {
+    setLoadedRows(initialRows);
+    setRows(initialRows);
+  }
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -366,7 +372,15 @@ function AmountInput({
   );
 }
 
-function NoteInput({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+function NoteInput({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onCommit: (v: string) => Promise<boolean>;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <textarea
@@ -374,10 +388,15 @@ function NoteInput({ label, value, onCommit }: { label: string; value: string; o
       rows={1}
       value={draft ?? value}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const v = (draft ?? value).trim();
-        setDraft(null);
-        if (v !== value.trim()) onCommit(v);
+      onBlur={async () => {
+        if (draft === null) return;
+        const v = draft.trim();
+        if (v === value.trim()) {
+          setDraft(null);
+          return;
+        }
+        // Keep what was typed until it's saved, so a failed save loses nothing.
+        if (await onCommit(v)) setDraft(null);
       }}
       placeholder="Notes…"
       className="w-full resize-y rounded border border-slate-200 px-2 py-1 text-sm"
