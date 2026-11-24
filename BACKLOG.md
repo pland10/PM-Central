@@ -74,3 +74,20 @@ Recommended source of truth — **Rentvine**, not LeadSimple or our DB:
    `rv_work_orders` (additive columns); `WorkOrderRow` gets `preventive`;
    Maintenance gets the filter. Title fallback (`/tune[- ]?up/i`, etc.) so
    existing tune-ups are tagged until the type is used consistently.
+
+## Owner Draws follow-ups (Accounting → Owner Draws)
+Shipped Nov 24, 2026 (v1.0.448). Waiting on the team to settle the process
+before picking these up.
+
+- **Paid ticks itself from Rentvine.** Use the "Owner Payments" report (route
+  `owner-payments`) to mark a row paid when the owner payment posts, instead of
+  the manual checkbox. **On hold until the user decides the draw process.**
+- **Past months hide unapproved rows.** `buildDrawRows` only lists rows with a
+  snapshot (approved/paid) when there's no live data, so notes and edits on a
+  past month's unapproved rows don't show. List them too.
+- **Rows vanish when a portfolio leaves Rentvine.** A saved row (notes/edits)
+  whose portfolio drops out of the Portfolio Balances report mid-month isn't
+  shown. Show it with a "not in Rentvine" marker.
+- **Import history (last).** Bring in the last month or two from the Owner
+  Draws spreadsheet, only if still useful. User: "that should be the last
+  thing we work on."
