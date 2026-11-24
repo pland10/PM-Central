@@ -71,7 +71,6 @@ export type DrawRow = {
   paidAt: string | null;
   paidBy: string | null;
   frozen: boolean; // figures come from the approval snapshot
-  lastNote: string; // last month's note ("Charge next month: …")
   lastReserveLoweredBy: number; // reserve held back last month
 };
 
@@ -219,8 +218,8 @@ const hasContent = (r: DrawRecord) =>
 
 // The month's rows. `live` is null for a past month (Rentvine only knows
 // today's balances), so only rows saved that month are listed — from their
-// snapshots. `previous` is last month's saved rows, for the carried note and
-// the reserve that was held back.
+// snapshots. `previous` is last month's saved rows, for the reserve that was
+// held back.
 export function buildDrawRows(args: {
   live: DrawPortfolio[] | null;
   bills: Map<string, DrawBill[]>;
@@ -264,7 +263,6 @@ export function buildDrawRows(args: {
       paidAt: rec?.paidAt ?? null,
       paidBy: rec?.paidBy ?? null,
       frozen,
-      lastNote: prev?.note.trim() ?? "",
       lastReserveLoweredBy: prev ? reserveLoweredBy(prev, prev.snapshot?.reserve ?? live?.reserve ?? 0) : 0,
     });
   }

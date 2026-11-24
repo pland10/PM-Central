@@ -4,6 +4,9 @@ import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCurrencyCents } from "@/lib/format";
 import { applyRecord, monthLabel, round2, type DrawRecord, type DrawRow } from "@/lib/owner-draws";
+import type { NoteSummary } from "@/lib/work-order-notes-db";
+import { NotesCell } from "@/app/(app)/work-orders/NotesCell";
+import { NotesPanel } from "@/components/NotesPanel";
 
 // Accounting → Owner Draws table (replaces the monthly Owner Draws sheet).
 // Balance / Reserve / Unpaid bills come from Rentvine and can be edited for the
@@ -33,6 +36,7 @@ export function OwnerDraws({
   initialRows,
   canApprove,
   rentvineAccount,
+  noteSummaries = {},
 }: {
   month: string;
   months: string[];
@@ -40,6 +44,7 @@ export function OwnerDraws({
   initialRows: DrawRow[];
   canApprove: boolean;
   rentvineAccount: string;
+  noteSummaries?: Record<string, NoteSummary>; // notes thread per owner: count + latest
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
@@ -54,6 +59,8 @@ export function OwnerDraws({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [notes, setNotes] = useState(noteSummaries);
+  const [notesFor, setNotesFor] = useState<DrawRow | null>(null);
 
   async function save(row: DrawRow, body: Record<string, unknown>): Promise<boolean> {
     setError("");
@@ -294,9 +301,12 @@ export function OwnerDraws({
                         </div>
                       )}
                     </td>
-                    <td className="min-w-[16rem] px-3 py-2 align-top">
-                      <NoteInput label={`Note for ${r.name}`} value={r.note} onCommit={(v) => save(r, { action: "note", value: v })} />
-                      {r.lastNote && <div className="mt-1 text-xs text-slate-500">Last month: {r.lastNote}</div>}
+                    <td className="px-3 py-2 align-top">
+                      <NotesCell
+                        summary={notes[r.portfolioId]}
+                        onOpen={() => setNotesFor(r)}
+                        ariaLabel={`Notes for ${r.name}`}
+                      />
                     </td>
                   </tr>
                   {open[r.portfolioId] && (
@@ -327,6 +337,34 @@ export function OwnerDraws({
           </tbody>
         </table>
       </div>
+
+      {notesFor && (
+        <NotesPanel
+          api="/api/accounting/owner-draw-notes"
+          listQuery={`portfolio=${encodeURIComponent(notesFor.portfolioId)}`}
+          postKey={{ portfolioId: notesFor.portfolioId, month, name: notesFor.name }}
+          heading={`Notes · Owner draws · ${monthLabel(month)}`}
+          title={notesFor.name}
+          placeholder="e.g. Charge next month: refrigerator repair $890"
+          dialogLabel={`Notes for ${notesFor.name}`}
+          onClose={() => setNotesFor(null)}
+          onAdded={(note, count) =>
+            setNotes((prev) => ({
+              ...prev,
+              [notesFor.portfolioId]: { count, latest: note.body, latestAt: note.createdAt, latestBy: note.authorName },
+            }))
+          }
+          onChanged={(latest, count) =>
+            setNotes((prev) => {
+              const { [notesFor.portfolioId]: _drop, ...rest } = prev;
+              void _drop;
+              return latest
+                ? { ...rest, [notesFor.portfolioId]: { count, latest: latest.body, latestAt: latest.createdAt, latestBy: latest.authorName } }
+                : rest;
+            })
+          }
+        />
+      )}
     </div>
   );
 }
@@ -368,38 +406,6 @@ function AmountInput({
       className={`w-28 rounded border px-2 py-1 text-right tabular-nums disabled:bg-transparent disabled:text-slate-700 ${
         edited ? "border-amber-400 bg-amber-50" : "border-slate-200"
       }`}
-    />
-  );
-}
-
-function NoteInput({
-  label,
-  value,
-  onCommit,
-}: {
-  label: string;
-  value: string;
-  onCommit: (v: string) => Promise<boolean>;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <textarea
-      aria-label={label}
-      rows={1}
-      value={draft ?? value}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={async () => {
-        if (draft === null) return;
-        const v = draft.trim();
-        if (v === value.trim()) {
-          setDraft(null);
-          return;
-        }
-        // Keep what was typed until it's saved, so a failed save loses nothing.
-        if (await onCommit(v)) setDraft(null);
-      }}
-      placeholder="Notes…"
-      className="w-full resize-y rounded border border-slate-200 px-2 py-1 text-sm"
     />
   );
 }

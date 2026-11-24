@@ -6,7 +6,6 @@ vi.mock("@/lib/auth/supabase-server", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/owner-draws-db", () => ({
   getDrawRecord: vi.fn(),
   setDrawOverride: vi.fn(async () => {}),
-  setDrawNote: vi.fn(async () => {}),
   setDrawStatus: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/owner-draws-rentvine", () => ({ loadOwnerDrawData: vi.fn() }));
@@ -75,12 +74,13 @@ describe("POST /api/accounting/owner-draws", () => {
   });
 
   it("rejects bad input", async () => {
-    expect((await post({ month: "2026-13", portfolioId: "75", action: "note", value: "x" })).status).toBe(400);
-    expect((await post({ month: MONTH, portfolioId: "", action: "note", value: "x" })).status).toBe(400);
+    expect((await post({ month: "2026-13", portfolioId: "75", action: "paid" })).status).toBe(400);
+    expect((await post({ month: MONTH, portfolioId: "", action: "paid" })).status).toBe(400);
     expect((await post({ month: MONTH, portfolioId: "75", action: "set", field: "rent", value: 1 })).status).toBe(400);
     expect((await post({ month: MONTH, portfolioId: "75", action: "set", field: "reserve", value: "abc" })).status).toBe(400);
     expect((await post({ month: MONTH, portfolioId: "75", action: "set", field: "reserve", value: 1e10 })).status).toBe(400);
     expect((await post({ month: MONTH, portfolioId: "75", action: "nope" })).status).toBe(400);
+    expect((await post({ month: MONTH, portfolioId: "75", action: "note", value: "x" })).status).toBe(400);
   });
 
   it("won't change the numbers on a row marked paid", async () => {
@@ -88,11 +88,6 @@ describe("POST /api/accounting/owner-draws", () => {
     const res = await post({ month: MONTH, portfolioId: "75", action: "set", field: "reserve", value: 250 });
     expect(res.status).toBe(409);
     expect(db.setDrawOverride).not.toHaveBeenCalled();
-  });
-
-  it("saves the note", async () => {
-    await post({ month: MONTH, portfolioId: "75", action: "note", value: "  Charge next month: fridge  " });
-    expect(db.setDrawNote).toHaveBeenCalledWith(MONTH, "75", "Charge next month: fridge", "Boss");
   });
 
   it("approving freezes today's Rentvine figures", async () => {
@@ -120,7 +115,7 @@ describe("POST /api/accounting/owner-draws", () => {
     asCoordinator();
     expect((await post({ month: MONTH, portfolioId: "75", action: "approve", expectDue: 2400 })).status).toBe(403);
     expect((await post({ month: MONTH, portfolioId: "75", action: "unapprove" })).status).toBe(403);
-    expect((await post({ month: MONTH, portfolioId: "75", action: "note", value: "hi" })).status).toBe(200);
+    expect((await post({ month: MONTH, portfolioId: "75", action: "set", field: "unpaid", value: 1 })).status).toBe(200);
     expect((await post({ month: MONTH, portfolioId: "75", action: "paid" })).status).toBe(200);
     expect(db.setDrawStatus).toHaveBeenCalledWith(MONTH, "75", "paid", true, "JR", expect.objectContaining({ balance: 3000 }));
   });
@@ -147,6 +142,6 @@ describe("POST /api/accounting/owner-draws", () => {
 
   it("is hidden from people without Accounting", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "u3", email: "x@y.com", role: "user" } as never);
-    expect((await post({ month: MONTH, portfolioId: "75", action: "note", value: "x" })).status).toBe(404);
+    expect((await post({ month: MONTH, portfolioId: "75", action: "paid" })).status).toBe(404);
   });
 });

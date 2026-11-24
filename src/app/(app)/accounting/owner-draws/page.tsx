@@ -5,6 +5,7 @@ import { canAccessAccounting, canApproveOwnerDraws } from "@/lib/accounting-acce
 import { buildDrawRows, isMonthKey, monthKeyET, prevMonthKey } from "@/lib/owner-draws";
 import { listDrawMonths, listDrawRecords } from "@/lib/owner-draws-db";
 import { loadOwnerDrawData } from "@/lib/owner-draws-rentvine";
+import { ownerDrawNoteSummaries } from "@/lib/owner-draw-notes-db";
 import { AccountingTabs } from "../AccountingTabs";
 import { OwnerDraws } from "./OwnerDraws";
 
@@ -24,11 +25,12 @@ export default async function OwnerDrawsPage({ searchParams }: { searchParams: P
   const month = isMonthKey(asked) && asked <= thisMonth ? asked : thisMonth;
   const isCurrent = month === thisMonth;
 
-  const [live, records, previous, savedMonths] = await Promise.all([
+  const [live, records, previous, savedMonths, noteSummaries] = await Promise.all([
     isCurrent ? loadOwnerDrawData() : Promise.resolve(null),
     listDrawRecords(month),
     listDrawRecords(prevMonthKey(month)),
     listDrawMonths(),
+    ownerDrawNoteSummaries(),
   ]);
 
   const rows = buildDrawRows({
@@ -57,6 +59,7 @@ export default async function OwnerDrawsPage({ searchParams }: { searchParams: P
         initialRows={rows}
         canApprove={canApproveOwnerDraws(user)}
         rentvineAccount={rentvineAccount}
+        noteSummaries={noteSummaries}
       />
     </div>
   );
