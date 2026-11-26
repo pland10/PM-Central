@@ -57,32 +57,85 @@ export function InvoiceEditor({
   const [errorMsg, setErrorMsg] = useState("");
   const totals = invoiceTotals(items.map((it) => ({ qty: it.qty, rate: it.rate })), taxRate);
 
-  async function save() {
-    setSaveState("saving");
-    setErrorMsg("");
-    const payload = {
-      invoice_date: invoiceDate || null,
-      due_date: dueDate || null,
-      period: period || null,
-      bill_to: billTo,
-      terms: terms || null,
-      notes: notes || null,
-      billing_contact: billingContact || null,
-      tax_rate: Number(taxRate) || 0,
-      status,
-      property_external_id: propertyExternalId || null,
-      items: items.map((it) => ({ desc: it.desc, qty: Number(it.qty) || 0, rate: Number(it.rate) || 0 })),
-    };
-    const res = await fetch(`/api/invoices/${initial.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      setErrorMsg((await res.json().catch(() => ({}))).error || "Save failed.");
+  // The whole invoice as one save payload. Kept in a ref so a save fired while
+  // leaving (unmount / pagehide) sends the latest edits, not a stale closure.
+  const payload = {
+    invoice_date: invoiceDate || null,
+    due_date: dueDate || null,
+    period: period || null,
+    bill_to: billTo,
+    terms: terms || null,
+    notes: notes || null,
+    billing_contact: billingContact || null,
+    tax_rate: Number(taxRate) || 0,
+    status,
+    property_external_id: propertyExternalId || null,
+    items: items.map((it) => ({ desc: it.desc, qty: Number(it.qty) || 0, rate: Number(it.rate) || 0 })),
+  };
+  const payloadRef = useRef(payload);
+  payloadRef.current = payload;
+
+  // Stale-copy guard: every save says which version it started from; the
+  // server refuses (409) if the invoice has moved on (another tab, the back
+  // button, a save still in flight) instead of overwriting it — the way a line
+  // could silently go missing. After each save we carry the new version.
+  const baseRef = useRef<string | null>(initial.updated_at);
+  const dirtyRef = useRef(false); // edits not yet sent
+  const conflictRef = useRef(false);
+  const [conflict, setConflict] = useState(false);
+
+  // One save at a time: a save that starts while another is in flight would
+  // carry the old version and draw a false conflict, so each waits its turn.
+  const inFlightRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingRef = useRef(0); // saves queued or in flight
+  function save(opts: { keepalive?: boolean } = {}): Promise<void> {
+    pendingRef.current++;
+    const run = (pendingRef.current === 1 ? sendSave(opts) : inFlightRef.current.then(() => sendSave(opts))).finally(
+      () => {
+        pendingRef.current--;
+      }
+    );
+    inFlightRef.current = run.catch(() => {});
+    return run;
+  }
+
+  async function sendSave(opts: { keepalive?: boolean }) {
+    if (conflictRef.current) return;
+    dirtyRef.current = false;
+    if (!opts.keepalive) {
+      setSaveState("saving");
+      setErrorMsg("");
+    }
+    let res: Response;
+    try {
+      res = await fetch(`/api/invoices/${initial.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payloadRef.current, base_updated_at: baseRef.current }),
+        keepalive: opts.keepalive,
+      });
+    } catch {
+      if (!opts.keepalive) {
+        setErrorMsg("Save failed — check your connection.");
+        setSaveState("error");
+      }
+      return;
+    }
+    if (opts.keepalive) return; // leaving the page; nobody to show the result to
+    const data = (await res.json().catch(() => ({}))) as { updated_at?: string | null; error?: string; conflict?: boolean };
+    if (res.status === 409 || data.conflict) {
+      conflictRef.current = true;
+      setConflict(true);
+      setErrorMsg(data.error || "This invoice was changed since you opened it. Reload to see the latest.");
       setSaveState("error");
       return;
     }
+    if (!res.ok) {
+      setErrorMsg(data.error || "Save failed.");
+      setSaveState("error");
+      return;
+    }
+    if (data.updated_at) baseRef.current = data.updated_at;
     setSaveState("saved");
   }
 
@@ -93,10 +146,27 @@ export function InvoiceEditor({
       first.current = false;
       return;
     }
-    const t = setTimeout(save, 1000);
+    if (conflictRef.current) return;
+    dirtyRef.current = true;
+    const t = setTimeout(() => save(), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, invoiceDate, dueDate, period, terms, billingContact, notes, taxRate, billTo, items, propertyExternalId]);
+
+  // Leaving with an edit still waiting on the debounce (e.g. "← All invoices"
+  // within a second of typing, or closing the tab): send it now, keepalive so
+  // it completes even as the page goes away.
+  useEffect(() => {
+    const flush = () => {
+      if (dirtyRef.current && !conflictRef.current) void save({ keepalive: true });
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateItem(i: number, patch: Partial<ItemDraft>) {
     setItems((arr) => arr.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
@@ -137,6 +207,15 @@ export function InvoiceEditor({
             {saveState === "saving" && "Saving…"}
             {saveState === "saved" && "✓ Saved"}
             {saveState === "error" && <span className="text-red-600">{errorMsg}</span>}
+            {conflict && (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50"
+              >
+                Reload
+              </button>
+            )}
           </span>
         </div>
         <div className="flex items-center gap-2">
