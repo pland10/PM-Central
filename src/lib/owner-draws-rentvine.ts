@@ -9,6 +9,7 @@
 // RENTVINE_API_KEY / RENTVINE_API_SECRET (+ RENTVINE_BASE_URL or
 // RENTVINE_SUBDOMAIN).
 
+import { fetchWithRetry, type RetryOptions } from "@/lib/http-retry";
 import { parsePayables, parsePortfolioBalances, type DrawBill, type DrawPortfolio, type ReportRow } from "@/lib/owner-draws";
 
 export type OwnerDrawData =
@@ -43,13 +44,19 @@ class ReportError extends Error {
   }
 }
 
+// Rentvine rate-limits (HTTP 429) when several report calls land together, and
+// blips with 5xx now and then; retry those with backoff (as the syncs do)
+// instead of failing the page. Exported so tests can skip the real wait.
+export const reportRetry: RetryOptions = {};
+
 async function runReport(route: string, displayColumns: string[], filters: Record<string, unknown>[]): Promise<ReportRow[]> {
   const auth = Buffer.from(`${process.env.RENTVINE_API_KEY || ""}:${process.env.RENTVINE_API_SECRET || ""}`).toString("base64");
   const json = encodeURIComponent(JSON.stringify({ displayColumns, filters }));
-  const res = await fetch(`${baseUrl()}/reports/${route}?exportTypeID=1&json=${json}`, {
-    headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
-    cache: "no-store",
-  });
+  const res = await fetchWithRetry(
+    `${baseUrl()}/reports/${route}?exportTypeID=1&json=${json}`,
+    { headers: { Accept: "application/json", Authorization: `Basic ${auth}` }, cache: "no-store" },
+    reportRetry
+  );
   if (!res.ok) throw new ReportError(`Rentvine ${route} report failed (HTTP ${res.status}).`, res.status);
   const payload = (await res.json()) as { rows?: ReportRow[] };
   return Array.isArray(payload.rows) ? payload.rows : [];

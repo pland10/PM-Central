@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { jsonResponse, stubFetch } from "../helpers/fetch";
-import { loadOwnerDrawData } from "@/lib/owner-draws-rentvine";
+import { loadOwnerDrawData, reportRetry } from "@/lib/owner-draws-rentvine";
 
 const balances = {
   rows: [
@@ -32,6 +32,7 @@ describe("loadOwnerDrawData", () => {
     vi.stubEnv("RENTVINE_API_KEY", "k");
     vi.stubEnv("RENTVINE_API_SECRET", "s");
     vi.stubEnv("RENTVINE_BASE_URL", "https://rv.example/api/manager");
+    reportRetry.sleep = async () => {}; // retries without the real backoff wait
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -73,10 +74,26 @@ describe("loadOwnerDrawData", () => {
     }
   });
 
+  it("retries when Rentvine rate-limits (HTTP 429), then loads", async () => {
+    let balanceCalls = 0;
+    stubFetch([
+      [/reports\/portfolio-balances$/, () => (++balanceCalls === 1 ? jsonResponse("slow down", { status: 429 }) : jsonResponse(balances))],
+      [/reports\/payables$/, jsonResponse(payables)],
+    ]);
+    const res = await loadOwnerDrawData();
+    expect(res.ok).toBe(true);
+    expect(balanceCalls).toBe(2);
+  });
+
   it("returns an error result when Rentvine fails", async () => {
-    stubFetch([[/reports\/portfolio-balances$/, jsonResponse("boom", { status: 500 })]]);
+    const fetchMock = stubFetch([
+      [/reports\/portfolio-balances$/, jsonResponse("boom", { status: 500 })],
+      [/reports\/payables$/, jsonResponse(payables)],
+    ]);
     const res = await loadOwnerDrawData();
     expect(res).toMatchObject({ ok: false, status: 500 });
+    // A persistent 5xx is retried (4 tries) before giving up.
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("portfolio-balances"))).toHaveLength(4);
   });
 
   it("says so when Rentvine isn't configured", async () => {
