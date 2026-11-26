@@ -14,6 +14,8 @@
 // RENTVINE_SUBDOMAIN) on the service — the same creds the other Rentvine
 // report pages use.
 
+import { fetchWithRetry, type RetryOptions } from "@/lib/http-retry";
+
 // PMI Lighthouse's live bank accounts (the inactive "DO NOT USE" 156/157 are
 // excluded). Ids are Rentvine bankAccountIDs; override the set later if the
 // account structure changes.
@@ -89,6 +91,12 @@ function today(): string {
   return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// Rentvine rate-limits (HTTP 429) when several report calls land together (the
+// Accounting page runs a few at once), and blips with 5xx now and then; retry
+// those with backoff instead of failing the panel. Exported so tests can skip
+// the real wait.
+export const reportRetry: RetryOptions = {};
+
 // Run one Rentvine report and return its data rows (rowTypeID 3; 4 = totals).
 // Throws { status } on an HTTP/transport error so callers can map to ok:false.
 async function runReport(
@@ -101,10 +109,11 @@ async function runReport(
   const json = encodeURIComponent(JSON.stringify(body));
   const url = `${baseUrl()}/reports/${route}?exportTypeID=1&json=${json}`;
 
-  const res = await fetch(url, {
-    headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
-    cache: "no-store",
-  });
+  const res = await fetchWithRetry(
+    url,
+    { headers: { Accept: "application/json", Authorization: `Basic ${auth}` }, cache: "no-store" },
+    reportRetry
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     const err = new Error(`Rentvine report ${route} failed (HTTP ${res.status}). ${text.slice(0, 200)}`);

@@ -9,6 +9,7 @@ import {
   paymentMethodLabel,
   payeeTypeLabel,
   isRentvineConfigured,
+  reportRetry,
 } from "@/lib/accounting";
 
 type Data = Record<string, string>;
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.stubEnv("RENTVINE_BASE_URL", "https://acct.rentvine.com/api/manager/");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
+  reportRetry.sleep = async () => {}; // retries without the real backoff wait
 });
 
 afterEach(() => vi.useRealTimers());
@@ -88,6 +90,15 @@ describe("fetchCashOnHand", () => {
 
     expect(result).toMatchObject({ ok: false, status: 503 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries a rate-limited (HTTP 429) report, then succeeds", async () => {
+    const ok = { ok: true, status: 200, json: async () => ({ rows: [] }), text: async () => "" };
+    const limited = { ok: false, status: 429, json: async () => ({}), text: async () => "slow down" };
+    const fetchMock = vi.fn().mockResolvedValueOnce(limited).mockResolvedValue(ok);
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await fetchMoneyOut()).toMatchObject({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("passes through a Rentvine HTTP error", async () => {
