@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { isFeatureEnabled } from "@/config/features";
 
-// Update an invoice (partial, over an allowlist) or discard a draft. Writes to
+// Update an invoice (partial, over an allowlist) or discard a draft.
+// Stale-copy guard: the editor sends base_updated_at (the version it loaded or
+// last saved). The update only applies if the invoice is still at that version;
+// otherwise 409, so an old copy (back button, second tab, a save still in
+// flight) can never overwrite a newer one — e.g. silently dropping a line. Writes to
 // PM-Central's single database (Prisma/Postgres). from_party / billing_party are
 // NOT editable after creation (the sender is fixed, as in the original app).
 export const dynamic = "force-dynamic";
@@ -55,9 +59,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
+  const baseRaw = (body as { base_updated_at?: unknown }).base_updated_at;
+  const base = typeof baseRaw === "string" ? new Date(baseRaw) : null;
+  if (baseRaw !== undefined && baseRaw !== null && (!base || Number.isNaN(base.getTime()))) {
+    return NextResponse.json({ error: "Bad base_updated_at" }, { status: 400 });
+  }
 
   try {
-    await prisma.invoice.update({ where: { id }, data: data as Prisma.InvoiceUpdateInput });
+    if (base) {
+      const { count } = await prisma.invoice.updateMany({
+        where: { id, updatedAt: base },
+        data: data as Prisma.InvoiceUpdateManyMutationInput,
+      });
+      const now = await prisma.invoice.findUnique({ where: { id }, select: { updatedAt: true } });
+      if (!now) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (count === 0) {
+        return NextResponse.json(
+          {
+            error: "This invoice was changed since you opened it. Reload to see the latest — your last edit wasn't saved.",
+            conflict: true,
+          },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ id, updated_at: now.updatedAt.toISOString() });
+    }
+    const saved = await prisma.invoice.update({ where: { id }, data: data as Prisma.InvoiceUpdateInput });
+    return NextResponse.json({ id, updated_at: saved.updatedAt ? saved.updatedAt.toISOString() : null });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -65,7 +93,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const message = e instanceof Error ? e.message : "Update failed";
     return NextResponse.json({ error: message }, { status: 502 });
   }
-  return NextResponse.json({ id });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
