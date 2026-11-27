@@ -44,6 +44,7 @@ const live = {
   ok: true as const,
   portfolios: [{ portfolioId: "75", name: "Grant", owners: ["Ann"], balance: 3000, reserve: 500, unpaid: 100, hold: false }],
   bills: new Map([["75", [{ billId: "1", description: "Pest Control", amount: 100, dateDue: "" }]]]),
+  asOf: "2026-11-27T12:00:00.000Z",
 };
 
 const asAdmin = () =>
@@ -93,7 +94,7 @@ describe("POST /api/accounting/owner-draws", () => {
   it("approving freezes today's Rentvine figures", async () => {
     const res = await post({ month: MONTH, portfolioId: "75", action: "approve", expectDue: 2400 });
     expect(res.status).toBe(200);
-    expect(loadOwnerDrawData).toHaveBeenCalledWith("75");
+    expect(loadOwnerDrawData).toHaveBeenCalledWith("75", { fresh: true }); // never a cached copy
     expect(db.setDrawStatus).toHaveBeenCalledWith(MONTH, "75", "approved", true, "Boss", {
       name: "Grant",
       owners: ["Ann"],
@@ -103,6 +104,14 @@ describe("POST /api/accounting/owner-draws", () => {
       hold: false,
       bills: [{ billId: "1", description: "Pest Control", amount: 100, dateDue: "" }],
     });
+  });
+
+  it("won't approve on stale (fallback) figures when Rentvine is busy", async () => {
+    vi.mocked(loadOwnerDrawData).mockResolvedValue({ ...live, stale: true, staleReason: "Rentvine is busy right now" });
+    const res = await post({ month: MONTH, portfolioId: "75", action: "approve", expectDue: 2400 });
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toMatch(/busy/i);
+    expect(db.setDrawStatus).not.toHaveBeenCalled();
   });
 
   it("refuses to approve when Rentvine moved since the page loaded", async () => {
