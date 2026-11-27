@@ -33,3 +33,24 @@ CREATE TABLE IF NOT EXISTS meeting_topic_notes (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (topic_id, meeting_date)
 );
+
+-- Per-week agenda (Nov 2026): every change is made for a meeting date and
+-- applies from that week on, so earlier weeks keep the agenda they had.
+-- start_date / end_date: the weeks a section or topic shows (NULL = always).
+-- *_titles: a section's / topic's name from a given week on.
+ALTER TABLE meeting_sections ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE meeting_sections ADD COLUMN IF NOT EXISTS end_date DATE;
+ALTER TABLE meeting_topics ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE meeting_topics ADD COLUMN IF NOT EXISTS end_date DATE;
+CREATE TABLE IF NOT EXISTS meeting_section_titles (
+    section_id INT NOT NULL,
+    from_date  DATE NOT NULL,
+    title      TEXT NOT NULL,
+    PRIMARY KEY (section_id, from_date)
+);
+CREATE TABLE IF NOT EXISTS meeting_topic_titles (
+    topic_id  INT NOT NULL,
+    from_date DATE NOT NULL,
+    title     TEXT NOT NULL,
+    PRIMARY KEY (topic_id, from_date)
+);

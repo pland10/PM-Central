@@ -35,16 +35,19 @@ afterEach(() => vi.clearAllMocks());
 
 describe("admin meeting sections", () => {
   it("adds, renames, deletes", async () => {
-    expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "Growth" }))).status).toBe(201);
-    expect(db.addSection).toHaveBeenCalledWith("Growth");
-    await secPATCH(mk("PATCH", "/api/admin/meeting-sections", { id: 1, title: "Growth & Sales" }));
-    expect(db.renameSection).toHaveBeenCalledWith(1, "Growth & Sales");
-    await secDELETE(mk("DELETE", "/api/admin/meeting-sections?id=1"));
-    expect(db.deleteSection).toHaveBeenCalledWith(1);
+    expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "Growth", date: "2026-12-01" }))).status).toBe(201);
+    expect(db.addSection).toHaveBeenCalledWith("Growth", "2026-12-01");
+    await secPATCH(mk("PATCH", "/api/admin/meeting-sections", { id: 1, title: "Growth & Sales", date: "2026-12-01" }));
+    expect(db.renameSection).toHaveBeenCalledWith(1, "Growth & Sales", "2026-12-01");
+    await secDELETE(mk("DELETE", "/api/admin/meeting-sections?id=1&date=2026-12-01"));
+    expect(db.deleteSection).toHaveBeenCalledWith(1, "2026-12-01");
   });
 
   it("rejects an empty title and gates non-admins", async () => {
-    expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "  " }))).status).toBe(400);
+    expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "  ", date: "2026-12-01" }))).status).toBe(400);
+    // Every change is for a meeting date.
+    expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "X" }))).status).toBe(400);
+    expect((await secDELETE(mk("DELETE", "/api/admin/meeting-sections?id=1"))).status).toBe(400);
     asUser();
     expect((await secPOST(mk("POST", "/api/admin/meeting-sections", { title: "X" }))).status).toBe(403);
     vi.mocked(getCurrentUser).mockResolvedValue(null);
@@ -54,16 +57,17 @@ describe("admin meeting sections", () => {
 
 describe("admin meeting topics", () => {
   it("adds (under a section), renames, deletes", async () => {
-    expect((await topPOST(mk("POST", "/api/admin/meeting-topics", { sectionId: 1, title: "Hiring" }))).status).toBe(201);
-    expect(db.addTopic).toHaveBeenCalledWith(1, "Hiring");
-    await topPATCH(mk("PATCH", "/api/admin/meeting-topics", { id: 2, title: "Hiring a PM" }));
-    expect(db.renameTopic).toHaveBeenCalledWith(2, "Hiring a PM");
-    await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2"));
-    expect(db.deleteTopic).toHaveBeenCalledWith(2);
+    expect((await topPOST(mk("POST", "/api/admin/meeting-topics", { sectionId: 1, title: "Hiring", date: "2026-12-01" }))).status).toBe(201);
+    expect(db.addTopic).toHaveBeenCalledWith(1, "Hiring", "2026-12-01");
+    await topPATCH(mk("PATCH", "/api/admin/meeting-topics", { id: 2, title: "Hiring a PM", date: "2026-12-01" }));
+    expect(db.renameTopic).toHaveBeenCalledWith(2, "Hiring a PM", "2026-12-01");
+    await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2&date=2026-12-01"));
+    expect(db.deleteTopic).toHaveBeenCalledWith(2, "2026-12-01");
   });
 
   it("needs a section id to add", async () => {
-    expect((await topPOST(mk("POST", "/api/admin/meeting-topics", { title: "Hiring" }))).status).toBe(400);
+    expect((await topPOST(mk("POST", "/api/admin/meeting-topics", { title: "Hiring", date: "2026-12-01" }))).status).toBe(400);
+    expect((await topPATCH(mk("PATCH", "/api/admin/meeting-topics", { id: 2, title: "X" }))).status).toBe(400);
     expect(db.addTopic).not.toHaveBeenCalled();
   });
 });

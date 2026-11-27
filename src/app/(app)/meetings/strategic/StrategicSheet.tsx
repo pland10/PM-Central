@@ -189,8 +189,8 @@ export function StrategicSheet({
             )}
           </label>
           {canManage && (
-            <Link href="/admin/meeting-topics" className="text-xs font-medium text-brand-600 hover:underline">
-              Edit sections &amp; topics
+            <Link href={`/admin/meeting-topics?date=${date}`} className="text-xs font-medium text-brand-600 hover:underline">
+              Edit this week&apos;s sections &amp; topics
             </Link>
           )}
         </div>
@@ -202,7 +202,7 @@ export function StrategicSheet({
         <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
           No agenda yet.{" "}
           {canManage ? (
-            <Link href="/admin/meeting-topics" className="font-medium text-brand-600 hover:underline">
+            <Link href={`/admin/meeting-topics?date=${date}`} className="font-medium text-brand-600 hover:underline">
               Add sections and topics
             </Link>
           ) : (

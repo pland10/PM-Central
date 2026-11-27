@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import { nestTopics } from "@/lib/meetings";
+import { isMeetingDate, meetingDateOptions, nestTopics, tuesdayOf } from "@/lib/meetings";
 import { listStructureSafe } from "@/lib/meeting-topics-db";
 import { MeetingTopicsManager } from "./MeetingTopicsManager";
 
@@ -9,11 +9,19 @@ import { MeetingTopicsManager } from "./MeetingTopicsManager";
 // strategic meeting agenda (see /meetings/strategic).
 export const dynamic = "force-dynamic";
 
-export default async function MeetingTopicsAdminPage() {
+export default async function MeetingTopicsAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") notFound();
 
-  const { sections, topics } = await listStructureSafe();
+  // The agenda is per meeting date; default to next week's (the one being planned).
+  const { date: raw } = await searchParams;
+  const dateOptions = meetingDateOptions(new Date(), 2, 8);
+  const date = isMeetingDate(raw) ? raw : dateOptions[0] ?? tuesdayOf(new Date());
+  const { sections, topics } = await listStructureSafe(date);
   const nested = nestTopics(sections, topics);
 
   return (
@@ -25,11 +33,13 @@ export default async function MeetingTopicsAdminPage() {
           <Link href="/meetings/strategic" className="font-medium text-brand-600 hover:underline">
             Tuesday strategic meeting
           </Link>
-          : group it into sections, add the topics you walk through under each. Rename by editing the box; changes
-          save when you click away. Deleting a section removes its topics and their notes.
+          , week by week: pick the meeting date, then group it into sections and add the topics you walk through under
+          each. Rename by editing the box; changes save when you click away. A change applies to that week and the
+          weeks after it, so earlier meetings keep the agenda and notes they had.
         </p>
       </div>
-      <MeetingTopicsManager initialSections={nested} />
+      {/* key={date} reloads the editor with that week's agenda. */}
+      <MeetingTopicsManager key={date} initialSections={nested} date={date} dateOptions={dateOptions} />
     </div>
   );
 }
