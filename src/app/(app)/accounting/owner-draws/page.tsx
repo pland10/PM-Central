@@ -7,6 +7,7 @@ import { listDrawMonths, listDrawRecords } from "@/lib/owner-draws-db";
 import { loadOwnerDrawData } from "@/lib/owner-draws-rentvine";
 import { ownerDrawNoteSummaries } from "@/lib/owner-draw-notes-db";
 import { AccountingTabs } from "../AccountingTabs";
+import { LiveStatus } from "./LiveStatus";
 import { OwnerDraws } from "./OwnerDraws";
 
 // Accounting → Owner Draws: the monthly owner payout sheet. Balance, reserve
@@ -15,18 +16,19 @@ import { OwnerDraws } from "./OwnerDraws";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export default async function OwnerDrawsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+export default async function OwnerDrawsPage({ searchParams }: { searchParams: Promise<{ month?: string; refresh?: string }> }) {
   requireFeature("accounting");
   const user = await getCurrentUser();
   if (!canAccessAccounting(user)) notFound();
 
   const thisMonth = monthKeyET();
-  const asked = (await searchParams).month;
+  const params = await searchParams;
+  const asked = params.month;
   const month = isMonthKey(asked) && asked <= thisMonth ? asked : thisMonth;
   const isCurrent = month === thisMonth;
 
   const [live, records, previous, savedMonths, noteSummaries] = await Promise.all([
-    isCurrent ? loadOwnerDrawData() : Promise.resolve(null),
+    isCurrent ? loadOwnerDrawData(undefined, { fresh: params.refresh === "1" }) : Promise.resolve(null),
     listDrawRecords(month),
     listDrawRecords(prevMonthKey(month)),
     listDrawMonths(),
@@ -46,10 +48,14 @@ export default async function OwnerDrawsPage({ searchParams }: { searchParams: P
     <div>
       <h1 className="text-lg font-semibold text-ink">Accounting</h1>
       <AccountingTabs />
-      {live && !live.ok && (
-        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Couldn&apos;t load balances from Rentvine: {live.error}
-        </p>
+      {live && (
+        <LiveStatus
+          live={
+            live.ok
+              ? { ok: true, asOf: live.asOf, stale: live.stale, staleReason: live.staleReason }
+              : { ok: false, error: live.error }
+          }
+        />
       )}
       <OwnerDraws
         key={month}
