@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { tuesdayOf } from "@/lib/meetings";
 
 type Topic = { id: number; title: string };
 type Section = { id: number; title: string; topics: Topic[] };
@@ -19,7 +21,30 @@ async function postJSON(url: string, method: string, body?: unknown): Promise<{ 
   }
 }
 
-export function MeetingTopicsManager({ initialSections }: { initialSections: Section[] }) {
+function prettyDate(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+// Edits the agenda for one meeting date. Every change applies from that week
+// on; earlier weeks keep the agenda they had (see src/lib/meeting-topics-db.ts).
+export function MeetingTopicsManager({
+  initialSections,
+  date,
+  dateOptions,
+}: {
+  initialSections: Section[];
+  date: string;
+  dateOptions: string[];
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const currentTuesday = tuesdayOf(new Date());
   const [sections, setSections] = useState<Section[]>(initialSections);
   const [newSection, setNewSection] = useState("");
   const [newTopic, setNewTopic] = useState<Record<number, string>>({});
@@ -28,7 +53,7 @@ export function MeetingTopicsManager({ initialSections }: { initialSections: Sec
   async function addSection() {
     const title = newSection.trim();
     if (!title) return;
-    const r = await postJSON("/api/admin/meeting-sections", "POST", { title });
+    const r = await postJSON("/api/admin/meeting-sections", "POST", { title, date });
     if (!r?.id) return setError("Couldn't add that section.");
     setSections((s) => [...s, { id: r.id!, title, topics: [] }]);
     setNewSection("");
@@ -36,19 +61,19 @@ export function MeetingTopicsManager({ initialSections }: { initialSections: Sec
 
   async function saveSectionTitle(id: number, title: string) {
     if (!title.trim()) return;
-    if (!(await postJSON("/api/admin/meeting-sections", "PATCH", { id, title: title.trim() }))) setError("Couldn't rename that section.");
+    if (!(await postJSON("/api/admin/meeting-sections", "PATCH", { id, title: title.trim(), date }))) setError("Couldn't rename that section.");
   }
 
   async function removeSection(id: number) {
-    if (!confirm("Delete this section and all its topics (and their notes)?")) return;
-    if (await postJSON(`/api/admin/meeting-sections?id=${id}`, "DELETE")) setSections((s) => s.filter((x) => x.id !== id));
+    if (!confirm(`Remove this section and its topics from ${prettyDate(date)} on? Earlier weeks keep them.`)) return;
+    if (await postJSON(`/api/admin/meeting-sections?id=${id}&date=${date}`, "DELETE")) setSections((s) => s.filter((x) => x.id !== id));
     else setError("Couldn't delete that section.");
   }
 
   async function addTopic(sectionId: number) {
     const title = (newTopic[sectionId] ?? "").trim();
     if (!title) return;
-    const r = await postJSON("/api/admin/meeting-topics", "POST", { sectionId, title });
+    const r = await postJSON("/api/admin/meeting-topics", "POST", { sectionId, title, date });
     if (!r?.id) return setError("Couldn't add that topic.");
     setSections((s) => s.map((x) => (x.id === sectionId ? { ...x, topics: [...x.topics, { id: r.id!, title }] } : x)));
     setNewTopic((n) => ({ ...n, [sectionId]: "" }));
@@ -56,17 +81,43 @@ export function MeetingTopicsManager({ initialSections }: { initialSections: Sec
 
   async function saveTopicTitle(id: number, title: string) {
     if (!title.trim()) return;
-    if (!(await postJSON("/api/admin/meeting-topics", "PATCH", { id, title: title.trim() }))) setError("Couldn't rename that topic.");
+    if (!(await postJSON("/api/admin/meeting-topics", "PATCH", { id, title: title.trim(), date }))) setError("Couldn't rename that topic.");
   }
 
   async function removeTopic(sectionId: number, id: number) {
-    if (await postJSON(`/api/admin/meeting-topics?id=${id}`, "DELETE"))
+    if (await postJSON(`/api/admin/meeting-topics?id=${id}&date=${date}`, "DELETE"))
       setSections((s) => s.map((x) => (x.id === sectionId ? { ...x, topics: x.topics.filter((t) => t.id !== id) } : x)));
     else setError("Couldn't delete that topic.");
   }
 
   return (
     <div>
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <span className="font-medium">Meeting date</span>
+          <select
+            aria-label="Meeting date"
+            value={date}
+            disabled={isPending}
+            onChange={(e) => {
+              const v = e.target.value;
+              startTransition(() => router.push(`/admin/meeting-topics?date=${v}`));
+            }}
+            className="rounded-lg border border-slate-200 px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none disabled:opacity-60"
+          >
+            {dateOptions.map((d) => (
+              <option key={d} value={d}>
+                {prettyDate(d)}
+                {d === currentTuesday ? " · this week" : d > currentTuesday ? " · next week" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-slate-500">
+          Changes apply to {prettyDate(date)} and the weeks after it. Earlier weeks keep their own agenda.
+        </p>
+      </div>
+
       {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
 
       <div className="space-y-4">

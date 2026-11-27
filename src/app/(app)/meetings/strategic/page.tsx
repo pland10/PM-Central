@@ -5,8 +5,8 @@ import { listStructureSafe, topicNotesForDate, topicPreviousNotes } from "@/lib/
 import { MeetingTabs } from "../MeetingTabs";
 import { StrategicSheet, type StrategicSection } from "./StrategicSheet";
 
-// Tuesday strategic meeting: walk the admin-managed agenda (sections → topics),
-// taking a dated note on each topic. Date defaults to this week's Tuesday.
+// Tuesday strategic meeting: walk that week's admin-managed agenda (sections →
+// topics), taking a dated note on each topic. Date defaults to this week's Tuesday.
 export const dynamic = "force-dynamic";
 
 export default async function StrategicMeetingPage({
@@ -20,7 +20,7 @@ export default async function StrategicMeetingPage({
   const date = isMeetingDate(raw) ? raw : tuesdayOf(new Date());
 
   const [{ sections, topics }, notes, prior] = await Promise.all([
-    listStructureSafe(),
+    listStructureSafe(date),
     topicNotesForDate(date).catch(() => ({}) as Record<number, string>),
     topicPreviousNotes(date).catch(() => ({}) as Record<number, { date: string; body: string }>),
   ]);
