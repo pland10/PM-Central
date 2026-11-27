@@ -74,6 +74,6 @@ describe("StrategicSheet", () => {
   it("shows an empty state with an admin link when there's no agenda", () => {
     render(<StrategicSheet date="2026-11-17" dateOptions={["2026-11-17"]} sections={[]} canManage />);
     expect(screen.getByText(/No agenda yet/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Add sections and topics/ })).toHaveAttribute("href", "/admin/meeting-topics");
+    expect(screen.getByRole("link", { name: /Add sections and topics/ })).toHaveAttribute("href", "/admin/meeting-topics?date=2026-11-17");
   });
 });
