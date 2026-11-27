@@ -59,8 +59,11 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "Bad id" }, { status: 400 });
   const date = req.nextUrl.searchParams.get("date");
   if (!isMeetingDate(date)) return NO_DATE();
+  // "week" = only that meeting; "forward" (the default) = that week and after.
+  const scope = req.nextUrl.searchParams.get("scope") ?? "forward";
+  if (scope !== "week" && scope !== "forward") return NextResponse.json({ error: "Bad scope" }, { status: 400 });
   try {
-    await deleteTopic(id, date);
+    await deleteTopic(id, date, scope);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return fail(e);

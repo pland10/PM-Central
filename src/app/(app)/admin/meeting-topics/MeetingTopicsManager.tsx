@@ -64,10 +64,15 @@ export function MeetingTopicsManager({
     if (!(await postJSON("/api/admin/meeting-sections", "PATCH", { id, title: title.trim(), date }))) setError("Couldn't rename that section.");
   }
 
-  async function removeSection(id: number) {
-    if (!confirm(`Remove this section and its topics from ${prettyDate(date)} on? Earlier weeks keep them.`)) return;
-    if (await postJSON(`/api/admin/meeting-sections?id=${id}&date=${date}`, "DELETE")) setSections((s) => s.filter((x) => x.id !== id));
-    else setError("Couldn't delete that section.");
+  // Removing asks which weeks it's for: only this meeting, or this week and after.
+  type Scope = "week" | "forward";
+  const [removing, setRemoving] = useState<{ kind: "section" | "topic"; id: number; sectionId: number } | null>(null);
+
+  async function removeSection(id: number, scope: Scope) {
+    setRemoving(null);
+    if (await postJSON(`/api/admin/meeting-sections?id=${id}&date=${date}&scope=${scope}`, "DELETE"))
+      setSections((s) => s.filter((x) => x.id !== id));
+    else setError("Couldn't remove that section.");
   }
 
   async function addTopic(sectionId: number) {
@@ -84,11 +89,28 @@ export function MeetingTopicsManager({
     if (!(await postJSON("/api/admin/meeting-topics", "PATCH", { id, title: title.trim(), date }))) setError("Couldn't rename that topic.");
   }
 
-  async function removeTopic(sectionId: number, id: number) {
-    if (await postJSON(`/api/admin/meeting-topics?id=${id}&date=${date}`, "DELETE"))
+  async function removeTopic(sectionId: number, id: number, scope: Scope) {
+    setRemoving(null);
+    if (await postJSON(`/api/admin/meeting-topics?id=${id}&date=${date}&scope=${scope}`, "DELETE"))
       setSections((s) => s.map((x) => (x.id === sectionId ? { ...x, topics: x.topics.filter((t) => t.id !== id) } : x)));
-    else setError("Couldn't delete that topic.");
+    else setError("Couldn't remove that topic.");
   }
+
+  // The "which weeks?" choice shown in place of a Remove button.
+  const removeChoice = (onPick: (scope: Scope) => void) => (
+    <span className="flex shrink-0 items-center gap-1.5 text-xs">
+      <span className="text-slate-500">Remove:</span>
+      <button type="button" onClick={() => onPick("week")} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700 hover:bg-slate-200">
+        Only this week
+      </button>
+      <button type="button" onClick={() => onPick("forward")} className="rounded-md bg-red-50 px-2 py-0.5 font-medium text-red-700 hover:bg-red-100">
+        This week and after
+      </button>
+      <button type="button" onClick={() => setRemoving(null)} className="text-slate-400 hover:text-slate-600">
+        Cancel
+      </button>
+    </span>
+  );
 
   return (
     <div>
@@ -114,7 +136,8 @@ export function MeetingTopicsManager({
           </select>
         </label>
         <p className="text-xs text-slate-500">
-          Changes apply to {prettyDate(date)} and the weeks after it. Earlier weeks keep their own agenda.
+          Adds and renames apply to {prettyDate(date)} and the weeks after it; removing asks whether it&apos;s only this
+          week. Earlier weeks keep their own agenda.
         </p>
       </div>
 
@@ -130,9 +153,17 @@ export function MeetingTopicsManager({
                 onBlur={(e) => saveSectionTitle(sec.id, e.target.value)}
                 className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold text-slate-900 focus:border-brand-500 focus:outline-none"
               />
-              <button type="button" onClick={() => removeSection(sec.id)} className="text-xs text-slate-400 hover:text-red-600">
-                Delete section
-              </button>
+              {removing?.kind === "section" && removing.id === sec.id ? (
+                removeChoice((scope) => removeSection(sec.id, scope))
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRemoving({ kind: "section", id: sec.id, sectionId: sec.id })}
+                  className="text-xs text-slate-400 hover:text-red-600"
+                >
+                  Remove section
+                </button>
+              )}
             </div>
 
             <ul className="mt-3 space-y-1.5 pl-1">
@@ -145,9 +176,17 @@ export function MeetingTopicsManager({
                     onBlur={(e) => saveTopicTitle(t.id, e.target.value)}
                     className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-brand-500 focus:outline-none"
                   />
-                  <button type="button" onClick={() => removeTopic(sec.id, t.id)} className="text-xs text-slate-400 hover:text-red-600">
-                    Remove
-                  </button>
+                  {removing?.kind === "topic" && removing.id === t.id ? (
+                    removeChoice((scope) => removeTopic(sec.id, t.id, scope))
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setRemoving({ kind: "topic", id: t.id, sectionId: sec.id })}
+                      className="text-xs text-slate-400 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

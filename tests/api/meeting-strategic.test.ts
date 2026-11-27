@@ -40,7 +40,9 @@ describe("admin meeting sections", () => {
     await secPATCH(mk("PATCH", "/api/admin/meeting-sections", { id: 1, title: "Growth & Sales", date: "2026-12-01" }));
     expect(db.renameSection).toHaveBeenCalledWith(1, "Growth & Sales", "2026-12-01");
     await secDELETE(mk("DELETE", "/api/admin/meeting-sections?id=1&date=2026-12-01"));
-    expect(db.deleteSection).toHaveBeenCalledWith(1, "2026-12-01");
+    expect(db.deleteSection).toHaveBeenCalledWith(1, "2026-12-01", "forward");
+    await secDELETE(mk("DELETE", "/api/admin/meeting-sections?id=1&date=2026-12-01&scope=week"));
+    expect(db.deleteSection).toHaveBeenLastCalledWith(1, "2026-12-01", "week");
   });
 
   it("rejects an empty title and gates non-admins", async () => {
@@ -61,8 +63,11 @@ describe("admin meeting topics", () => {
     expect(db.addTopic).toHaveBeenCalledWith(1, "Hiring", "2026-12-01");
     await topPATCH(mk("PATCH", "/api/admin/meeting-topics", { id: 2, title: "Hiring a PM", date: "2026-12-01" }));
     expect(db.renameTopic).toHaveBeenCalledWith(2, "Hiring a PM", "2026-12-01");
-    await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2&date=2026-12-01"));
-    expect(db.deleteTopic).toHaveBeenCalledWith(2, "2026-12-01");
+    await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2&date=2026-12-01&scope=week"));
+    expect(db.deleteTopic).toHaveBeenCalledWith(2, "2026-12-01", "week");
+    await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2&date=2026-12-01&scope=forward"));
+    expect(db.deleteTopic).toHaveBeenLastCalledWith(2, "2026-12-01", "forward");
+    expect((await topDELETE(mk("DELETE", "/api/admin/meeting-topics?id=2&date=2026-12-01&scope=all"))).status).toBe(400);
   });
 
   it("needs a section id to add", async () => {
