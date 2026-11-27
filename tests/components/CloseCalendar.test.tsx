@@ -220,7 +220,7 @@ describe("CloseCalendar — person colors", () => {
     setup({ colors: { "ari@pmi.com": BLUE }, me: "paul@pmi.com" });
     const chip = screen.getAllByTitle(/Reimbursables review/)[0];
     expect(chip).toHaveStyle({ borderLeftColor: BLUE });
-    const legend = screen.getByLabelText("Colors");
+    const legend = screen.getByLabelText("Show people");
     expect(within(legend).getByText("Ari")).toBeInTheDocument();
     expect(within(legend).getByText("Unassigned")).toBeInTheDocument();
   });
@@ -258,3 +258,32 @@ describe("CloseCalendar — admins set everyone's colors", () => {
   });
 });
 
+
+describe("CloseCalendar — people filter", () => {
+  it("hides a person's events when toggled off, and 'Show all' brings them back", async () => {
+    const { user } = setup();
+    expect(screen.getByLabelText("done-1-2026-11")).toBeInTheDocument(); // Ari's
+    expect(screen.getByLabelText("done-2-2026-11")).toBeInTheDocument(); // Unassigned
+
+    await user.click(screen.getByRole("button", { name: "Ari" }));
+    expect(screen.queryByLabelText("done-1-2026-11")).not.toBeInTheDocument(); // Ari hidden
+    expect(screen.getByLabelText("done-2-2026-11")).toBeInTheDocument(); // unassigned still shows
+
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getByLabelText("done-1-2026-11")).toBeInTheDocument();
+  });
+
+  it("can hide the unassigned events", async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Unassigned" }));
+    expect(screen.queryByLabelText("done-2-2026-11")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("done-1-2026-11")).toBeInTheDocument();
+  });
+
+  it("'Only me' shows just my events", async () => {
+    const { user } = setup({ me: "ari@pmi.com" });
+    await user.click(screen.getByRole("button", { name: "Only me" }));
+    expect(screen.getByLabelText("done-1-2026-11")).toBeInTheDocument(); // mine (Ari)
+    expect(screen.queryByLabelText("done-2-2026-11")).not.toBeInTheDocument(); // unassigned hidden
+  });
+});
