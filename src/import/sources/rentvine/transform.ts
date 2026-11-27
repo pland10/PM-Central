@@ -48,7 +48,11 @@ export function rentvineToCanonical(data: RentvineExport): CanonicalDataset {
               endDate: l.end,
               tenants: [
                 {
-                  externalId: `${p.id}-${i + 1}-t`,
+                  // Keyed by the lease, never by position: when a property has
+                  // several active leases and Rentvine returns them in a new
+                  // order, a position key moved names between leases (Nov 2026:
+                  // two tenants' names swapped, so the end dates looked swapped).
+                  externalId: l.leaseId != null ? `lease-${l.leaseId}-t` : `${p.id}-${i + 1}-t`,
                   email: l.email ?? null,
                   phone: l.phone ?? null,
                   ...nameParts(l.tenant),

@@ -172,6 +172,7 @@ export async function loadCanonical(
         seenLeases.push(lExt);
         counts.leases++;
 
+        const contactIds: string[] = [];
         for (let i = 0; i < u.lease.tenants.length; i++) {
           const t = u.lease.tenants[i];
           const tExt = ns(account, "contact", t.externalId);
@@ -188,6 +189,7 @@ export async function loadCanonical(
             update: tenantData,
           });
           counts.tenants++;
+          contactIds.push(contact.id);
 
           const existing = await prisma.leaseTenant.findUnique({
             where: { leaseId_contactId: { leaseId: lease.id, contactId: contact.id } },
@@ -197,6 +199,11 @@ export async function loadCanonical(
               data: { leaseId: lease.id, contactId: contact.id, isPrimary: i === 0 },
             });
           }
+        }
+        // Sync: the source's tenant list is the truth, so drop links to anyone
+        // no longer on the lease (incl. stale links from older tenant keys).
+        if (syncMode) {
+          await prisma.leaseTenant.deleteMany({ where: { leaseId: lease.id, contactId: { notIn: contactIds } } });
         }
       }
     }

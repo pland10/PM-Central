@@ -31,6 +31,20 @@ const exportOf = (over: Partial<RentvineExport> = {}): RentvineExport => ({
 });
 
 describe("rentvineToCanonical", () => {
+  it("keys each tenant by its lease, so a different lease order can't swap names", () => {
+    const a = lease({ leaseId: 28, tenant: "Hal Adams", end: "2026-12-31" });
+    const b = lease({ leaseId: 33, tenant: "Cy Baker", end: "2027-05-31" });
+    const tenantOf = (leases: RvLease[]) =>
+      Object.fromEntries(
+        rentvineToCanonical(exportOf({ activeLeases: leases })).properties[0].units.map((u) => [
+          u.lease!.externalId,
+          u.lease!.tenants[0].externalId,
+        ])
+      );
+    expect(tenantOf([a, b])).toEqual({ "28": "lease-28-t", "33": "lease-33-t" });
+    expect(tenantOf([b, a])).toEqual({ "28": "lease-28-t", "33": "lease-33-t" });
+  });
+
   it("tags the dataset with its source and account", () => {
     const ds = rentvineToCanonical(exportOf());
     expect(ds.source).toBe("rentvine");

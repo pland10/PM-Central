@@ -125,6 +125,20 @@ describe("loadCanonical", () => {
     expect(db.leaseTenant.create).not.toHaveBeenCalled();
   });
 
+  it("sync drops a lease's links to tenants it no longer has", async () => {
+    await load(dataset(), { mode: "sync" });
+    const unlink = db.leaseTenant.deleteMany.mock.calls.map(([a]) => a.where);
+    expect(unlink).toContainEqual({
+      leaseId: "lease:pmilighthouse:lease:27",
+      contactId: { notIn: ["contact:pmilighthouse:contact:12-1-t", "contact:pmilighthouse:contact:12-1-t2"] },
+    });
+  });
+
+  it("an import (not sync) leaves existing tenant links alone", async () => {
+    await load(dataset());
+    expect(db.leaseTenant.deleteMany).not.toHaveBeenCalled();
+  });
+
   it("loads work orders for known properties and skips orphans", async () => {
     const counts = await load(
       dataset({
