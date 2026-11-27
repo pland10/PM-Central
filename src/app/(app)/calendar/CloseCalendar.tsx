@@ -80,6 +80,15 @@ export function CloseCalendar({
   const [view, setView] = useState({ y: ty, m: tm });
   const [editing, setEditing] = useState<CalendarEvent | "new" | null>(null);
   const [error, setError] = useState("");
+  // People filter: owner emails whose events are hidden ("__none__" = unassigned).
+  const [hiddenOwners, setHiddenOwners] = useState<Set<string>>(new Set());
+  const toggleOwner = (key: string) =>
+    setHiddenOwners((h) => {
+      const n = new Set(h);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
 
   const idx = (v: { y: number; m: number }) => v.y * 12 + v.m - 1;
   const step = (n: number) =>
@@ -94,7 +103,12 @@ export function CloseCalendar({
   const last = ymd(view.y, view.m, daysInMonth(view.y, view.m));
   const active = useMemo(() => events.filter((e) => e.active), [events]);
   const byId = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
-  const occ = useMemo(() => occurrencesBetween(active, first, last), [active, first, last]);
+  // Only the selected people's events feed the grid and the task list.
+  const visible = useMemo(
+    () => active.filter((e) => !hiddenOwners.has(e.ownerEmail ? e.ownerEmail.toLowerCase() : "__none__")),
+    [active, hiddenOwners]
+  );
+  const occ = useMemo(() => occurrencesBetween(visible, first, last), [visible, first, last]);
   // The task list shows per-day tasks (every business day / chosen weekdays) only
   // for today (the grid shows every day); otherwise they'd fill the list.
   const listed = useMemo(
@@ -151,9 +165,20 @@ export function CloseCalendar({
   });
   // Legend: everyone who has picked a color, plus the grey for unassigned / not picked yet.
   const nameOf = (email: string) => staff.find((s) => s.email.toLowerCase() === email)?.name ?? email;
-  const legend = Object.entries(colors)
-    .map(([email, hex]) => ({ name: nameOf(email), hex }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // People who own events — each becomes a toggle to show / hide their events.
+  const ownerMap = new Map<string, string>(); // owner email (lower-case) → display name
+  for (const e of active) {
+    if (e.ownerEmail) {
+      const k = e.ownerEmail.toLowerCase();
+      if (!ownerMap.has(k)) ownerMap.set(k, e.ownerName || nameOf(k));
+    }
+  }
+  const people = [...ownerMap.entries()].map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name));
+  const hasUnassigned = active.some((e) => !e.ownerEmail);
+  const anyHidden = hiddenOwners.size > 0;
+  const meKey = me.toLowerCase();
+  const onlyMe = () =>
+    setHiddenOwners(new Set([...people.map((p) => p.key), ...(hasUnassigned ? ["__none__"] : [])].filter((k) => k !== meKey)));
 
   const btn = "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40";
 
@@ -193,18 +218,53 @@ export function CloseCalendar({
         </div>
       </div>
 
-      <div aria-label="Colors" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-        {legend.map((l) => (
-          <span key={l.name} className="inline-flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.hex }} />
-            {l.name}
-          </span>
-        ))}
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NO_COLOR }} />
-          Unassigned
-        </span>
-        <span className="inline-flex items-center gap-1 text-red-600">
+      <div aria-label="Show people" className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+        <span className="font-medium text-slate-500">Show:</span>
+        {people.map((p) => {
+          const shown = !hiddenOwners.has(p.key);
+          return (
+            <button
+              key={p.key}
+              type="button"
+              aria-pressed={shown}
+              onClick={() => toggleOwner(p.key)}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${shown ? "border-slate-200 bg-white text-slate-700" : "border-transparent bg-slate-50 text-slate-400 line-through"}`}
+            >
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorOf(p.key), opacity: shown ? 1 : 0.4 }} />
+              {p.name}
+            </button>
+          );
+        })}
+        {hasUnassigned &&
+          (() => {
+            const shown = !hiddenOwners.has("__none__");
+            return (
+              <button
+                type="button"
+                aria-pressed={shown}
+                onClick={() => toggleOwner("__none__")}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${shown ? "border-slate-200 bg-white text-slate-700" : "border-transparent bg-slate-50 text-slate-400 line-through"}`}
+              >
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NO_COLOR, opacity: shown ? 1 : 0.4 }} />
+                Unassigned
+              </button>
+            );
+          })()}
+        {meKey && people.some((p) => p.key === meKey) && (
+          <button type="button" onClick={onlyMe} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600 hover:bg-slate-50">
+            Only me
+          </button>
+        )}
+        {anyHidden && (
+          <button
+            type="button"
+            onClick={() => setHiddenOwners(new Set())}
+            className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-medium text-brand-600 hover:bg-slate-50"
+          >
+            Show all
+          </button>
+        )}
+        <span className="ml-1 inline-flex items-center gap-1 text-red-600">
           <span className="inline-block h-2.5 w-2.5 rounded-sm ring-1 ring-red-500" />
           Overdue
         </span>
