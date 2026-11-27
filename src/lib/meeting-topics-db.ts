@@ -8,8 +8,10 @@ import { prisma } from "@/lib/prisma";
 // The agenda is per meeting date: every change is made FOR a date and applies
 // from that week on, never to earlier weeks.
 //   - added on D: start_date = D (earlier weeks don't show it)
-//   - removed on D: end_date = D (earlier weeks still show it, with their notes);
-//     if it was added that same week (or later), it's simply deleted
+//   - removed on D, "this week and after": end_date = D (earlier weeks still
+//     show it, with their notes); if it was added that same week (or later),
+//     it's simply deleted
+//   - removed on D, "only this week": a skip row for D (other weeks unchanged)
 //   - renamed on D: a title row from D on (earlier weeks keep the old name)
 // Rows with no dates (the agenda from before this) show on every week.
 
@@ -57,7 +59,20 @@ const DDL = [
      title     TEXT NOT NULL,
      PRIMARY KEY (topic_id, from_date)
    )`,
+  // Removed for one week only.
+  `CREATE TABLE IF NOT EXISTS meeting_section_skips (
+     section_id   INT NOT NULL,
+     meeting_date DATE NOT NULL,
+     PRIMARY KEY (section_id, meeting_date)
+   )`,
+  `CREATE TABLE IF NOT EXISTS meeting_topic_skips (
+     topic_id     INT NOT NULL,
+     meeting_date DATE NOT NULL,
+     PRIMARY KEY (topic_id, meeting_date)
+   )`,
 ];
+
+export type RemoveScope = "week" | "forward";
 
 let tables: Promise<void> | null = null;
 export function ensureStrategicTables(): Promise<void> {
@@ -86,6 +101,7 @@ export async function listSections(date: string): Promise<SectionRow[]> {
                      ORDER BY t.from_date DESC LIMIT 1), s.title) AS title
     FROM meeting_sections s
     WHERE ${showsOn("s", date)}
+      AND NOT EXISTS (SELECT 1 FROM meeting_section_skips k WHERE k.section_id = s.id AND k.meeting_date = ${date}::date)
     ORDER BY s.sort_order, s.id`);
 }
 
@@ -98,6 +114,7 @@ export async function listTopics(date: string): Promise<TopicRow[]> {
                      ORDER BY t.from_date DESC LIMIT 1), tp.title) AS title
     FROM meeting_topics tp
     WHERE ${showsOn("tp", date)}
+      AND NOT EXISTS (SELECT 1 FROM meeting_topic_skips k WHERE k.topic_id = tp.id AND k.meeting_date = ${date}::date)
     ORDER BY tp.sort_order, tp.id`);
   return rows.map((r) => ({ id: r.id, sectionId: r.section_id, title: r.title, status: r.status }));
 }
@@ -128,10 +145,16 @@ export async function renameSection(id: number, title: string, date: string): Pr
     ON CONFLICT (section_id, from_date) DO UPDATE SET title = EXCLUDED.title`);
 }
 
-// Remove a section from date on. One that only started that week (or later)
-// never showed before, so it goes for good — with its topics and their notes.
-export async function deleteSection(id: number, date: string): Promise<void> {
+// Remove a section for one week ("week"), or from that week on ("forward").
+// Going forward, one that only started that week (or later) never showed
+// before, so it goes for good — with its topics and their notes.
+export async function deleteSection(id: number, date: string, scope: RemoveScope): Promise<void> {
   await ensureStrategicTables();
+  if (scope === "week") {
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO meeting_section_skips (section_id, meeting_date) VALUES (${id}, ${date}::date) ON CONFLICT DO NOTHING`);
+    return;
+  }
   const rows = await prisma.$queryRaw<{ fresh: boolean }[]>(Prisma.sql`
     SELECT (start_date IS NOT NULL AND start_date >= ${date}::date) AS fresh FROM meeting_sections WHERE id = ${id}`);
   if (!rows.length) return;
@@ -146,8 +169,12 @@ export async function deleteSection(id: number, date: string): Promise<void> {
     prisma.$executeRaw(
       Prisma.sql`DELETE FROM meeting_topic_titles WHERE topic_id IN (SELECT id FROM meeting_topics WHERE section_id = ${id})`
     ),
+    prisma.$executeRaw(
+      Prisma.sql`DELETE FROM meeting_topic_skips WHERE topic_id IN (SELECT id FROM meeting_topics WHERE section_id = ${id})`
+    ),
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_topics WHERE section_id = ${id}`),
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_section_titles WHERE section_id = ${id}`),
+    prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_section_skips WHERE section_id = ${id}`),
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_sections WHERE id = ${id}`),
   ]);
 }
@@ -173,10 +200,16 @@ export async function setTopicStatus(id: number, status: string): Promise<void> 
   await prisma.$executeRaw(Prisma.sql`UPDATE meeting_topics SET status = ${status} WHERE id = ${id}`);
 }
 
-// Remove a topic from date on (earlier weeks keep it and their notes). One
-// added that same week (or later) is deleted outright.
-export async function deleteTopic(id: number, date: string): Promise<void> {
+// Remove a topic for one week ("week"), or from that week on ("forward";
+// earlier weeks keep it and their notes). Going forward, one added that same
+// week (or later) is deleted outright.
+export async function deleteTopic(id: number, date: string, scope: RemoveScope): Promise<void> {
   await ensureStrategicTables();
+  if (scope === "week") {
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO meeting_topic_skips (topic_id, meeting_date) VALUES (${id}, ${date}::date) ON CONFLICT DO NOTHING`);
+    return;
+  }
   const rows = await prisma.$queryRaw<{ fresh: boolean }[]>(Prisma.sql`
     SELECT (start_date IS NOT NULL AND start_date >= ${date}::date) AS fresh FROM meeting_topics WHERE id = ${id}`);
   if (!rows.length) return;
@@ -187,6 +220,7 @@ export async function deleteTopic(id: number, date: string): Promise<void> {
   await prisma.$transaction([
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_topic_notes WHERE topic_id = ${id}`),
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_topic_titles WHERE topic_id = ${id}`),
+    prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_topic_skips WHERE topic_id = ${id}`),
     prisma.$executeRaw(Prisma.sql`DELETE FROM meeting_topics WHERE id = ${id}`),
   ]);
 }

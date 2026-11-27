@@ -54,3 +54,15 @@ CREATE TABLE IF NOT EXISTS meeting_topic_titles (
     title     TEXT NOT NULL,
     PRIMARY KEY (topic_id, from_date)
 );
+
+-- Removed for ONE meeting only ("Only this week"); other weeks unchanged.
+CREATE TABLE IF NOT EXISTS meeting_section_skips (
+    section_id   INT NOT NULL,
+    meeting_date DATE NOT NULL,
+    PRIMARY KEY (section_id, meeting_date)
+);
+CREATE TABLE IF NOT EXISTS meeting_topic_skips (
+    topic_id     INT NOT NULL,
+    meeting_date DATE NOT NULL,
+    PRIMARY KEY (topic_id, meeting_date)
+);

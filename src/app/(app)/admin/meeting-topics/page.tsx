@@ -34,8 +34,9 @@ export default async function MeetingTopicsAdminPage({
             Tuesday strategic meeting
           </Link>
           , week by week: pick the meeting date, then group it into sections and add the topics you walk through under
-          each. Rename by editing the box; changes save when you click away. A change applies to that week and the
-          weeks after it, so earlier meetings keep the agenda and notes they had.
+          each. Rename by editing the box; changes save when you click away. Adds and renames apply to that week and
+          the weeks after it; when you remove something you choose &ldquo;only this week&rdquo; or &ldquo;this week
+          and after&rdquo;. Earlier meetings keep the agenda and notes they had.
         </p>
       </div>
       {/* key={date} reloads the editor with that week's agenda. */}
