@@ -7,6 +7,9 @@
 // below (429 + 5xx). It does NOT retry 4xx — those are our bugs or auth issues,
 // not transient. On the final attempt it returns the last response as-is, so the
 // caller's own `if (!res.ok) throw ...` still produces its usual error message.
+//
+// When the server sends Retry-After (seconds or an HTTP date) we wait at least
+// that long — capped at maxRetryAfterMs so one bad header can't hang a request.
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
@@ -25,11 +28,22 @@ export interface RetryOptions {
   attempts?: number; // total tries, default 4
   baseDelayMs?: number; // first backoff, default 500
   maxDelayMs?: number; // backoff ceiling, default 8000
+  maxRetryAfterMs?: number; // most we'll honour from a Retry-After header, default 20000
   retryStatus?: (status: number) => boolean;
   onRetry?: (info: RetryInfo) => void;
   // Injectable for tests; defaults to a real timer / Math.random.
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  now?: () => number;
+}
+
+// Retry-After → milliseconds to wait, or null when absent/unparseable.
+export function retryAfterMs(res: Response | undefined, now: number = Date.now()): number | null {
+  const raw = res?.headers?.get?.("retry-after")?.trim();
+  if (!raw) return null;
+  if (/^\d+(\.\d+)?$/.test(raw)) return Math.round(Number(raw) * 1000);
+  const at = Date.parse(raw);
+  return Number.isNaN(at) ? null : Math.max(0, at - now);
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -43,10 +57,12 @@ export async function fetchWithRetry(
     attempts = 4,
     baseDelayMs = 500,
     maxDelayMs = 8000,
+    maxRetryAfterMs = 20000,
     retryStatus = isRetryableStatus,
     onRetry,
     sleep = defaultSleep,
     random = Math.random,
+    now = Date.now,
   } = opts;
 
   let lastError: unknown;
@@ -69,7 +85,9 @@ export async function fetchWithRetry(
     // Exponential backoff with half-jitter: wait between 50% and 100% of the
     // capped backoff, so parallel requests don't all retry in lockstep.
     const backoff = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
-    const delayMs = backoff / 2 + random() * (backoff / 2);
+    const jittered = backoff / 2 + random() * (backoff / 2);
+    const asked = retryAfterMs(res, now());
+    const delayMs = asked === null ? jittered : Math.max(jittered, Math.min(asked, maxRetryAfterMs));
     onRetry?.({ attempt, delayMs, status: res?.status, error: res ? undefined : lastError });
     await sleep(delayMs);
   }

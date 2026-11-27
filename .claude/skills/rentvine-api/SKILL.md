@@ -100,6 +100,20 @@ regenerate it. "New API Secret" regenerates the secret only; the key id stays.
 Before regenerating any secret, list every repo/env that holds it. The Rentvine
 **MCP connector** uses separate auth — unaffected by any of these.
 
+## Rate limits (HTTP 429)
+Rentvine rate-limits `/reports/*` hard. On 2026-11-26 Owner Draws got 429 on
+`portfolio-balances` even with no sync running and a 4-try retry of a few
+seconds, so the limit lasts longer than that. The limits aren't documented
+(we've asked Rentvine). What the app does now (`src/lib/owner-draws-rentvine.ts`,
+`src/lib/http-retry.ts`):
+- run report calls **one at a time**, never `Promise.all` them;
+- retry 429/5xx with a longer backoff and honour `Retry-After`;
+- cache good live-report results for a few minutes (`fresh: true` to skip);
+  when Rentvine still fails, show the last good figures flagged stale, but
+  never freeze stale figures into an approval/snapshot.
+Use the same pattern for any new live-report page. Update this section once
+Rentvine replies with the real limits.
+
 ## Discovering an unknown endpoint (probe-and-log)
 Guessing a path and silently falling back is how the renewal fix failed once.
 1. **See the real data first** with the MCP connector (`list_lease_renewals`,

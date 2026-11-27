@@ -110,3 +110,41 @@ describe("fetchWithRetry", () => {
     expect(delays).toEqual([75, 150, 225, 225]);
   });
 });
+
+describe("fetchWithRetry — Retry-After", () => {
+  const withRetryAfter = (status: number, value: string) =>
+    ({ ok: false, status, headers: new Headers({ "Retry-After": value }) }) as Response;
+
+  it("waits the seconds Rentvine asks for when longer than the backoff", async () => {
+    const { delays, opts } = harness();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(withRetryAfter(429, "5")).mockResolvedValueOnce(resp(200)));
+    const res = await fetchWithRetry("https://x", undefined, { ...opts, maxRetryAfterMs: 30000 });
+    expect(res.status).toBe(200);
+    expect(delays).toEqual([5000]);
+  });
+
+  it("reads an HTTP-date Retry-After", async () => {
+    const { delays, opts } = harness();
+    const now = Date.parse("2026-11-27T12:00:00Z");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(withRetryAfter(503, "Fri, 27 Nov 2026 12:00:03 GMT")).mockResolvedValueOnce(resp(200))
+    );
+    await fetchWithRetry("https://x", undefined, { ...opts, now: () => now });
+    expect(delays).toEqual([3000]);
+  });
+
+  it("caps a huge Retry-After at maxRetryAfterMs", async () => {
+    const { delays, opts } = harness();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(withRetryAfter(429, "3600")).mockResolvedValueOnce(resp(200)));
+    await fetchWithRetry("https://x", undefined, { ...opts, maxRetryAfterMs: 15000 });
+    expect(delays).toEqual([15000]);
+  });
+
+  it("ignores a junk Retry-After and uses the normal backoff", async () => {
+    const { delays, opts } = harness();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(withRetryAfter(429, "soon")).mockResolvedValueOnce(resp(200)));
+    await fetchWithRetry("https://x", undefined, opts);
+    expect(delays).toEqual([75]); // 100ms backoff, half-jitter at random 0.5
+  });
+});

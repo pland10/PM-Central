@@ -39,8 +39,10 @@ export async function POST(req: NextRequest) {
   // Rentvine's figures for this portfolio right now, to freeze on approve/paid.
   async function liveSnapshot(): Promise<DrawSnapshot | NextResponse> {
     if (month !== monthKeyET()) return bad("Rentvine only has today's numbers — open the current month.", 409);
-    const data = await loadOwnerDrawData(portfolioId);
-    if (!data.ok) return bad(data.error, 502);
+    // Always live: a snapshot must be today's figures, not a cached/fallback copy.
+    const data = await loadOwnerDrawData(portfolioId, { fresh: true });
+    if (!data.ok) return bad(data.error, data.busy ? 503 : 502);
+    if (data.stale) return bad(`${data.staleReason} — try again in a minute.`, 503);
     const p = data.portfolios.find((x) => x.portfolioId === portfolioId);
     if (!p) return bad("That portfolio isn't in Rentvine.", 404);
     const { portfolioId: _id, ...rest } = p;

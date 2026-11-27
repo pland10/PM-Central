@@ -55,21 +55,42 @@ describe("MeetingTopicsManager", () => {
     expect(JSON.parse(call[1].body)).toEqual({ id: 10, title: "Hiring a PM", date: "2026-12-01" });
   });
 
-  it("deletes a topic", async () => {
+  it("removing a topic asks: only this week, or this week and after", async () => {
     const user = userEvent.setup();
     render(<MeetingTopicsManager initialSections={initial} date="2026-12-01" dateOptions={["2026-12-01", "2026-11-24"]} />);
     await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Only this week" }));
     const call = fetchMock.mock.calls.find((c) => c[1]?.method === "DELETE")!;
-    expect(call[0]).toBe("/api/admin/meeting-topics?id=10&date=2026-12-01");
+    expect(call[0]).toBe("/api/admin/meeting-topics?id=10&date=2026-12-01&scope=week");
     expect(screen.queryByDisplayValue("Hiring")).not.toBeInTheDocument();
   });
 
-  it("deletes a section (after confirm)", async () => {
+  it("removes a topic from this week on", async () => {
     const user = userEvent.setup();
     render(<MeetingTopicsManager initialSections={initial} date="2026-12-01" dateOptions={["2026-12-01", "2026-11-24"]} />);
-    await user.click(screen.getByRole("button", { name: "Delete section" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "This week and after" }));
     const call = fetchMock.mock.calls.find((c) => c[1]?.method === "DELETE")!;
-    expect(call[0]).toBe("/api/admin/meeting-sections?id=1&date=2026-12-01");
+    expect(call[0]).toBe("/api/admin/meeting-topics?id=10&date=2026-12-01&scope=forward");
+  });
+
+  it("can cancel a removal", async () => {
+    const user = userEvent.setup();
+    render(<MeetingTopicsManager initialSections={initial} date="2026-12-01" dateOptions={["2026-12-01", "2026-11-24"]} />);
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Hiring")).toBeInTheDocument();
+  });
+
+  it("removing a section asks the same", async () => {
+    const user = userEvent.setup();
+    render(<MeetingTopicsManager initialSections={initial} date="2026-12-01" dateOptions={["2026-12-01", "2026-11-24"]} />);
+    await user.click(screen.getByRole("button", { name: "Remove section" }));
+    await user.click(screen.getByRole("button", { name: "Only this week" }));
+    const call = fetchMock.mock.calls.find((c) => c[1]?.method === "DELETE")!;
+    expect(call[0]).toBe("/api/admin/meeting-sections?id=1&date=2026-12-01&scope=week");
     expect(screen.queryByDisplayValue("Growth")).not.toBeInTheDocument();
   });
 
